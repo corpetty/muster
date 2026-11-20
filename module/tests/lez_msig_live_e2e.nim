@@ -23,7 +23,8 @@
 ## Each member pays their own transaction's fee; approvals cost nothing on chain.
 ## On a zone with slow blocks (the 0.4 devnet makes one about a minute apart),
 ## MUSTER_LEZ_E2E_WAIT_SCALE multiplies every wait and the queue's landing slack, and
-## MUSTER_LEZ_E2E_FUND keeps each member's funding within the funder's means.
+## MUSTER_LEZ_E2E_FUND keeps each member's funding within the funder's means. Passed 7/7 on the
+## LEZ 0.4.0-rc3 devnet, 2026-11-20 (docs/labbook/lez-v04-port.md trap 12).
 
 import std/[os, json, strutils, sequtils, times, options, tables]
 import stint

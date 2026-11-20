@@ -71,3 +71,13 @@
     - Create 834,360;
     - an Execute refused below threshold 5,606,640: the whole limit, again;
     - a 2-of-3 Execute that paid 4,687,312.
+12. **Muster's room drives it on the devnet** (2026-11-20, exo-50c): `lez_msig_live_e2e` passed 7/7
+    against the deployed program, every step under its own gas limit (`lez/msig_gas.nim`): the
+    ceremony, Create, a 2-of-3 payment, R.2's stale epoch, a queued time-locked payment, nothing sent
+    below threshold, a multisig over a member's disclosed account. Run with
+    `MUSTER_LEZ_VERSION=v0.4.0-rc3 MUSTER_LEZ_E2E_FUND=50000000 MUSTER_LEZ_E2E_WAIT_SCALE=4
+    TEST_TIMEOUT=5400 MUSTER_LEZ_MSIG_PROGRAM=1c0a7ce6…8170d TEST_ARGS=http://46.225.45.199:3040
+    module/tests/run-suite.sh e2e lez_msig_live`; about 25 minutes at a block a minute, so the
+    suite's default 900 s budget cuts it off in step 7. `funder.sh` must run the 0.4 wallet
+    (`MUSTER_LEZ_VERSION`): the v0.3.0 one fails a deploy on a v0.4 zone at its first segment,
+    reading a fresh account's `null`.
