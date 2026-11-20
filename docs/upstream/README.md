@@ -15,6 +15,13 @@ side.
   *provider*, but only the shell can *dispatch*; without it `provides: coordinate.request`
   is inert. Blocks `exo-44b` L4 and the `coordinate.request` handler.
 
+Field reports (performance and findings from real use, kept current; each ends with asks):
+
+- [`chat-module-field-report.md`](chat-module-field-report.md) — for the **chat** team: a
+  `chat_module` group per multisig, its roster following the members; removal on GroupV3
+  (logos-chat-module#103), one-session addresses, two-minute membership changes, every member an
+  admin, no address proof.
+
 Notes offered (not asks):
 
 - [`atomic-swaps-htlc-on-lez-v03.md`](atomic-swaps-htlc-on-lez-v03.md) — for whoever
