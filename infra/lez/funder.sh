@@ -35,7 +35,7 @@ case "${ZONE%/}" in                     # the two zones by their URLs too
   http://127.0.0.1:3040|http://localhost:3040) ZONE=local ;;
   https://testnet.lez.logos.co) ZONE=testnet ;;
 esac
-DIR="${MUSTER_LEZ_DIR:-$HOME/.cache/muster/lez-v0.3.0}"
+DIR="${MUSTER_LEZ_DIR:-$HOME/.cache/muster/lez-${MUSTER_LEZ_VERSION:-v0.3.0}}"   # the line localnet.sh runs
 WALLET="$DIR/target/release/wallet"
 PASSWORD="${MUSTER_LEZ_FUNDER_PASSWORD:-muster-funder}"
 case "$ZONE" in

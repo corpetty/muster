@@ -21,6 +21,9 @@
 ##      multisig is set up with it as his approval key, and the program pays on Bob's approval
 ##      signed with that account.
 ## Each member pays their own transaction's fee; approvals cost nothing on chain.
+## On a zone with slow blocks (the 0.4 devnet makes one about a minute apart),
+## MUSTER_LEZ_E2E_WAIT_SCALE multiplies every wait and the queue's landing slack, and
+## MUSTER_LEZ_E2E_FUND keeps each member's funding within the funder's means.
 
 import std/[os, json, strutils, sequtils, times, options, tables]
 import stint
@@ -52,6 +55,8 @@ let program = hexToBytes(programText)
 echo "the lez-msig program: ", programText
 
 let rpc = newLezRpc(url)
+let waitScale = parseFloat(getEnv("MUSTER_LEZ_E2E_WAIT_SCALE", "1"))
+proc scaled(seconds: int): float = float(seconds) * waitScale
 var r = newRoom3("/muster/1/lez-msig-e2e/" & $epochTime().int & "/proto")
 let kss = @[Keystore(aliceKs), Keystore(bobKs), Keystore(room3CarolKs)]
 let sessions = @[r.alice, r.bob, r.carol]
@@ -65,7 +70,7 @@ proc pollAll() =
   for s in sessions: s.poll()
 
 proc waitFor(what: string, cond: proc(): bool, seconds = 120) =
-  let until = epochTime() + float(seconds)
+  let until = epochTime() + scaled(seconds)
   while not cond():
     doAssert epochTime() < until, "timed out waiting for " & what
     sleep(3000)
@@ -149,7 +154,7 @@ proc settleAndWatch(id: string, seconds = 180, slackMs = 0'u64): Finality =
   let (st, asm0) = settle(id, slackMs)
   doAssert asm0.ok, asm0.error & ": " & asm0.detail
   let txRef = st.submit(asm0.tx, aliceKs)
-  let until = epochTime() + float(seconds)
+  let until = epochTime() + scaled(seconds)
   while true:
     result = st.watch(txRef)
     if result.status != fsPending or epochTime() > until: return
@@ -181,13 +186,13 @@ echo "4. R.2: approvals from epoch 0 are refused after the change, by name (", s
 # ── 5. the time lock ─────────────────────────────────────────────────────────
 let pay2 = propose(2, MsigAction(kind: akTransfer, to: recipient, amount: 300.u128), alice.readMsig(a).state)
 approve(1, pay2)
-let (qst, qasm) = settle(pay2, slackMs = 45_000)
+let (qst, qasm) = settle(pay2, slackMs = uint64(45_000 * waitScale))
 doAssert qasm.ok, qasm.detail
 doAssert parseJson(qasm.tx.payload)["msig"].getStr() == $ikQueue, "a time-locked multisig queues"
 let qref = qst.submit(qasm.tx, aliceKs)
 var qf = qst.watch(qref)
 var sawQueued = false
-let until = epochTime() + 240
+let until = epochTime() + scaled(240)
 while qf.status == fsPending and epochTime() < until:
   if "queued" in qf.detail and not sawQueued:
     sawQueued = true
@@ -254,7 +259,7 @@ block:
   doAssert asm3.ok, asm3.error & ": " & asm3.detail
   let ref3 = st3.submit(asm3.tx, aliceKs)
   var f3 = st3.watch(ref3)
-  let until3 = epochTime() + 180
+  let until3 = epochTime() + scaled(180)
   while f3.status == fsPending and epochTime() < until3:
     sleep(3000)
     f3 = st3.watch(ref3)
@@ -275,7 +280,7 @@ block:
   doAssert asm4.ok, asm4.error & ": " & asm4.detail
   let ref4 = st4.submit(asm4.tx, aliceKs)
   var f4 = st4.watch(ref4)
-  let until4 = epochTime() + 180
+  let until4 = epochTime() + scaled(180)
   while f4.status == fsPending and epochTime() < until4:
     sleep(3000)
     f4 = st4.watch(ref4)

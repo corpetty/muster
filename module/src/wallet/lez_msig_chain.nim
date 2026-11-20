@@ -13,6 +13,7 @@
 import std/[options, tables, times]
 import stint
 import ../lez/msig
+import ../lez/msig_gas
 import ../lez/tx as leztx
 import ../lez/account_view
 import ../crypto/keystore
@@ -142,9 +143,15 @@ method sendMsig*(c: MsigLive, shards: seq[LezShard], instruction: seq[byte]): Ms
   try:
     let nonce = c.account(payer).nonce
     if c.zoneLine() == "v0.4":
+      # a refused v0.4 transaction burns its whole gas limit, so the limit is this step's own
+      # (lez/msig_gas.nim, exo-50c), never the wallet's 2M default
+      let (_, op) = decodePublicEnvelope(instruction)
+      let members = (if op.kind == ikCreate: op.config.members.len
+                     else: c.readMsig(shards[0].account).state.config.members.len)
+      let gas = gasLimitFor(op, members)
       var m = LezMessage4(root: LezActor(account: shards[0].account, program: shards[0].program),
                           message: instruction, nonces: @[(account: payer, nonce: nonce)],
-                          fee: some defaultFee(payer))
+                          fee: some LezFee(payer: payer, gasLimit: gas, tip: 0, maxFee: 0.u128))
       for i, s in shards:
         # a payee no one has used yet is not declared: v0.4 refuses a declared public account it
         # cannot admit (only the payee's key would), and an undeclared credit waits as a pending
@@ -154,6 +161,10 @@ method sendMsig*(c: MsigLive, shards: seq[LezShard], instruction: seq[byte]): Ms
         m.actors.add LezActor(account: s.account, program: s.program)
       if instruction.len > 32 and instruction[32] == 0 and c.account(shards[0].account).fresh():
         m.evidence = @[LezEvidence(kind: ekPda, pdaProgram: c.program, seed: stateSeed(instruction[0 ..< 32]))]
+      # the cap covers the reserve over the wire bytes too; the fee fields are fixed-size, so
+      # the length with a zero cap is the length with the real one
+      let wire = leeTxPublic(m, @[LezWitness(signature: newSeq[byte](64), xonly: newSeq[byte](32))]).len
+      m.fee.get.maxFee = maxFeeFor(gas, wire, c.rpc.feeCeiling()).stuint(128)
       hashOf = messageHash(m)
       let ws = @[LezWitness(signature: c.ks.lezMemberSign(c.payerLabel, hashOf), xonly: c.ks.lezMemberKey(c.payerLabel))]
       want = publicTxHash(m, ws)
@@ -165,7 +176,8 @@ method sendMsig*(c: MsigLive, shards: seq[LezShard], instruction: seq[byte]): Ms
       let ws = @[LezWitness(signature: c.ks.lezMemberSign(c.payerLabel, hashOf), xonly: c.ks.lezMemberKey(c.payerLabel))]
       want = publicTxHash(m, ws)
       txBytes = leeTxPublic(m, ws)
-  except CatchableError as e: return MsigSent(ok: false, error: "could not read the payer's nonce: " & e.msg)
+  except MsigDecodeError as e: return MsigSent(ok: false, error: "not a public lez-msig instruction: " & e.msg)
+  except CatchableError as e: return MsigSent(ok: false, error: "could not prepare the transaction: " & e.msg)
   try:
     let got = c.rpc.sendTransaction(txBytes)
     if got != want: return MsigSent(ok: false, error: "the sequencer answered hash " & got & " for " & want)

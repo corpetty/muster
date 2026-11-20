@@ -5,6 +5,10 @@
 `v04_private_fee.rs`: D17 on LEE v0.4 state, dev-mode proofs. The group's fee account (from the GMS, witnessed
 `FeeOnly`) pays a private Create's fee; without its authorization key it cannot; the PDA cannot pay its own.
 
+`v04_gas.rs`: what every step meters (Create, Execute of a transfer or a config change, Queue,
+ExecuteQueued, Spend; across members and approvals), as the sequencer meters it. `MSIG_GAS_OUT`
+writes `module/tests/vectors/lez-msig/v04-gas.json`, which Muster's per-step gas limits are held to.
+
 `live_public04.rs`: the same program against a real v0.4 standalone sequencer
 (`MUSTER_LEZ_VERSION=v0.4.0-rc3 infra/lez/localnet.sh`, then `deploy`): create on a fresh PDA,
 below threshold, a 2-of-3 payment, every transaction paying its fee. Skipped unless

@@ -52,9 +52,17 @@
    The sequencer refuses a `max_fee` below the fee reserve, which is about the gas limit × the
    base fee ("max_fee 400000 below the fee reserve 8005280" for a 1M limit). A refusal then costs
    the whole reserve. So Muster has to declare a gas limit close to what a step uses: under v0.3's
-   wallet default (2M gas), every refusal costs about 16M. Before a v0.4 settlement sends, it
-   should simulate the step, or use measured per-step limits. Whether the payer must also hold
-   the whole reserve was not tested.
+   wallet default (2M gas), every refusal costs about 16M. The sequencer has no simulate call
+   (LEZ's wallet simulates by running the program itself), so Muster declares a per-step limit
+   from a model fitted to what each step meters on LEE's own state (exo-50c,
+   `module/src/lez/msig_gas.nim`, vectors from `lez04/host/tests/v04_gas.rs`):
+   - each approval or executor signature is a BIP-340 verification in the guest, about 275k
+     cycles: a 2-of-3 Execute meters about 580k, a 10-of-10 about 2.78M;
+   - a config change costs about 29k more per member; Create about 30k per member;
+   - ExecuteQueued carries no signatures, about 30k;
+   - the fee cap is the reserve at twice the next block's base-fee ceiling (`getFeeState`).
+
+   Whether the payer must also hold the whole reserve was not tested.
 10. **The devnet makes a block about a minute apart**, irregularly (0.4.0-rc3 devnet,
     2026-11-20). A local zone makes one every 15 s. Waits sized for a local zone time out there.
 11. **On the devnet** (2026-11-20), the program deployed immutable at
