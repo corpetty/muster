@@ -5,6 +5,13 @@
 `v04_private_fee.rs`: D17 on LEE v0.4 state, dev-mode proofs. The group's fee account (from the GMS, witnessed
 `FeeOnly`) pays a private Create's fee; without its authorization key it cannot; the PDA cannot pay its own.
 
+`v04_private.rs`: the private posture end to end, dev-mode proofs: a private Create, a deposit
+from a public account, a 2-of-3 payment to a public payee, every step's fee from the group's fee
+account; below threshold and a spent nonce refused while proving.
+
+`v04_bench.rs` (ignored): the same steps with REAL proving for M = 1, 3, 5, 10 (RFP P.1/P.2);
+`cargo test --release -p msig_host04 --test v04_bench -- --ignored --nocapture`.
+
 `v04_gas.rs`: what every step meters (Create, Execute of a transfer or a config change, Queue,
 ExecuteQueued, Spend; across members and approvals), as the sequencer meters it. `MSIG_GAS_OUT`
 writes `module/tests/vectors/lez-msig/v04-gas.json`, which Muster's per-step gas limits are held to.

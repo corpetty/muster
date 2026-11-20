@@ -41,9 +41,13 @@ Its 0.4 port is one actor handler (`actor_entrypoint!`); the payout is
   Muster's three-member room flow (`module/tests/lez_msig_live_e2e.nim`) passed 7/7: Create, a
   2-of-3 payment, approvals refused after a config change, a queued time-locked payment, nothing
   sent below threshold, and a second multisig over a member's own account.
-- **Private posture, in-process** [measured, dev-mode proofs]. A private Create, its fee paid in
-  the proof by a GMS-derived regular account witnessed `RegularKey::FeeOnly`
-  (`lez04/host/tests/v04_private_fee.rs`). A private payment from the vault is next.
+- **Private posture, in-process** [measured, dev-mode proofs], every step's fee paid in the proof
+  by a GMS-derived regular account witnessed `RegularKey::FeeOnly`
+  (`lez04/host/tests/v04_private.rs`, `v04_private_fee.rs`):
+  - a private Create;
+  - a deposit from a public account into the private vault;
+  - a 2-of-3 payment to a public payee (`custody_transfer` from the private PDA);
+  - refusals below threshold and on a spent nonce.
 
 ## Performance
 
@@ -159,7 +163,24 @@ paid segments, and a retry has to start over with fresh accounts.
 
 **Ask:** resumable uploads, or a note in the CLI's error that names the stranded accounts.
 
-### 5. Things that surprised us, documented here for other program authors
+### 5. A note's commitment is not in its own action
+
+**What happens** [measured, `lez04/host/tests/v04_private.rs`]:
+- A member reads their new note by decrypting `encrypted_post_state` under the action's nullifier.
+- With one private action, the decrypted account's commitment equals that action's `commitment`.
+- With two (any private step that pays its fee in the proof: the PDA plus the fee account), it
+  does not: the commitment sits in the other action.
+
+`PrivateAction` does warn that the commitment "is not necessarily connected to the nullifier in
+content" [from source, `lee/state_machine/core/src/circuit_io.rs`]. But every scanner written
+against 0.3's single-action transactions matched within the action, and on 0.4 they fail silently:
+the note just isn't found. We now match the decrypted account against every commitment the
+transaction makes.
+
+**Ask:** say so in the scanning docs, or give each note an index to its commitment. Wallets and
+indexers outside your workspace will hit this the first time a fee shares a proof.
+
+### 6. Things that surprised us, documented here for other program authors
 
 - **A fresh public account must be admitted by its key** [measured]: funding one takes
   `--to-pk`. A program's own fresh PDA needs `PublicAccountEvidence::Pda` on Create.

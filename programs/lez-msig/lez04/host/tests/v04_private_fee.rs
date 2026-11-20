@@ -25,7 +25,7 @@ use lee_core::{
 };
 use msig_core::sign::Signer;
 use msig_core::*;
-use msig_host04::{fee_derivation_id, program, Msig, Placement};
+use msig_host04::{fee_derivation_id, program, Msig};
 
 const ZONE: Key = [0x2e; 32];
 const P: [u8; 32] = [0xa4; 32];
@@ -42,11 +42,7 @@ fn group() -> Group {
     let gms = GroupKeyHolder::new();
     let create_key: Key = rand::random();
     let pda = gms.derive_keys_for_pda(&program().id(), &msig_v04::seed(&create_key));
-    let placement = Placement::Private {
-        npk: pda.generate_nullifier_public_key(),
-        vpk: pda.generate_viewing_public_key(),
-    };
-    Group { m: Msig { program: AccountId::new(P), create_key, placement }, gms, pda }
+    Group { m: Msig::private(AccountId::new(P), &program().id(), create_key, &gms), gms, pda }
 }
 
 fn fee_keys(g: &Group) -> PrivateKeyHolder {
@@ -152,9 +148,10 @@ fn the_group_fee_account_pays_a_private_create_fee_only() {
     let k = fee_keys(&g);
     let payer = fee_account_id(&k);
 
-    // Every member derives the same fee account from the GMS alone.
+    // Every member derives the same fee account from the GMS alone, and the host names it.
     let again = GroupKeyHolder::from_gms(*g.gms.dangerous_raw_gms());
     assert_eq!(fee_account_id(&again.derive_regular_shared_account_keys(&fee_derivation_id(&g.m.create_key))), payer);
+    assert_eq!(g.m.fee_account(), Some(payer));
 
     let w = fee_witness(&k, RegularKey::FeeOnly(k.authorization_secret_key), note.clone(), proof);
     let tx = private_create(&g, &s, payer, vec![w]).expect("proved");
