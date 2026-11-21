@@ -1,0 +1,12 @@
+[package]
+name = "msig_methods04"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "Builds the lez-msig v0.4 guest (methods/guest) and embeds its ELF and image id."
+
+[build-dependencies]
+risc0-build.workspace = true
+
+[package.metadata.risc0]
+methods = ["guest"]

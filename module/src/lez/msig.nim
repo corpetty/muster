@@ -353,14 +353,56 @@ proc raction(r: var Reader): MsigAction =
     for _ in 0 ..< r.rlen(8): a.nonces.add r.ru64()
     a
 
+proc rproposal(r: var Reader): MsigProposal =
+  result.multisig = r.rfixed(32); result.zone = r.rfixed(32); result.epoch = r.ru64()
+  result.nonce = r.ru64(); result.action = r.raction(); result.expiresMs = r.ru64()
+  result.proposer = r.rfixed(32)
+
 proc decodeProposal*(b: openArray[byte]): MsigProposal =
   ## A proposal as its members sign it. Only exact bytes decode: a short, padded or
   ## non-canonical encoding (a bool other than 0/1, a trailing byte) is refused.
   var r = Reader(b: @b)
-  result.multisig = r.rfixed(32); result.zone = r.rfixed(32); result.epoch = r.ru64()
-  result.nonce = r.ru64(); result.action = r.raction(); result.expiresMs = r.ru64()
-  result.proposer = r.rfixed(32)
+  result = r.rproposal()
   if r.i != r.b.len: bad("trailing bytes after the proposal")
+
+proc rsigned(r: var Reader): MsigSigned = MsigSigned(key: r.rfixed(32), sig: r.rfixed(64))
+proc rsignedVec(r: var Reader): seq[MsigSigned] =
+  for _ in 0 ..< r.rlen(96): result.add r.rsigned()
+proc ropt(r: var Reader): Option[MsigSigned] =
+  if r.rbool(): some r.rsigned() else: none MsigSigned
+
+proc rinstruction(r: var Reader): MsigInstruction =
+  let tag = r.ru8()
+  if tag > uint8(ord(high(InstrKind))): bad("unknown instruction " & $tag)
+  case InstrKind(tag)
+  of ikCreate: MsigInstruction(kind: ikCreate, zone: r.rfixed(32), config: r.rconfig())
+  of ikExecute:
+    MsigInstruction(kind: ikExecute, proposal: r.rproposal(), approvals: r.rsignedVec(), executor: r.ropt())
+  of ikQueue:
+    MsigInstruction(kind: ikQueue, proposal: r.rproposal(), approvals: r.rsignedVec(), executor: r.ropt(),
+                    atMs: r.ru64())
+  of ikExecuteQueued:
+    MsigInstruction(kind: ikExecuteQueued, proposal: r.rproposal(), executor: r.ropt(), atMs: r.ru64())
+  of ikSpend:
+    var sp = MsigSpend(multisig: r.rfixed(32), zone: r.rfixed(32), epoch: r.ru64(), limit: r.ru32(),
+                       nonce: r.ru64(), to: r.rfixed(32), amount: r.ru128(), expiresMs: r.ru64())
+    MsigInstruction(kind: ikSpend, spend: sp, spendApprovals: r.rsignedVec(), period: r.ru64(),
+                    periodMs: r.ru64())
+
+proc decodeInstruction*(b: openArray[byte]): MsigInstruction =
+  ## The core instruction, exact bytes only (the inverse of `borsh`).
+  var r = Reader(b: @b)
+  result = r.rinstruction()
+  if r.i != r.b.len: bad("trailing bytes after the instruction")
+
+proc decodePublicEnvelope*(b: openArray[byte]): tuple[createKey: Key32, op: MsigInstruction] =
+  ## The inverse of `envelopePublic`: a public placement only (a private envelope carries its
+  ## group's keys and never reaches a public send).
+  var r = Reader(b: @b)
+  result.createKey = r.rfixed(32)
+  if r.ru8() != 0: bad("not a public placement")
+  result.op = r.rinstruction()
+  if r.i != r.b.len: bad("trailing bytes after the envelope")
 
 proc decodeMsigConfig*(b: openArray[byte]): MsigConfig =
   var r = Reader(b: @b)

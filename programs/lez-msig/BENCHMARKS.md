@@ -17,6 +17,39 @@ the local CPU prover):
 
 Every transaction below was accepted by the state machine.
 
+## 2026-11-20: LEZ v0.4.0-rc3, the same machine (AMD EPYC 7C13, 64 cores, 503 GB)
+
+`cargo run --release -p msig_host04 --bin msig_bench04 -- 1 3 5 10` in `lez04`. On v0.4 every private
+transaction pays its fee inside its proof (D17), so each step below carries a second private account,
+the group's fee account (witnessed `FeeOnly`). The exception is the top-up, where the fee account is
+the only private account and pays out of the credit it receives. The program is named directly
+(disclosed); D18's undisclosed claim changes what the proof claims, not what it proves. The machine was
+otherwise idle.
+
+| M | step | prove (s) | tx size (bytes) |
+|---|---|---|---|
+| 1 | top-up of the fee account (public → private, one private account) | 75.0 | 229,025 |
+| 1 | create (3 members) | 184.1 | 237,441 |
+| 1 | deposit (public → the vault) | 169.0 | 238,217 |
+| 1 | **execute: pay, 1 signature** | **195.1** | 237,905 |
+| 3 | **execute: pay, 3 signatures** | **209.4** | 237,905 |
+| 5 | create (5 members) | 184.1 | 237,441 |
+| 5 | **execute: pay, 5 signatures** | **234.8** | 237,905 |
+| 10 | create (10 members) | 192.1 | 237,441 |
+| 10 | **execute: pay, 10 signatures** | **297.6** | 237,905 |
+
+Every transaction was accepted. Top-ups and deposits repeat within a second across M (74–77 s,
+169–170 s). Peak resident memory: 9.6 GB. The whole run took 45 min.
+
+What changed from v0.3:
+- **A payment proves in about 182 s + 11.5 s · M** (v0.3: 136 s + 15 s · M). The per-signature cost
+  fell; the base rose.
+- **The in-proof fee costs about 95 s per step.** A deposit and a top-up are the same public → private
+  transfer; the deposit's second private account, the fee witness, is the difference (169 s against
+  75 s).
+- **The transaction stays flat in M**, 229–238 KB (v0.3: 228 KB). Its fee is flat too: about 5.07M at
+  base fee 8, whatever M (`docs/upstream/lez-v04-field-report.md`).
+
 ## 2026-10-23: AMD EPYC, 64 cores, 503 GB. The guest uses RISC Zero's accelerated k256
 
 The machine was shared: Nim builds and a local sequencer ran alongside. Treat these as upper
