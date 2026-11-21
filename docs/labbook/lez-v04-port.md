@@ -103,3 +103,13 @@
     module/tests/run-suite.sh e2e lez_msig_private`, after `cargo build --release -p msig_host04
     --bin msig_exec04` in `programs/lez-msig/lez04`. Hosted in Basecamp it still needs the
     `lez_msig_module` rebuilt from lez04.
+15. **The 0.4 prover as a Logos module** (2026-11-21, exo-cc7): `lez_msig_module` 0.2.0 builds from
+    `programs/lez-msig/lez04` (`nix build "git+file://…?dir=programs/lez-msig/lez04#lgx-portable"`, an
+    86 MB `.lgx`) and loads in `logoscore` 0.3.1: `health` answers `line: v0.4` with the devnet
+    program's image id, `derive` the private PDA and the fee account. Two traps on the way:
+    - the module builder copies only the package directory into its sandbox, so `msig_core` in
+      `../core` is staged inside by the flake (import-from-derivation, which `nix flake show`
+      refuses and `nix build` allows);
+    - a path dependency inside the workspace directory becomes a workspace member, so the staged
+      core pulled its dev-dependencies (`proptest`) into a lockfile without them, and the offline
+      build failed with "no matching package named `bit-set`". The staged workspace excludes it.
