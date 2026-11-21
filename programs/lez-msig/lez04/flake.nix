@@ -62,6 +62,10 @@
             cp -R --no-preserve=mode,ownership ${../core} $out/core
             sed -i 's|msig_core = { path = "../core" }|msig_core = { path = "core" }|' $out/Cargo.toml
             grep -q 'msig_core = { path = "core" }' $out/Cargo.toml
+            # a path dependency inside the workspace directory becomes a member, and would pull
+            # msig_core's dev-dependencies into a lockfile that does not hold them
+            sed -i 's|exclude = \["methods/guest"\]|exclude = ["methods/guest", "core"]|' $out/Cargo.toml
+            grep -q 'exclude = \["methods/guest", "core"\]' $out/Cargo.toml
           '';
         in
         logos-module-builder.lib.mkLogosModule {
