@@ -16,7 +16,7 @@ Muster's UI backend is 1,151 lines of C++ in a Qt plugin. It is a thin pass-thro
 | T0: parity harness | done | Every offscreen self-test takes `MUSTER_UI=cpp\|nim`. C++ 8/8 green; Nim 8/8 red until T6. |
 | T1: toolchain | done | seaqt `qt-6.8` + nimside, built by nix against the runner's own Qt 6.9.2 (same store paths). A nimside object binds to QML both ways. |
 | T2: the contract in the DSL | done | `repContract` generates a nimside `qobject:` from the `.rep` repc reads. QtRO's view of it matches repc's, index for index: 50 properties, 50 signals, 67 slots. |
-| T3: seaqt RemoteObjects | done | QtRemoteObjects bindings, generated at build time by the pinned seaqt-gen plus four patches, so no C++ is committed. A nimside source is remoted and driven through a dynamic replica both ways. |
+| T3: seaqt RemoteObjects | done, upstream since 2026-11-17 | QtRemoteObjects bindings. They were generated at build time by the pinned seaqt-gen plus four patches. Since seaqt-gen #18, #20 and #21 merged, nim-seaqt ships them and `ui-nim` takes them from its pin (exo-c49). A nimside source is remoted and driven through a dynamic replica both ways. |
 | T4a: probe B, a standalone seaqt app | done | The real `Main.qml` runs in a Nim host, which starts logos-core itself and calls `muster_module` over `lp_*`. `health()` reaches the view as `ok`. No C++ of ours, no chronos worker. |
 | T4b: probe A, a Nim plugin in Basecamp | done | A Nim `.so` works in the real `ui-host`, both ways through the builder's typed replica. That only happens once the object is registered under the replica's name, which today takes an ABI hack. It cannot reach the capability token without the C++ SDK. Two small `ui-host` changes would make A clean. |
 | Gate | decided, 2026-10-14 | B, written as if Basecamp did not exist. Newest Qt and seaqt. C++ generated at build time is fine. The Basecamp UI stays, frozen. ADR-019. |
@@ -250,6 +250,8 @@ So the two backends cannot drift during the port, and the order QtRO binds by is
 Also found: 7 contract entries are never named as `backend.<x>` in the QML: `checkHealth`, `declineJson`, `loadActivity`, `loadDrivers`, `loadFrostCeremonies`, `loadPolicy`, `startInbox`. The C++ backend or its autopilot calls some of them itself. The rest are candidates for removal from the contract.
 
 ### T3: seaqt RemoteObjects (exo-607.4, 2026-09-29)
+
+> **Superseded 2026-11-21 (exo-c49).** The patches went upstream and nim-seaqt now ships the bindings, so `seaqt-ro.nix` and the patches are gone. See "Upstream: the seaqt-gen merges" below. What follows is the record of how T3 was first built.
 
 **Generated at build time, so no C++ is committed.** `ui-nim/nix/seaqt-ro.nix` runs seaqt-gen in the nix sandbox and adds its RemoteObjects output to nim-seaqt `qt-6.8`. The generated wrappers are C++ (`gen_*.cpp/.h`), so they exist only in the build. The repo carries the four generator patches in `ui-nim/nix/seaqt-gen-patches/`, which are Go diffs.
 
@@ -485,7 +487,7 @@ Both runs were on `logos.dev`, minutes apart, on the same machine, with foundry 
 **Found on the way, for the gap list:**
 
 - **No slot interceptor in nimside.** The view self-test has to know which slots QML called with no core behind them. `repContract` gained one: a module that declares `onSlot(o, name)` has it called first in every slot. In C++ that is a hook in each slot.
-- **`nim check` breaks on nimside.** `seaqt`'s `qtcore_pkg.nim` reads the Qt version with `gorge("pkg-config …")`, and `nim check` runs no `gorge`, so nimside's metaobject generator fails with "Unsupported Qt version". `nim c --compileOnly` works, and the T5 loop used it. Editor tooling (nimsuggest) is likely hit the same way.
+- **`nim check` breaks on nimside.** `seaqt`'s `qtcore_pkg.nim` reads the Qt version with `gorge("pkg-config …")`, and `nim check` runs no `gorge`, so nimside's metaobject generator fails with "Unsupported Qt version". `nim c --compileOnly` works, and the T5 loop used it. Editor tooling (nimsuggest) is likely hit the same way. *Fixed upstream by seaqt-gen #22: from nim-seaqt `6956721` on, `nim check` passes on `hello/` (exo-c49).*
 - **seaqt slot closures must be `{.closure, raises: [].}`**, written out (`QTimer.onTimeout`).
 - **QQuickStyle is not bound** (QtQuickControls2). The app sets `QT_QUICK_CONTROLS_STYLE=Basic` instead, before the application exists.
 - **Icons need GL.** The design system tints them through `MultiEffect`, so the software renderer draws them blank, as for C++. They also need `qtsvg` in the app's closure.
@@ -511,3 +513,27 @@ Both runs were on `logos.dev`, minutes apart, on the same machine, with foundry 
 
 - **The generated surface's constructor runs `NimMain` at load.** That is how the plugin initializes. In a Nim program that also has a `main`, `NimMain` then runs twice, and every module's top-level code with it. The harness ran its calls twice before it was built `--noMain`. The C++ harness called `NimMain` a second time too; it was harmless only because the staticlib printed nothing on init.
 - **`exportc` without `dynlib` is hidden.** Fine for a staticlib linked into the plugin. But a shared build of the module exports none of `logos_module_*`, so a Nim host cannot `dlopen` one.
+
+### Upstream: the seaqt-gen merges (exo-c49, 2026-11-21)
+
+Jacek merged five of the seaqt-gen PRs on 2026-11-17 and regenerated nim-seaqt's `qt-6.8` and `qt-6.11` branches with them the same day.
+
+| PR | What | Status | What it means for `ui-nim` |
+|---|---|---|---|
+| seaqt-gen #18 | QtRemoteObjects in the Qt 6 module list (patch `0001`) | merged | nim-seaqt ships `seaqt/QtRemoteObjects/` |
+| seaqt-gen #20 | a parameter named `self` (patch `0003`) | merged, with Jacek's change: `self` added to the reserved-word lists | in the shipped bindings |
+| seaqt-gen #21 | `QSet<T>` returns (patch `0004`) | merged | in the shipped bindings, also fixing QtStateMachine and QtDesigner |
+| seaqt-gen #22 | `BuildVersion` falls back to `GenVersion` when `gorge` does not run | merged | `nim check` and nimsuggest work on nimside programs |
+| seaqt-gen #23 | `transformtypedefs_test` builds | merged | none |
+| seaqt-gen #19 | `-modules`, a module filter (the local patch `0002`) | open, now conflicting with master | none: `ui-nim` no longer runs the generator |
+| nimside #1–#11 | the DSL suggestions in `seaqt-dsl-feedback.md` | open, no review yet; #1–#6, #8 and #9 are drafts | none until they merge |
+
+**What changed in `ui-nim`:**
+
+- **The pin.** nim-seaqt is now `qt-6.11` at `6956721d` (generated for Qt 6.11.1; the app's Qt is 6.11.2). The branch was rebased, so the old pin `41a8f1b1` is no longer on it. GitHub still serves it, but only for now.
+- **What was deleted.** `nix/seaqt-ro.nix`, `nix/seaqt-gen-patches/` (four Go diffs), and the `seaqt-gen` and `nixpkgs-clang14` inputs. `ro-test` builds on the plain nim-seaqt now. There is no longer a Go or clang 14 step in the build.
+- **The checks, on the new pin:**
+  - `hello` 3/3, `contract` (81 properties, 114 slots, 187 QML references, index for index with repc), `ro` 9/9 and `muster-app-view` 3/3, all on the bindings as shipped;
+  - `headless-host` builds;
+  - `scripts/nim-app-core-probe.sh` 5/5 and `scripts/nim-headless-probe.sh` pass;
+  - `MUSTER_UI=nim MUSTER_FLEET=local scripts/ui-parity.sh`: 13/13. `split` needs foundry on the path (`nix shell nixpkgs#foundry`).

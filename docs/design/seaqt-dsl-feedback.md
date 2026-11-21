@@ -2,6 +2,7 @@
 
 **For:** Jacek (arnetheduck), as the playground's report back (exo-607 T8, `exo-607.11`).
 **Status:** written 2026-10-15, after T1b–T7 landed ([corpetty/muster#298](https://github.com/corpetty/muster/pull/298)). Q5 below is still open, and its experiment waits on your answer.
+**Upstream (2026-11-21):** the seaqt-gen half has landed. #18, #20, #21, #22 and #23 merged on 2026-11-17, and nim-seaqt `qt-6.8` and `qt-6.11` were regenerated with them, so muster now takes QtRemoteObjects from nim-seaqt and runs no generator (exo-c49). #19 (`-modules`) is still open and now conflicts with master. The nimside PRs (#1–#11) are still open with no review yet; #1–#6, #8 and #9 are drafts. Details: `docs/design/seaqt-ui.md`, "Upstream: the seaqt-gen merges".
 **Reads with:** `docs/design/seaqt-ui.md` (the plan and the evidence, slice by slice), ADR-019 in `docs/02-implementation-plan.md` (the decision).
 
 ## The short version
@@ -58,7 +59,7 @@ Each item gives what muster needed, what it did, and what the DSL could offer.
 
 ## For seaqt and seaqt-gen
 
-- **RemoteObjects, generated at build time.** It took four patches to seaqt-gen `56485e6`; they are in `ui-nim/nix/seaqt-gen-patches/`, and `0001`, `0003` and `0004` are worth upstreaming:
+- **RemoteObjects, generated at build time.** *Upstream since 2026-11-17 (seaqt-gen #18, #20, #21); nim-seaqt ships the module and muster's patches are deleted.* It took four patches to seaqt-gen `56485e6`; they were in `ui-nim/nix/seaqt-gen-patches/`, and `0001`, `0003` and `0004` were worth upstreaming:
   - `0001` adds the module to the module list;
   - `0002` adds a module filter (local only);
   - `0003` fixes a parameter named `self`, which collides;
@@ -66,7 +67,7 @@ Each item gives what muster needed, what it did, and what the DSL could offer.
 
   The generator needs clang 14.0.6: from clang 16 it prints nested types unqualified and panics. The output is reproducible.
 - **seaqt-gen on any C++.** This is your Q3 direction, and muster has a first customer for it. Basecamp's capability token reaches a plugin only as a C++ `LogosAPI*`, whose accessors are non-virtual and statically linked into `ui-host`. Bindings generated from the Logos C++ SDK's headers would turn that hard blocker into a build step.
-- **`nim check` cannot type-check a nimside program.** `qtcore_pkg.nim` reads the Qt version with `gorge("pkg-config …")`. `nim check` runs no `gorge`, so nimside's metaobject generator fails with "Unsupported Qt version". `nim c --compileOnly` works, and muster's edit loop used it. nimsuggest is presumably hit the same way. A `-d:QtCoreBuildVersion=` override, or a fallback, would fix it.
+- **`nim check` cannot type-check a nimside program.** *Fixed by seaqt-gen #22 (merged 2026-11-17).* `qtcore_pkg.nim` reads the Qt version with `gorge("pkg-config …")`. `nim check` runs no `gorge`, so nimside's metaobject generator fails with "Unsupported Qt version". `nim c --compileOnly` works, and muster's edit loop used it. nimsuggest is presumably hit the same way. A `-d:QtCoreBuildVersion=` override, or a fallback, would fix it.
 - **Slot closures must be spelled `{.closure, raises: [].}`** (`QTimer.onTimeout`). It is correct, but every first use trips on it.
 - **`acquireDynamic` returns `owned: false`.** Nim never deletes the replica, so it must be parented or deleted by hand.
 - **No QString type.** A string argument to `invokeMethod` goes in as `QGenericArgument.create("QString", QVariant.constData())`.

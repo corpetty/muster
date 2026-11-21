@@ -11,7 +11,7 @@
 , qml ? [ ]           # QML files installed to $out/share/<pname>/
 , nimFlags ? [ ]
 , extraAttrs ? { }    # passed through to mkDerivation, e.g. qtWrapperArgs
-, seaqt ? nim-seaqt   # the seaqt source tree, e.g. nix/seaqt-ro.nix's (with QtRemoteObjects)
+, seaqt ? nim-seaqt   # the seaqt source tree
 , extraBuildInputs ? [ ]
 }:
 

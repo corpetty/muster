@@ -53,10 +53,12 @@
       inputs.logos-nix.inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # nim-seaqt's qt-6.11 branch (head 2026-07-08), generated for Qt 6.11: the app's Qt.
+    # nim-seaqt's qt-6.11 branch (head 2026-11-17), generated for Qt 6.11.1: the app's Qt
+    # is 6.11.2. Since that regeneration it carries QtRemoteObjects (seaqt-gen #18, with
+    # #20 and #21), so T3's build-time generation is gone (exo-c49).
     # The branches are rebased upstream — pin by commit, never by branch.
     nim-seaqt = {
-      url = "github:seaqt/nim-seaqt/41a8f1b16c8fc6afc86de4559bb819980fb07d72";
+      url = "github:seaqt/nim-seaqt/6956721d703242733eaa44e0269b4c7551c5c4b6";
       flake = false;
     };
     # nimside: the qobject: DSL (compile-time QMetaObject, the moc replacement) and the
@@ -73,31 +75,15 @@
       url = "github:corpetty/logos-nim-sdk/a710a31a940c99b7d5ad811f7f31aa4913f5032a";
       flake = false;
     };
-    # T3: seaqt-gen, the generator that produced nim-seaqt qt-6.8@7d40abd7 and
-    # qt-6.11@41a8f1b1 (master has not moved since). nix/seaqt-ro.nix
-    # runs it at build time (with nix/seaqt-gen-patches) to add QtRemoteObjects.
-    seaqt-gen = {
-      url = "github:seaqt/seaqt-gen/56485e6d0c3243f9511b34d65c215afead60865f";
-      flake = false;
-    };
-    # clang 14.0.6 for the generator only (its Docker image's version; clang >= 16 prints
-    # nested types unqualified and it panics). The runner's nixpkgs dropped llvmPackages_14.
-    # Build-time tooling: nothing from this nixpkgs reaches a binary.
-    nixpkgs-clang14.url = "github:NixOS/nixpkgs/b134951a4c9f3c995fd7be05f3243f8ecd65d798";
   };
 
-  outputs = { self, nixpkgs, logos-module-builder, logos-liblogos, logos-protocol, nim-seaqt, nimside, logos-nim-sdk, seaqt-gen, nixpkgs-clang14 }:
+  outputs = { self, nixpkgs, logos-module-builder, logos-liblogos, logos-protocol, nim-seaqt, nimside, logos-nim-sdk }:
     let
       systems = [ "x86_64-linux" "aarch64-linux" ];
       # The app itself builds on plain nixos-unstable (its default compiler, Boost, …). Only
       # the Logos tree takes nix/nixpkgs-app's overrides. Qt is the same store path in both.
       forAll = f: nixpkgs.lib.genAttrs systems (system: f (import nixpkgs.inputs.upstream { inherit system; }));
       seaqtApp = pkgs: pkgs.callPackage ./nix/seaqt-app.nix { inherit nim-seaqt nimside; };
-      # nim-seaqt + QtRemoteObjects, generated at build time (T3).
-      seaqtRO = pkgs: import ./nix/seaqt-ro.nix {
-        inherit pkgs nim-seaqt seaqt-gen;
-        clang14 = nixpkgs-clang14.legacyPackages.${pkgs.stdenv.hostPlatform.system}.llvmPackages_14.clang;
-      };
       # The view contract and the QML that uses it, shared with the C++ build (ui/).
       viewContract = ../ui/src/muster_ui.rep;
       viewQml = ../ui/src/qml;
@@ -165,14 +151,13 @@
           ];
           extraAttrs.qtWrapperArgs = [ "--set-default" "LOGOS_HOST_PATH" "${runner}/bin/logos_host" ];
         };
-        # T3: nim-seaqt with QtRemoteObjects, and its proof (checks.ro): a nimside source
-        # remoted over local:, acquired as a dynamic replica, driven both ways.
-        seaqt-ro = seaqtRO pkgs;
+        # T3: QtRemoteObjects from Nim (nim-seaqt binds it since 2026-11-17), and its proof
+        # (checks.ro): a nimside source remoted over local:, acquired as a dynamic replica,
+        # driven both ways.
         ro-test = seaqtApp pkgs {
           pname = "seaqt-ro-test";
           src = ./ro;
           main = "ro_test.nim";
-          seaqt = seaqtRO pkgs;
           extraBuildInputs = [ pkgs.qt6.qtremoteobjects ];
         };
         # T5: muster_module's typed client, generated from muster.lidl.
