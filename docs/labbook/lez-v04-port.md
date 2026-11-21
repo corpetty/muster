@@ -81,3 +81,16 @@
     suite's default 900 s budget cuts it off in step 7. `funder.sh` must run the 0.4 wallet
     (`MUSTER_LEZ_VERSION`): the v0.3.0 one fails a deploy on a v0.4 zone at its first segment,
     reading a fresh account's `null`.
+13. **The private posture on the devnet** (2026-11-21, exo-05f): `live_private04` passed with real
+    proofs against the immutable program, every proof naming no program (D18):
+    - a top-up of the group's fee account (104 s to prove, 229 KB);
+    - Create at the private PDA (257 s);
+    - a deposit (233 s);
+    - 1 of 2 refused while proving, nothing sent;
+    - a 2-of-3 payment to a public payee (292 s).
+
+    Each fee was 5,704,443 in the proof; the funder spent about 34.2M on the run. Run with
+    `CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo test --release -p msig_host04 --test
+    live_private04 -- --nocapture` and `MSIG_LIVE_WAIT_S=900`. A test enables LEE's test-utils
+    through its dev-dependencies, and LEE refuses them in a release build unless debug assertions
+    are on. Those assertions make proving about 38% slower than `msig_bench04`'s figures.

@@ -50,8 +50,10 @@ Its 0.4 port is one actor handler (`actor_entrypoint!`); the payout is
   - a deposit from a public account into the private vault;
   - a 2-of-3 payment to a public payee (`custody_transfer` from the private PDA);
   - refusals below threshold and on a spent nonce.
-- **Private posture, live local zone** [measured, dev-mode receipts]: the same four steps against a
-  real 0.4.0-rc3 sequencer (`lez04/host/tests/live_private04.rs`). Each fee went to the zone's fee
+- **Private posture, devnet** [measured, real proofs, 2026-11-21]: the same four steps against the
+  devnet (`lez04/host/tests/live_private04.rs`), all accepted: proved in 104 s, 257 s, 233 s and
+  292 s, about 230 KB each. That build ran with debug assertions on (below), about 38% slower than
+  our benchmark's figures. The same test passed on a local zone first, with dev-mode receipts. Each fee went to the zone's fee
   inbox, priced from `getFeeState`, and the program was deployed immutable so every proof named no
   program (D18).
 
@@ -239,7 +241,18 @@ indexers outside your workspace will hit this the first time a fee shares a proo
 cannot link `fee_core` (ours is Nim) need not copy the constants, and say when they will be
 re-pinned.
 
-### 7. Things that surprised us, documented here for other program authors
+### 7. A test cannot prove at release speed
+
+`test-utils` refuses to compile in a release build [from source, `lee/state_machine/src/lib.rs`],
+and a crate's tests get it whenever they use LEE's test helpers through dev-dependencies. So an
+integration test that proves for real either runs unoptimized (far slower) or sets
+`CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true`, which your own comment notes slips past the check,
+at about 38% slower proving [measured]. We moved our benchmark into a binary to avoid it.
+
+**Ask:** split the state-mutation helpers from the harmless ones (`TestPrivateKeys`,
+`signer_nonces`), so a release test can use the latter.
+
+### 8. Things that surprised us, documented here for other program authors
 
 - **A fresh public account must be admitted by its key** [measured]: funding one takes
   `--to-pk`. A program's own fresh PDA needs `PublicAccountEvidence::Pda` on Create.

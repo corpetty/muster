@@ -31,4 +31,6 @@ public account, a private Create, a deposit, below threshold refused while provi
 to a public payee. Every fee in the proof, priced from `getFeeState` (`private_reserve`) and paid to
 the zone's fee inbox; proved undisclosed (D18) when the program is immutable. Skipped unless
 `MSIG_LIVE_RPC` and `MSIG_LIVE_PROGRAM` are set; `RISC0_DEV_MODE=1` only against a dev-mode zone.
-Passed on a local 0.4.0-rc3 zone, 2026-11-20.
+Passed on a local 0.4.0-rc3 zone, 2026-11-20, and on the devnet with real proofs, 2026-11-21
+(`CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo test --release …`; labbook
+`docs/labbook/lez-v04-port.md` trap 13).
