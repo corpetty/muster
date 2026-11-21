@@ -8,6 +8,9 @@
 #                                                      made on first use
 #   infra/lez/funder.sh [--zone Z] balance             what it holds, in base units
 #   infra/lez/funder.sh [--zone Z] fund <id> <amount>  send native LEZ (id: hex or base58)
+#   infra/lez/funder.sh [--zone Z] new-account         a fresh public account in the funder's
+#                                                      wallet: prints "<id hex> <public key hex>"
+#                                                      (a test payee; v0.4 admits it by that key)
 #   infra/lez/funder.sh [--zone Z] deploy <prog.bin>   deploy a v0.3 program through
 #                                                      program_loader, the funder paying;
 #                                                      prints "program account: <b58> (hex <hex>)"
@@ -140,5 +143,18 @@ EOF
     w program-loader deploy --elf "$2" --header "$header" --segments "${segs[@]}" --payer "Public/$payer" "${imm[@]}" >&2 || exit 1
     id="${header#Public/}"
     echo "program account: $id (hex $(hex "$id"))" ;;
-  *) echo "usage: $0 [--zone local|testnet|<url>] account | balance | fund <id> <amount> | deploy <program.bin>" >&2; exit 2 ;;
+  new-account)
+    out=$(w account new public 2>&1) || { echo "$out" >&2; exit 1; }
+    id=$(echo "$out" | grep -oE 'Public/[1-9A-HJ-NP-Za-km-z]{32,44}' | head -1)
+    pk=$(echo "$out" | grep -oE 'With pk [0-9a-f]{64}' | head -1 | cut -d' ' -f3)
+    [ -n "$id" ] && [ -n "$pk" ] || { echo "could not make an account: $out" >&2; exit 1; }
+    python3 - "${id#Public/}" "$pk" <<'EOF2'
+import sys
+a = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+n = 0
+for c in sys.argv[1]: n = n * 58 + a.index(c)
+print(n.to_bytes(32, "big").hex(), sys.argv[2])
+EOF2
+    ;;
+  *) echo "usage: $0 [--zone local|testnet|<url>] account | balance | fund <id> <amount> | new-account | deploy <program.bin>" >&2; exit 2 ;;
 esac

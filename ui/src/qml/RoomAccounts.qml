@@ -70,11 +70,15 @@ Item {
     property var lezMsigOpen: ({})
     property var lezMsigPropose: ({})
     property var lezMsigFund: ({})
+    property var lezMsigTopup: ({})
     property var lezMsigRecover: ({})
     property var lezMsigState: ({})
     signal lezMsigOpenRequested(string specJson)
     signal lezMsigProposeRequested(string account, string actionJson)
     signal lezMsigFundRequested(string account, string amount)
+    // LEZ v0.4 (D17): the group's fee account, which pays every private transaction's fee;
+    // account is the multisig's id or, before Create, its ceremony's create key
+    signal lezMsigTopupRequested(string account, string amount)
     signal lezMsigRecoverRequested(string account)
 
     // a member's own accounts, disclosed to the room (exo-1f9): anyone may pick one where an
@@ -1160,21 +1164,47 @@ Item {
             // the room's ceremonies
             Repeater {
                 model: acc.lezMsigCeremonies
-                delegate: LogosText {
+                delegate: ColumnLayout {
+                    id: cer
                     required property var modelData
-                    objectName: "msigCeremony"
                     Layout.fillWidth: true
-                    wrapMode: Text.WordWrap
-                    readonly property int joined: (modelData.members || []).filter(function (m) { return m.joined; }).length
-                    text: (modelData.private ? qsTr("private") + " · " : "")
-                          + qsTr("%1 of %2 · joined %3 of %2").arg(modelData.threshold).arg((modelData.members || []).length).arg(joined)
-                          + (String(modelData.account || "").length > 0 ? "  ·  " + qsTr("created, disclosed")
-                             : modelData.createSent ? "  ·  " + qsTr("creating on chain…")
-                             : modelData.ready ? "  ·  " + qsTr("everyone joined; the opener creates it")
-                             : "  ·  " + qsTr("waiting for members to join"))
-                    color: Theme.palette.textSecondary
-                    font.family: MusterStyle.mono
-                    font.pixelSize: MusterStyle.caption
+                    spacing: Theme.spacing.small
+                    LogosText {
+                        objectName: "msigCeremony"
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        readonly property int joined: (cer.modelData.members || []).filter(function (m) { return m.joined; }).length
+                        text: (cer.modelData.private ? qsTr("private") + " · " : "")
+                              + qsTr("%1 of %2 · joined %3 of %2").arg(cer.modelData.threshold).arg((cer.modelData.members || []).length).arg(joined)
+                              + (String(cer.modelData.account || "").length > 0 ? "  ·  " + qsTr("created, disclosed")
+                                 : cer.modelData.createSent ? "  ·  " + qsTr("creating on chain…")
+                                 : cer.modelData.ready ? "  ·  " + qsTr("everyone joined; the opener creates it")
+                                 : "  ·  " + qsTr("waiting for members to join"))
+                        color: Theme.palette.textSecondary
+                        font.family: MusterStyle.mono
+                        font.pixelSize: MusterStyle.caption
+                    }
+                    // LEZ v0.4 (D17): Create itself pays its fee from the group's fee account, so a
+                    // private multisig needs a top-up before it exists
+                    RowLayout {
+                        Layout.fillWidth: true
+                        visible: cer.modelData.private === true && String(cer.modelData.account || "").length === 0
+                        spacing: Theme.spacing.small
+                        LogosTextField {
+                            id: cerTopupAmount
+                            objectName: "msigCeremonyTopupAmount"
+                            Layout.fillWidth: true
+                            placeholderText: qsTr("LEZ for its fees (needed first on LEZ v0.4)")
+                        }
+                        ActionButton {
+                            objectName: "msigCeremonyTopup"
+                            readonly property string base: acc.lezBase(cerTopupAmount.text)
+                            enabled: base !== "" && base !== "0"
+                            text: qsTr("Top up the fee account")
+                            variant: LogosButton.Variant.Secondary
+                            onClicked: acc.lezMsigTopupRequested(String(cer.modelData.createKey), base)
+                        }
+                    }
                 }
             }
             LogosText {
@@ -1250,6 +1280,25 @@ Item {
                     Layout.fillWidth: true
                     visible: parent.st.private === true
                     spacing: Theme.spacing.small
+                    LogosTextField {
+                        id: msigTopupAmount
+                        objectName: "msigTopupAmount"
+                        Layout.fillWidth: true
+                        placeholderText: qsTr("LEZ for the group's fees (LEZ v0.4)")
+                    }
+                    ActionButton {
+                        objectName: "msigTopup"
+                        readonly property string base: acc.lezBase(msigTopupAmount.text)
+                        enabled: base !== "" && base !== "0"
+                        text: qsTr("Top up the fee account")
+                        variant: LogosButton.Variant.Secondary
+                        onClicked: acc.lezMsigTopupRequested(String(acc.msigAccount.id), base)
+                    }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    visible: parent.st.private === true
+                    spacing: Theme.spacing.small
                     LogosText {
                         objectName: "msigRecoverNote"
                         Layout.fillWidth: true
@@ -1268,6 +1317,17 @@ Item {
                         variant: LogosButton.Variant.Secondary
                         onClicked: acc.lezMsigRecoverRequested(String(acc.msigAccount.id))
                     }
+                }
+                LogosText {
+                    objectName: "msigTopupResult"
+                    Layout.fillWidth: true
+                    visible: !!(acc.lezMsigTopup && (acc.lezMsigTopup.error || acc.lezMsigTopup.job))
+                    text: acc.lezMsigTopup && acc.lezMsigTopup.error
+                          ? "⚠ " + String(acc.lezMsigTopup.error) + (acc.lezMsigTopup.detail ? " — " + String(acc.lezMsigTopup.detail) : "")
+                          : qsTr("Proving your top-up on this device; every private transaction pays its fee from this account.")
+                    color: acc.lezMsigTopup && acc.lezMsigTopup.error ? Theme.palette.error : Theme.palette.textSecondary
+                    font.pixelSize: MusterStyle.caption
+                    wrapMode: Text.WordWrap
                 }
                 LogosText {
                     objectName: "msigFundResult"

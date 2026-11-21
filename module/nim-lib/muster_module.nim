@@ -4072,6 +4072,9 @@ proc msigPrivateTick(c: MsigCeremony, ks: Keystore, me: string) =
   elif c.createKey in gMsigCreated and pc.failure(gMsigCreated[c.createKey].hash).len == 0:
     discard pc.included(gMsigCreated[c.createKey].hash)   # proving or landing; the note follows
   elif c.createKey notin gMsigCreated or epochTime() - gMsigCreated[c.createKey].at > 60.0:
+    # on LEZ v0.4 Create pays its fee from the group's fee account (D17): wait for a member's
+    # top-up (lez_msig_topup) to land rather than send a Create the prover can only refuse
+    if pc.feeNote.len == 0 and pc.zoneLine() == "v0.4": return
     let sent = pc.sendOp(msigbytes.borsh(MsigInstruction(kind: ikCreate, zone: hexToBytes(c.zone), config: configOf(c))))
     if sent.ok: gMsigCreated[c.createKey] = (sent.hash, epochTime())
 
@@ -5410,8 +5413,10 @@ proc musterLezMemberAccount(index: string): string =
   ## One of this instance's LEZ member accounts; empty index = the first still fresh.
   let ks = moduleKeystore()
   proc entry(i: int, fresh: JsonNode): JsonNode =
-    let id = publicAccountId(ks.lezMemberKey(lezMemberLabel(i)))
-    %*{"index": i, "account": lezHx(id), "base58": accountIdToBase58(id), "fresh": fresh}
+    let key = ks.lezMemberKey(lezMemberLabel(i))
+    let id = publicAccountId(key)
+    # the public key too: LEZ v0.4 admits a fresh account only by it, so its first funder needs it
+    %*{"index": i, "account": lezHx(id), "base58": accountIdToBase58(id), "key": lezHx(key), "fresh": fresh}
   proc isFresh(rpc: LezRpc, i: int): bool =
     let a = rpc.getAccount(publicAccountId(ks.lezMemberKey(lezMemberLabel(i))))
     a.owner.len == 0 and a.data.len == 0 and a.nonce.isZero

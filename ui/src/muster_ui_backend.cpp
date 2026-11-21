@@ -1127,6 +1127,17 @@ void MusterUiBackend::lezMsigFund(const QString &account, const QString &amount)
     loadLezMsig();
 }
 
+void MusterUiBackend::lezMsigTopup(const QString &account, const QString &amount)
+{
+    // lez_msig_topup → {job, amount, payer}, or {error, detail}: on LEZ v0.4 the module proves a
+    // top-up of the group's fee account, this member's keystore signs it, and the fee account's
+    // new note reaches every member. account may be a ceremony's createKey, before Create.
+    const QString r = modules().muster_module.lez_msig_topup(account.trimmed(), amount.trimmed());
+    qInfo() << "[muster_ui] lez_msig_topup" << account << amount << "->" << r;
+    setLezMsigTopupJson(asObjectJson(r, "job"));
+    loadLezMsig();
+}
+
 void MusterUiBackend::lezMsigRecover(const QString &account)
 {
     // lez_msig_recover → {job}, or {error, detail}: the module reads the newest note from
@@ -1695,15 +1706,19 @@ void MusterUiBackend::onContextReady()
                 // The private posture (exo-efa): MUSTER_AUTOMSIG_PRIVATE opens it private (the
                 // panel's "Create a private…"); MUSTER_AUTOMSIG_FUND=<amount> deposits that much
                 // from this member's own account once the private account is disclosed (the
-                // panel's "Put in from my account").
+                // panel's "Put in from my account"). On LEZ v0.4, MUSTER_AUTOMSIG_TOPUP=<amount>
+                // has the opener top up the group's fee account through the ceremony's create
+                // key once opened (the panel's "Top up the fee account"): Create waits for it.
                 const QString msigOpenK = QString::fromUtf8(qgetenv("MUSTER_AUTOMSIG_OPEN"));
                 const bool msigPrivate = !qgetenv("MUSTER_AUTOMSIG_PRIVATE").isEmpty();
                 const QString msigFund = QString::fromUtf8(qgetenv("MUSTER_AUTOMSIG_FUND"));
+                const QString msigTopup = QString::fromUtf8(qgetenv("MUSTER_AUTOMSIG_TOPUP"));
                 const QString msigPay = QString::fromUtf8(qgetenv("MUSTER_AUTOMSIG_PAY"));
                 const bool msigApprove = !qgetenv("MUSTER_AUTOMSIG_APPROVE").isEmpty();
                 const bool msigSettle = !qgetenv("MUSTER_AUTOMSIG_SETTLE").isEmpty();
                 if (!msigOpenK.isEmpty() || !msigPay.isEmpty() || msigApprove || msigSettle) {
-                    static bool msigOpened = false, msigProposed = false, msigPolicySet = false, msigFunded = false;
+                    static bool msigOpened = false, msigProposed = false, msigPolicySet = false, msigFunded = false,
+                                msigToppedUp = false;
                     static QSet<QString> msigApproved, msigSettled;
                     static bool msigPayerLogged = false;
                     if (!msigPayerLogged) {   // the account this member sends (and pays) from
@@ -1717,6 +1732,16 @@ void MusterUiBackend::onContextReady()
                                                                              {"private", msigPrivate}})
                                                           .toJson(QJsonDocument::Compact)));
                         qInfo().noquote() << "[muster_ui] MSIG open ->" << lezMsigOpenJson();
+                    }
+                    if (!msigTopup.isEmpty() && msigOpened && !msigToppedUp) {
+                        // retried each tick until the module takes it: the payer's own funds may
+                        // not have landed yet
+                        const QString ck = QJsonDocument::fromJson(lezMsigOpenJson().toUtf8()).object().value("createKey").toString();
+                        if (!ck.isEmpty()) {
+                            lezMsigTopup(ck, msigTopup);
+                            msigToppedUp = QJsonDocument::fromJson(lezMsigTopupJson().toUtf8()).object().contains("job");
+                            qInfo().noquote() << "[muster_ui] MSIG topup ->" << lezMsigTopupJson();
+                        }
                     }
                     QString msigAccount;
                     for (const auto &c : QJsonDocument::fromJson(lezMsigCeremoniesJson().toUtf8()).array())
