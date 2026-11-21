@@ -115,7 +115,7 @@ proc zoneLine*(c: MsigLive): string =
     c.line = (if a.v4: "v0.4" else: "v0.3")
   c.line
 
-proc account(c: MsigLive, id: seq[byte]): LezAccountState =
+proc account*(c: MsigLive, id: seq[byte]): LezAccountState =
   ## An account read for this zone's line: on v0.4 an account no one has used reads as fresh.
   if c.zoneLine() == "v0.4": c.rpc.getAccount04(id) else: c.rpc.getAccount(id)
 

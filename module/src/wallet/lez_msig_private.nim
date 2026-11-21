@@ -118,9 +118,20 @@ proc recover*(c: MsigPrivate, fromBlock = 1'u64): MsigSent =
   c.jobs[id] = PrivJob(n: c.noteN + 1, feeN: c.feeNoteN + 1, scan: true)
   MsigSent(ok: true, hash: id)
 
+proc payerCovers(c: MsigPrivate, amount: UInt128): string =
+  ## "" when this member's public account holds `amount`; else why not. Checked before proving:
+  ## a proof over funds that are not there fails minutes later, once the job runs.
+  try:
+    let bal = c.account(c.payer()).balance
+    if bal < amount: return "your LEZ account holds " & $bal & ", less than " & $amount
+  except CatchableError as e: return "could not read your LEZ account: " & e.msg
+  ""
+
 proc fund*(c: MsigPrivate, amount: UInt128): MsigSent =
   ## A deposit into the vault from this member's own public LEZ account.
   if c.note.len == 0: return MsigSent(ok: false, error: "the multisig is not created yet")
+  let short = c.payerCovers(amount)
+  if short.len > 0: return MsigSent(ok: false, error: short)
   var r = c.request("fund")
   try: r["payerNonce"] = % $c.rpc.getAccount(c.payer()).nonce
   except CatchableError as e: return MsigSent(ok: false, error: "could not read the payer's nonce: " & e.msg)
@@ -132,6 +143,8 @@ proc topUp*(c: MsigPrivate, amount: UInt128): MsigSent =
   ## A top-up of the group's fee account (v0.4, D17) from this member's own public LEZ account:
   ## proved by the prover, signed in the keystore, sent by the prover. The fee account pays this
   ## transaction's own fee out of `amount`, so a group with no funds can start.
+  let short = c.payerCovers(amount)
+  if short.len > 0: return MsigSent(ok: false, error: short)
   var r = c.request("topup")
   try: r["payerNonce"] = % $c.rpc.getAccount04(c.payer()).nonce
   except CatchableError as e: return MsigSent(ok: false, error: "could not read the payer's nonce: " & e.msg)

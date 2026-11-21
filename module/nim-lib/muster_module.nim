@@ -4094,6 +4094,9 @@ proc msigTick() =
   for f in gMsigFunds:
     try:
       if f.ck in gMsigPriv and not gMsigPriv[f.ck].included(f.job): still.add f
+      elif f.ck in gMsigPriv and gMsigPriv[f.ck].failure(f.job).len > 0:
+        # a deposit, top-up or recovery the prover or the sequencer refused: say so, it is rare
+        stderr.writeLine("MUSTER lez-msig job " & f.job & " failed: " & gMsigPriv[f.ck].failure(f.job))
     except CatchableError: still.add f
   gMsigFunds = still
   for c in ceremonies(gSession.roomEvents(), gSession.topic):
