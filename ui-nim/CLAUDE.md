@@ -14,11 +14,7 @@ This is the port of the UI backend from C++ (`ui/src/muster_ui_backend.cpp`) to 
   - **What each PROP becomes:** a READONLY property with a Nim `setX`.
   - **The check** (`contract_test.nim`, `checks.contract`): compares QtRO's view of that object with repc's typed-source API, index by index; drives all 66 slots and 50 properties through QML; and resolves every `backend.<name>` in `ui/src/qml`.
   - **`--dump`** prints the generated declaration.
-- **`nix/seaqt-ro.nix`, `nix/seaqt-gen-patches/` and `ro/`**: T3.
-  - **What it is:** nim-seaqt plus QtRemoteObjects, **generated at build time** by the pinned seaqt-gen with four patches, and clang 14 from a pinned nixos-24.05.
-  - **Why build time:** the generated wrappers are C++, so they are never committed. Only the patches are.
-  - **The proof:** `ro/ro_test.nim` (`checks.ro`) remotes a nimside source and drives a dynamic replica both ways.
-  - **To use it:** an app passes `seaqt = seaqtRO pkgs` to `seaqtApp`.
+- **`ro/`**: T3, QtRemoteObjects from Nim. `ro/ro_test.nim` (`checks.ro`) remotes a nimside source and drives a dynamic replica both ways. nim-seaqt has shipped the RemoteObjects bindings since 2026-11-17 (seaqt-gen #18, #20, #21), so they come with the pin. Until then they were generated at build time from four seaqt-gen patches (exo-c49).
 - **`app/`**: the standalone app (option B, ADR-019).
   - **`muster_app.nim`**: the host. It runs the real `ui/src/qml/Main.qml`, with a Nim `logos` shim providing `module()`, `isViewModuleReady()` and `viewModuleReadyChanged`. With `--modules <dir>` it starts logos-core itself, as logos-standalone-app does (`--user-dir` / `LOGOS_USER_DIR`, `capability_module`, then `ui/metadata.json`'s dependencies), registers the view's token with `capability_module`, and runs the backend's startup.
   - **`backend.nim`**: every SLOT of the contract and the `MUSTER_AUTO*` autopilot (T5), slot for slot with `ui/src/muster_ui_backend.cpp`. It calls `muster_module` only through `mm.<method>Async`, the async twin of the client generated from `muster.lidl`, so the view never blocks. Included into `muster_app.nim`, because nimside wants each Impl in the module that declares the contract.
@@ -33,7 +29,7 @@ cd ui-nim && nix build .#checks.x86_64-linux.hello     # the same test, in the s
 cd ui-nim && nix run .#hello                           # a real window, on a display
 cd ui-nim && nix build .#checks.x86_64-linux.contract  # T2: the contract, index for index with repc
 cd ui-nim && nix run .#contract-test -- --dump         # the nimside declaration repContract generates
-cd ui-nim && nix build .#checks.x86_64-linux.ro             # T3: QtRemoteObjects from Nim (bindings generated in the build)
+cd ui-nim && nix build .#checks.x86_64-linux.ro             # T3: QtRemoteObjects from Nim
 cd ui-nim && nix build .#checks.x86_64-linux.muster-app-view   # T4a: the real Main.qml in the Nim host (sandbox)
 cd ui-nim && nix build .#logos-core .#logos-protocol-lib     # T1b: the in-process Logos libraries, on the app's Qt
 scripts/nim-app-core-probe.sh                          # T4a: + logos-core and muster_module.health() over lp_* (needs make build)
@@ -46,7 +42,8 @@ MUSTER_UI=nim scripts/ui-parity.sh                     # the parity oracle: ever
 
 - **One Qt per process.** seaqt compiles against Qt's private headers. It loads only on the Qt minor version it was generated for, or newer. One process cannot hold two Qt copies. Since T1b (ADR-019, "newest everything") the app has its own Qt, nixos-unstable's 6.11.2. Every library the app loads in-process is built here on that Qt, never taken from the builder's closure: `liblogos_core` and `liblogos_protocol`, through `nix/nixpkgs-app` (see its CLAUDE.md). The module processes keep Logos's Qt 6.9.2. Bump `logos-module-builder` here in the same change as `ui/flake.nix`, and move the `logos-liblogos` / `logos-protocol` pins with the runner's.
 - **The app is standalone** (ADR-019, option B). Write it as if Basecamp did not exist. The C++ Basecamp UI in `ui/` is frozen. It gets no feature of its own, but the QML and the `.rep` are shared, so a slot added to the contract is implemented in both backends. The compile fails on either side until it is.
-- **Pin seaqt and nimside by commit.** Their branches are rebased upstream.
+- **Pin seaqt and nimside by commit.** Their branches are rebased upstream, so a pinned commit can drop off its branch (nim-seaqt `qt-6.11` was rebased on 2026-11-17).
+- **`nim check` works** on the nimside programs here, since nim-seaqt `6956721` (seaqt-gen #22). `nim c --compileOnly` is no longer the only way to type-check.
 - **The UI reaches muster_module only through the logos API.** This applies here too. Code sharing means the client that logos-nim-sdk generates from `muster.lidl`. It never means linking the core into the UI process.
 - **Parity is judged by the self-tests.** A Nim UI build is ready when `MUSTER_UI=nim scripts/ui-parity.sh` is green, exactly as it is for `cpp` (11/11 on both, 2026-10-14). See `scripts/lib/ui-build.sh` for the contract a build must meet.
 - **Never block the main thread.** Every module call is an `…Async` twin; the next step goes in its continuation. A sync call here would freeze the view, which the C++ backend in `ui-host` never could.
