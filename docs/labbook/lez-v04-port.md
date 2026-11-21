@@ -113,3 +113,12 @@
     - a path dependency inside the workspace directory becomes a workspace member, so the staged
       core pulled its dev-dependencies (`proptest`) into a lockfile without them, and the offline
       build failed with "no matching package named `bit-set`". The staged workspace excludes it.
+16. **The private posture through the real UI on 0.4** (2026-11-21, exo-cc7):
+    `scripts/lez-msig-private-self-test.sh` passed on a local 0.4.0-rc3 zone, in a runner built with
+    `make build LEZ_MSIG_DIR=programs/lez-msig/lez04` (`lez_msig_module` 0.2.0 in its module set).
+    Two runners in one room: a private 2-of-2 opened, the fee account topped up through the
+    ceremony's create key, created through the hosted prover, a deposit, a payment approved on the
+    card and settled. The payee was paid exactly, both runners were final, 71 s in all with dev-mode
+    proofs. The first attempt found a real bug: the top-up went out before the opener's account was
+    funded, the job's proof failed minutes later, and nothing said so. A deposit or top-up now checks
+    the payer's balance first, and a failed job is logged.

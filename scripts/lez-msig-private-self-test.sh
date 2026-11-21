@@ -89,13 +89,16 @@ while [ $((SECONDS - T0)) -lt 900 ]; do
   fi
 done
 ui_cleanup
-for who in A B; do echo "$who: $(lg "$D/$who.log" | grep -a 'MSIG intent' | tail -1 | cut -c1-120)"; done
-echo "A topup: $(lg "$D/A.log" | grep -a 'MSIG topup' | tail -1 | cut -c1-160)"
+# a log line can pack several messages: take each one by its own marker
+for who in A B; do echo "$who: $(lg "$D/$who.log" | grep -aoE 'MSIG intent [^\\]{0,100}' | tail -1)"; done
+echo "A topup: $(lg "$D/A.log" | grep -aoE 'MSIG topup -> [^\\]{0,160}' | tail -1)"
+echo "A fund: $(lg "$D/A.log" | grep -aoE 'MSIG fund -> [^\\]{0,160}' | tail -1)"
+lg "$D/A.log" | grep -aoE 'MUSTER lez-msig job [^\\]{0,300}' | tail -3
 if [ "$ok" = 1 ]; then
   echo "SUCCESS: a private 2-of-2 lez-msig on LEZ v0.4, made and settled from the room, paid exactly $PAY; both runners final after $((SECONDS - T0))s."
   [ "${KEEP_LOGS:-0}" = 1 ] || rm -rf "$D"
 else
   echo "FAIL (the payee holds ${bal:-?}): logs kept in $D"
-  lg "$D/A.log" | grep -a 'MSIG ' | tail -5 | cut -c1-600
+  lg "$D/A.log" | grep -aoE 'MSIG (open|topup|account|fund|proposed|intent)[^\\]{0,200}' | tail -8
   exit 1
 fi
