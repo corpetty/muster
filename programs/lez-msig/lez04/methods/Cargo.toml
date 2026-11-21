@@ -3,10 +3,11 @@ name = "msig_methods04"
 version = "0.1.0"
 edition.workspace = true
 license.workspace = true
-description = "Builds the lez-msig v0.4 guest (methods/guest) and embeds its ELF and image id."
+description = "Embeds the deployed lez-msig v0.4 guest (artifacts/msig.bin) and its image id; MSIG_BUILD_GUEST=1 rebuilds it from methods/guest."
 
 [build-dependencies]
 risc0-build.workspace = true
+risc0-binfmt = "=3.0.4"
 
 [package.metadata.risc0]
 methods = ["guest"]

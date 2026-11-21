@@ -5,13 +5,20 @@ LEZ v0.3 and v0.4 cannot share one dependency graph. The rules are the same `../
 (`msig_core`), unchanged; only the adapter moves.
 
 - `v04/`: `msig_v04`, the wire types and the account derivation (a private PDA has no identifier).
-- `methods/`: builds the guest (`methods/guest`) with risc0-build; no deployed artifact yet.
-- `host/`: `msig_host04`, public transactions and the tests on LEE's own state (`V03State`, the
-  type kept its name at v0.4.0-rc3).
+- `methods/`: embeds the deployed guest (`artifacts/msig.bin`) and its image id.
+- `host/`: `msig_host04`, transactions for both postures, the executor (`exec.rs`) and the tests on
+  LEE's own state (`V03State`, the type kept its name at v0.4.0-rc3).
+- `module/`: `lez_msig_module` 0.2.0, the executor as a Logos module (exo-cc7). This directory is its
+  module package: `metadata.json`, `lez_msig_module.lidl` (v0.3's contract plus `topup` and the fee
+  account's notes), `generated/` (`tools/regen.sh`), `flake.nix` (`nix build .#lgx-portable`), which
+  stages `../core` inside its source since the builder compiles only this directory.
+- `artifacts/msig.bin`: the deployed v0.4 guest (the devnet's program, image id checked), embedded by
+  `methods/build.rs`; `MSIG_BUILD_GUEST=1` rebuilds it.
 
 Pins: LEZ `v0.4.0-rc3`. Both `Cargo.lock` files are seeded from LEZ rc3's own lockfile, because
 risc0-zkvm 3.0.5 is yanked and a fresh resolve picks 3.1.0, which does not build with LEZ.
-Build: `cargo build -p msig_methods04` (the guest, rzup's toolchain), `cargo test -p msig_host04`.
-The private posture on v0.4 runs on LEE's state (exo-05f, `host/tests/v04_private.rs`): Create, deposit and
-payment, each fee paid in the proof by the group's fee account (D17). D18's undisclosed image is shown (`v04_undisclosed.rs`).
-Not yet: a private payee, a call, the prover module and a live zone.
+Build: `cargo test -p msig_host04` (the guest comes from `artifacts/`; `MSIG_BUILD_GUEST=1` rebuilds it with
+rzup's toolchain). The private posture runs on LEE's state, on a local zone and on the devnet with real
+proofs (exo-05f): fee-account top-up, Create, deposit, payment, every fee in the proof from the group's
+fee account (D17), proved undisclosed (D18). Muster drives it through `msig_exec04`
+(`lez_msig_private_e2e`). Not yet: a private payee, a call, and the module installed in Basecamp.

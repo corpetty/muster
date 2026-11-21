@@ -52,6 +52,11 @@ pub fn program() -> Program {
     Program::new(msig_methods04::MSIG_ELF.into()).expect("a valid program")
 }
 
+/// The embedded program's image id, hex (its words little-endian, as risc0 prints a digest).
+pub fn image_id_hex() -> String {
+    program().id().iter().flat_map(|w| w.to_le_bytes()).map(|b| format!("{b:02x}")).collect()
+}
+
 pub struct Msig {
     pub program: AccountId,
     pub create_key: Key,
