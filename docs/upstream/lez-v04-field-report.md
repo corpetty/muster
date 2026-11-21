@@ -50,6 +50,10 @@ Its 0.4 port is one actor handler (`actor_entrypoint!`); the payout is
   - a deposit from a public account into the private vault;
   - a 2-of-3 payment to a public payee (`custody_transfer` from the private PDA);
   - refusals below threshold and on a spent nonce.
+- **Private posture through Muster's real UI, devnet** [measured, real proofs, 2026-11-21]: two
+  runners in one room, the prover a Logos module in each. A private 2-of-2 was opened, its fee
+  account topped up, created, funded, and a payment approved and settled, in 925 s end to end,
+  about four proofs and a dozen minute-long blocks (`scripts/lez-msig-private-self-test.sh`).
 - **Private posture, devnet** [measured, real proofs, 2026-11-21]: the same four steps against the
   devnet (`lez04/host/tests/live_private04.rs`), all accepted: proved in 104 s, 257 s, 233 s and
   292 s, about 230 KB each. That build ran with debug assertions on (below), about 38% slower than

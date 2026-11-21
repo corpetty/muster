@@ -122,3 +122,8 @@
     proofs. The first attempt found a real bug: the top-up went out before the opener's account was
     funded, the job's proof failed minutes later, and nothing said so. A deposit or top-up now checks
     the payer's balance first, and a failed job is logged.
+17. **The same, on the devnet with real proofs** (2026-11-21, exo-cc7): `MUSTER_FLEET=local
+    LEZ_RPC=http://46.225.45.199:3040 MSIG_PROGRAM=1c0a7ce6…8170d MSIG_REAL_PROOFS=1 MSIG_WAIT_S=3000
+    MSIG_MEMBER_FUND=60000000 scripts/lez-msig-private-self-test.sh`: two runners, the hosted
+    `lez_msig_module` 0.2.0 proving for real, every proof undisclosed. The top-up, Create, deposit and
+    settled 2-of-2 payment were all final in 925 s, and the payee was paid exactly.
