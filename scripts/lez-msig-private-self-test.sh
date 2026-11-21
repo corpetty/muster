@@ -20,7 +20,8 @@
 #   scripts/lez-msig-private-self-test.sh
 #   MSIG_PROGRAM (skip the deploy of lez04's artifacts/msig.bin), LEZ_RPC (default
 #   http://127.0.0.1:3040), KEEP_LOGS=1, MUSTER_FLEET=local (no fleet). Dev-mode proofs: the local
-#   zone runs RISC0_DEV_MODE, and so do the runners here.
+#   zone runs RISC0_DEV_MODE, and so do the runners here. On the devnet: MSIG_REAL_PROOFS=1 (the
+#   runners prove for real) and MSIG_WAIT_S (default 900) for four proofs and minute-long blocks.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/ui-build.sh
@@ -44,6 +45,8 @@ print("1" * (len(raw) - len(raw.lstrip(b"\0"))) + out)
 PY
 }
 [ "$(rpc getFeeState '[]')" != null ] || { echo "no LEZ v0.4 zone at $RPC: MUSTER_LEZ_VERSION=v0.4.0-rc3 infra/lez/localnet.sh"; exit 1; }
+# a funded member account: enough for the top-up and the deposit; on the devnet, keep it small
+MEMBER_FUND="${MSIG_MEMBER_FUND:-1000000000}"
 
 PROGRAM="${MSIG_PROGRAM:-}"
 if [ -z "$PROGRAM" ]; then
@@ -57,7 +60,9 @@ TOPIC="/muster/1/lez-msig-private-$(date +%s)/proto"
 CFG=$(ui_fleet_config)
 PAY=1200
 lg() { sed 's/\\"/"/g' "$1" 2>/dev/null; }
-LEZ=(MUSTER_LEZ_RPC="$RPC" MUSTER_LEZ_CHAIN=lez:local MUSTER_LEZ_MSIG_PROGRAM="$PROGRAM" RISC0_DEV_MODE=1)
+LEZ=(MUSTER_LEZ_RPC="$RPC" MUSTER_LEZ_CHAIN=lez:local MUSTER_LEZ_MSIG_PROGRAM="$PROGRAM")
+[ "${MSIG_REAL_PROOFS:-0}" = 1 ] || LEZ+=(RISC0_DEV_MODE=1)
+WAIT_S="${MSIG_WAIT_S:-900}"
 echo "program: $PROGRAM · topic: $TOPIC · logs: $D"
 
 read -r TO TOKEY < <("$FUNDER" --zone "$RPC" new-account) || { echo "no payee account"; exit 1; }
@@ -72,15 +77,15 @@ ui_launch "$D/B" "$D/B.log" HOME="$D/B-home" QT_FORCE_STDERR_LOGGING=1 "${LEZ[@]
 payer_of() { lg "$D/$1.log" | grep -a 'MSIG payer' | head -1; }
 
 funded=""; ok=0; T0=$SECONDS
-echo "running the ceremony, top-up, create, deposit, propose, approve, settle (up to 900s)..."
-while [ $((SECONDS - T0)) -lt 900 ]; do
+echo "running the ceremony, top-up, create, deposit, propose, approve, settle (up to ${WAIT_S}s)..."
+while [ $((SECONDS - T0)) -lt "$WAIT_S" ]; do
   sleep 2
   for who in A B; do   # fund each runner's own LEZ account once it names it, admitted by its key
     case " $funded " in *" $who "*) continue ;; esac
     line=$(payer_of "$who")
     acct=$(echo "$line" | grep -o '"account":"[0-9a-f]\{64\}"' | head -1 | cut -d'"' -f4)
     key=$(echo "$line" | grep -o '"key":"[0-9a-f]\{64\}"' | head -1 | cut -d'"' -f4)
-    [ -n "$acct" ] && [ -n "$key" ] && "$FUNDER" --zone "$RPC" fund "$acct" 1000000000 "$key" >/dev/null &&
+    [ -n "$acct" ] && [ -n "$key" ] && "$FUNDER" --zone "$RPC" fund "$acct" "$MEMBER_FUND" "$key" >/dev/null &&
       funded="$funded $who" && echo "funded $who's account $acct after $((SECONDS - T0))s"
   done
   bal=$(rpc getAccountBalance "[\"$(b58 "$TO")\"]")
