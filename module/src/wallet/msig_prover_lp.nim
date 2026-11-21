@@ -38,7 +38,8 @@ proc call(p: LpMsigProver, meth: string, arg: string): JsonNode =
 method derive*(p: LpMsigProver, req: JsonNode): JsonNode = p.call("derive", $req)
 method submit*(p: LpMsigProver, req: JsonNode): JsonNode =
   let mode = req{"mode"}.getStr("exec")
-  p.call((if mode in ["fund", "scan"]: mode else: "exec"), $req)
+  # topup is lez_msig_module 0.2.0's (the LEZ v0.4 line, exo-cc7); 0.1.0 answers it unknown
+  p.call((if mode in ["fund", "scan", "topup"]: mode else: "exec"), $req)
 method job*(p: LpMsigProver, id: string): JsonNode = p.call("job", id)
 method forget*(p: LpMsigProver, id: string) = discard p.call("forget", id)
 method send*(p: LpMsigProver, req: JsonNode): JsonNode = p.call("send", $req)

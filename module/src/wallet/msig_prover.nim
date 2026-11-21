@@ -19,7 +19,8 @@ type
 method derive*(p: MsigProver, req: JsonNode): JsonNode {.base.} =
   %*{"error": "unavailable", "detail": "no prover"}
 method submit*(p: MsigProver, req: JsonNode): JsonNode {.base.} =
-  ## {mode: exec | fund | scan, …} → {job} at once, or {error, detail}.
+  ## {mode: exec | fund | topup | scan, …} → {job} at once, or {error, detail}. topup is the LEZ
+  ## v0.4 line's (lez_msig_module 0.2.0).
   %*{"error": "unavailable", "detail": "no prover"}
 method job*(p: MsigProver, id: string): JsonNode {.base.} =
   ## {state: proving | done | failed, …the mode's answer} or {error}.
