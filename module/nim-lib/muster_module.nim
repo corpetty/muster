@@ -3996,6 +3996,12 @@ proc msigPrivFor(chain: string, program, createKey: seq[byte]): MsigPrivate =
     if gms.isNone: raise newException(WalletError, "you hold no group secret for this private multisig")
     let p = msigProver()
     if p == nil: raise newException(WalletError, "lez_msig_module is not loaded: install it to prove a private multisig's transactions")
+    # the prover must prove for this zone's LEZ line: v0.3 and v0.4 are separate builds (exo-cc7)
+    let line = newMsigLive(newLezRpc(gLezRpc), ks, chain, program, lezMemberLabel(0)).zoneLine()
+    let fit = proverFits(p.health(), line)
+    if not fit.ok:
+      raise newException(WalletError, "the installed lez_msig_module proves for another LEZ line than this zone's (" & line &
+                         "): install " & fit.want)
     let cer = ceremonyOf(gSession.roomEvents(), gSession.topic, ck)
     if cer.isNone: raise newException(WalletError, "no ceremony in this room for that multisig")
     let c = newMsigPrivate(newLezRpc(gLezRpc), gLezRpc, ks, chain, program, lezMemberLabel(0), p, gms.get, createKey)

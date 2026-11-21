@@ -107,7 +107,7 @@ proc newMsigLive*(rpc: LezRpc, ks: Keystore, chain: string, program: seq[byte], 
 
 proc payer*(c: MsigLive): seq[byte] = publicAccountId(c.ks.lezMemberKey(c.payerLabel))
 
-proc zoneLine(c: MsigLive): string =
+proc zoneLine*(c: MsigLive): string =
   ## The zone's line, from how it answers for the program's own account (deployed, so never
   ## fresh): v0.4 answers in actor states, v0.3 in shards. Read once.
   if c.line.len == 0:

@@ -35,6 +35,17 @@ proc call(p: LpMsigProver, meth: string, arg: string): JsonNode =
   except CatchableError as e:
     result = %*{"error": "unreadable", "detail": e.msg}
 
+method health*(p: LpMsigProver): JsonNode =
+  var res, err: cstring
+  let rc = lp_invoke(p.client, "health".cstring, "[]".cstring, CallMs, addr res, addr err)
+  defer:
+    if res != nil: lp_string_free(res)
+    if err != nil: lp_string_free(err)
+  if rc != LP_OK or res == nil: return %*{"error": "unreachable"}
+  try:
+    result = parseJson($res)
+    if result.kind == JString: result = parseJson(result.getStr())
+  except CatchableError: result = %*{"error": "unreadable"}
 method derive*(p: LpMsigProver, req: JsonNode): JsonNode = p.call("derive", $req)
 method submit*(p: LpMsigProver, req: JsonNode): JsonNode =
   let mode = req{"mode"}.getStr("exec")
