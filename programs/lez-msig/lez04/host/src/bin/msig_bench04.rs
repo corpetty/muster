@@ -61,13 +61,14 @@ impl Run {
     fn states(&self, ids: &[AccountId]) -> HashMap<Actor, ActorState> {
         ids.iter().map(|id| (Actor::native_balance(*id), native_state(&self.state.get_account_by_id(*id)))).collect()
     }
-    fn row(&mut self, m: usize, step: &str, f: impl FnOnce(&Self) -> Result<Proven, lee::error::LeeError>) {
+    fn row(&mut self, m: usize, step: &str, keys: &[&PrivateKey], f: impl FnOnce(&Self) -> Result<Proven, lee::error::LeeError>) {
         let t = Instant::now();
         let p = f(self).unwrap_or_else(|e| panic!("{step}: {e:?}"));
         let secs = t.elapsed().as_secs_f64();
-        let size = borsh::to_vec(&p.tx).unwrap().len();
+        let tx = p.signed(keys);
+        let size = borsh::to_vec(&tx).unwrap().len();
         self.block += 1;
-        let ok = self.state.transition_from_privacy_preserving_transaction(&p.tx, self.block, self.block * 1000).is_ok();
+        let ok = self.state.transition_from_privacy_preserving_transaction(&tx, self.block, self.block * 1000).is_ok();
         println!("| {m} | {step} | {secs:.1} | {size} | {} |", if ok { "yes" } else { "NO" });
         assert!(ok, "{step} was not accepted");
         if p.post.is_some() {
@@ -90,8 +91,8 @@ fn run(m: usize) {
     let mut r = Run { state, m: ms, note: None, fee_note: None, block: 0 };
     let (inbox, payee) = (AccountId::new(INBOX), AccountId::new(PAYEE));
 
-    r.row(m, "top-up of the fee account (public → private)", |r| {
-        r.m.top_up_fee_tx(&depositor, 0, 10_000, None, FEE, inbox, r.states(&[dep, inbox]))
+    r.row(m, "top-up of the fee account (public → private)", &[&depositor], |r| {
+        r.m.top_up_fee_tx(dep, 0, 10_000, None, FEE, inbox, r.states(&[dep, inbox]))
     });
     let config = Config {
         members: s.iter().map(|x| Member { key: x.key(), roles: role::ALL, weight: 1 }).collect(),
@@ -102,12 +103,12 @@ fn run(m: usize) {
         targets: vec![],
         limits: vec![],
     };
-    r.row(m, &format!("create ({n} members)"), |r| {
+    r.row(m, &format!("create ({n} members)"), &[], |r| {
         r.m.private_tx(Instruction::Create { zone: ZONE, config }, None, Some(r.fee()), r.states(&[inbox]))
     });
-    r.row(m, "deposit (public → the vault)", |r| {
+    r.row(m, "deposit (public → the vault)", &[&depositor], |r| {
         let nonce = r.state.get_account_by_id(dep).nonce.0;
-        r.m.deposit_tx(&depositor, nonce, 50_000, r.pre(), Some(r.fee()), r.states(&[dep, inbox]))
+        r.m.deposit_tx(dep, nonce, 50_000, r.pre(), Some(r.fee()), r.states(&[dep, inbox]))
     });
     let p = Proposal {
         multisig: r.m.key(),
@@ -119,7 +120,7 @@ fn run(m: usize) {
         proposer: s[0].key(),
     };
     let ins = Instruction::Execute { proposal: p.clone(), approvals: s[..m].iter().map(|x| x.approve(&p)).collect(), executor: None };
-    r.row(m, &format!("**execute: pay, {m} signature{}**", if m == 1 { "" } else { "s" }), |r| {
+    r.row(m, &format!("**execute: pay, {m} signature{}**", if m == 1 { "" } else { "s" }), &[], |r| {
         r.m.private_tx(ins, r.pre(), Some(r.fee()), r.states(&[payee, inbox]))
     });
     assert_eq!(vault_balance(r.note.as_ref().unwrap()), 49_000);

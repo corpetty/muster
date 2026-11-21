@@ -34,3 +34,8 @@ the zone's fee inbox; proved undisclosed (D18) when the program is immutable. Sk
 Passed on a local 0.4.0-rc3 zone, 2026-11-20, and on the devnet with real proofs, 2026-11-21
 (`CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo test --release …`; labbook
 `docs/labbook/lez-v04-port.md` trap 13).
+
+`live_exec04.rs`: the executor's JSON surface against a real v0.4 sequencer, as Muster calls it:
+derive, a top-up and a deposit signed outside the executor, Create, 1 of 2 answered `refused` with
+its code, 2 of 3 paying a public payee, scan reading both newest notes back. Passed on a local
+0.4.0-rc3 zone, 2026-11-21.

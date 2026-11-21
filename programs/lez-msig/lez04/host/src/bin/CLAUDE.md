@@ -6,3 +6,6 @@
 fee-account top-up, a private Create, a deposit and an M-signature payment, every fee in the proof.
 `cargo run --release -p msig_host04 --bin msig_bench04 -- 1 3 5 10`. A binary because LEE refuses its
 test-utils in a release build, and the tests' dev-dependencies enable them.
+
+`msig_exec04.rs`: `exec::exec_request` as a CLI, one JSON request on stdin, one answer on stdout;
+Muster's `CliMsigProver` runs it against a v0.4 zone.

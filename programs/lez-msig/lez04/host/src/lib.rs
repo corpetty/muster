@@ -14,15 +14,17 @@
 //! - for a Create of a public A that does not exist yet, admission evidence that A is the PDA of
 //!   (P, seed), since a fresh public account is otherwise refused.
 
+pub mod exec;
+
 use std::collections::{BTreeMap, HashMap};
 
 use key_protocol::key_management::{group_key_holder::GroupKeyHolder, secret_holders::PrivateKeyHolder};
 use lee::{
     fees::FeeDeclaration,
-    privacy_preserving_transaction::{circuit::ProgramCatalog, message::Message as PpMessage, witness_set::WitnessSet as PpWitnessSet},
+    privacy_preserving_transaction::{circuit::{ProgramCatalog, Proof}, message::Message as PpMessage, witness_set::WitnessSet as PpWitnessSet},
     program::Program,
     public_transaction, PrivacyPreservingTransaction, PrivateKey, ProgramId, ProvingInput, PublicAccountEvidence,
-    PublicExecutionContext, PublicKey, RecipientEncryption, RootCall, SenderPresentation, Simulation, TransactionEntry,
+    PublicExecutionContext, PublicKey, RecipientEncryption, Signature, RootCall, SenderPresentation, Simulation, TransactionEntry,
 };
 use lee_core::{
     account::{Account, AccountId, Actor, ActorState, Nonce},
@@ -75,12 +77,35 @@ pub struct PrivateFee {
     pub inbox: AccountId,
 }
 
-/// A proven private transaction, and the new notes a member decrypts from it: the multisig's
-/// and, when it paid, the fee account's.
+/// A proven private transaction, not yet signed, and the new notes a member decrypts from it:
+/// the multisig's and, when it paid, the fee account's. A public account spending in it (a
+/// deposit, a top-up) signs `hash()` in its own keystore; nothing here needs its key.
 pub struct Proven {
-    pub tx: PrivacyPreservingTransaction,
+    pub message: PpMessage,
+    pub proof: Proof,
     pub post: Option<Account>,
     pub fee_post: Option<Account>,
+}
+
+impl Proven {
+    /// What each signer signs: the message's hash.
+    pub fn hash(&self) -> [u8; 32] {
+        self.message.hash()
+    }
+
+    /// The transaction, signed here by `keys` (none for an execution: the multisig signs nothing).
+    pub fn signed(&self, keys: &[&PrivateKey]) -> PrivacyPreservingTransaction {
+        PrivacyPreservingTransaction::new(self.message.clone(), PpWitnessSet::for_message(&self.message, self.proof.clone(), keys))
+    }
+
+    /// The transaction with signatures made elsewhere, each checked against the message first.
+    pub fn with_signatures(&self, sigs: Vec<(Signature, PublicKey)>) -> Result<PrivacyPreservingTransaction, String> {
+        let ws = PpWitnessSet::from_raw_parts(sigs, self.proof.clone());
+        if !ws.signatures_are_valid_for(&self.message) {
+            return Err("bad-signature: a witness does not sign this message".into());
+        }
+        Ok(PrivacyPreservingTransaction::new(self.message.clone(), ws))
+    }
 }
 
 /// Where a private transaction's fee comes from: the fee account's current note, witnessed
@@ -239,29 +264,29 @@ impl Msig {
         let message = Program::serialize_message(self.envelope(op))?;
         let root = TransactionEntry::Sync(RootCall { to: self.root(), message });
         let fee = fee.map(Fee::Note);
-        self.prove(root, &mut actors, vec![], vec![self.pda_witness(pre)], fee, public_states, &[], BTreeMap::new(), self.account())
+        self.prove(root, &mut actors, vec![], vec![self.pda_witness(pre)], fee, public_states, BTreeMap::new(), self.account())
     }
 
-    /// A deposit into the private vault: a native transfer from `payer`'s public account, which
-    /// signs; the vault's credit is promoted into its note in the same proof.
+    /// A deposit into the private vault: a native transfer from the public account `from`, which
+    /// signs the result's `hash()`; the vault's credit is promoted into its note in the same proof.
     pub fn deposit_tx(
         &self,
-        payer: &PrivateKey,
-        payer_nonce: u128,
+        from: AccountId,
+        from_nonce: u128,
         amount: u128,
         pre: Option<(Account, MembershipProof)>,
         fee: Option<PrivateFee>,
         public_states: HashMap<Actor, ActorState>,
     ) -> Result<Proven, lee::error::LeeError> {
-        let from = AccountId::from(&PublicKey::new_from_private_key(payer));
         let sender = Actor::native_balance(from);
         let message = borsh::to_vec(&NativeMessage::Transfer { to: self.account(), amount }).expect("borsh");
         let root = TransactionEntry::Sync(RootCall { to: sender, message });
-        self.prove(root, &mut vec![sender], vec![from], vec![self.pda_witness(pre)], fee.map(Fee::Note), public_states, &[payer],
-                   BTreeMap::from([(from, Nonce(payer_nonce))]), self.account())
+        self.prove(root, &mut vec![sender], vec![from], vec![self.pda_witness(pre)], fee.map(Fee::Note), public_states,
+                   BTreeMap::from([(from, Nonce(from_nonce))]), self.account())
     }
 
-    /// A top-up of the group's fee account (D17) from `payer`'s public account, which signs. The
+    /// A top-up of the group's fee account (D17) from the public account `from`, which signs the
+    /// result's `hash()`. The
     /// credit is promoted into the fee account's note, witnessed with its full key (every member
     /// holds it), and the fee account pays this transaction's own fee out of it, so the first
     /// top-up needs no funds in the group. `pre` is the fee account's current note, None the first
@@ -269,15 +294,14 @@ impl Msig {
     #[allow(clippy::too_many_arguments)]
     pub fn top_up_fee_tx(
         &self,
-        payer: &PrivateKey,
-        payer_nonce: u128,
+        from: AccountId,
+        from_nonce: u128,
         amount: u128,
         pre: Option<(Account, MembershipProof)>,
         fee_amount: u128,
         inbox: AccountId,
         public_states: HashMap<Actor, ActorState>,
     ) -> Result<Proven, lee::error::LeeError> {
-        let from = AccountId::from(&PublicKey::new_from_private_key(payer));
         let sender = Actor::native_balance(from);
         let to = self.fee_account().expect("a private multisig has a fee account");
         let message = borsh::to_vec(&NativeMessage::Transfer { to, amount }).expect("borsh");
@@ -294,7 +318,7 @@ impl Msig {
             address_openings: Default::default(),
         };
         self.prove(root, &mut vec![sender], vec![from], vec![witness], Some(Fee::Credit { amount: fee_amount, inbox }),
-                   public_states, &[payer], BTreeMap::from([(from, Nonce(payer_nonce))]), to)
+                   public_states, BTreeMap::from([(from, Nonce(from_nonce))]), to)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -306,7 +330,6 @@ impl Msig {
         mut witnesses: Vec<PrivateWitness>,
         fee: Option<Fee>,
         public_states: HashMap<Actor, ActorState>,
-        signers: &[&PrivateKey],
         nonces: BTreeMap<AccountId, Nonce>,
         promote: AccountId,
     ) -> Result<Proven, lee::error::LeeError> {
@@ -350,8 +373,7 @@ impl Msig {
         let post = self.decrypt(actions);
         let fee_post = self.decrypt_fee(actions);
         let message = PpMessage::from_circuit_output(nonces, output);
-        let witness = PpWitnessSet::for_message(&message, proof, signers);
-        Ok(Proven { tx: PrivacyPreservingTransaction::new(message, witness), post, fee_post })
+        Ok(Proven { message, proof, post, fee_post })
     }
 
     /// The multisig's note among a transaction's private actions, as a member decrypts it.

@@ -77,9 +77,9 @@ impl Room {
     }
 
     /// Applies a proven transaction and carries its notes forward.
-    fn land(&mut self, p: Proven) {
+    fn land(&mut self, p: Proven, keys: &[&PrivateKey]) {
         self.block += 1;
-        self.state.transition_from_privacy_preserving_transaction(&p.tx, self.block, self.block * 1000).expect("the zone accepts it");
+        self.state.transition_from_privacy_preserving_transaction(&p.signed(keys), self.block, self.block * 1000).expect("the zone accepts it");
         if p.post.is_some() {
             self.note = p.post;
         }
@@ -129,29 +129,29 @@ fn the_private_vault_end_to_end_each_step_paying_its_fee() {
     // the group's fee account, topped up from a public account: its first fee comes out of the credit
     let dep = AccountId::from(&PublicKey::new_from_private_key(&r.depositor));
     let depositor = PrivateKey::try_new([7; 32]).unwrap();
-    let p = r.m.top_up_fee_tx(&depositor, 0, 1_000 + FEE, None, FEE, inbox, r.states(&[dep, inbox])).expect("top-up proves");
-    r.land(p);
+    let p = r.m.top_up_fee_tx(dep, 0, 1_000 + FEE, None, FEE, inbox, r.states(&[dep, inbox])).expect("top-up proves");
+    r.land(p, &[&depositor]);
     assert_eq!(vault_balance(&r.fee_note), 1_000, "the fee account holds the top-up less its own fee");
     assert_eq!(vault_balance(&r.state.get_account_by_id(dep)), 10_000 - 1_000 - FEE);
 
     // Create
     let create = Instruction::Create { zone: ZONE, config: config(&r.s) };
     let p = r.m.private_tx(create, None, Some(r.fee()), r.states(&[inbox])).expect("create proves");
-    r.land(p);
+    r.land(p, &[]);
     assert_eq!((r.st().epoch, r.st().config.threshold), (0, 2));
     assert_eq!(vault_balance(&r.fee_note), 1_000 - FEE, "the fee left the group's fee account");
 
     // a deposit from a public account
     let nonce = r.state.get_account_by_id(dep).nonce.0;
-    let p = r.m.deposit_tx(&depositor, nonce, 5_000, r.pre(), Some(r.fee()), r.states(&[dep, inbox])).expect("deposit proves");
-    r.land(p);
+    let p = r.m.deposit_tx(dep, nonce, 5_000, r.pre(), Some(r.fee()), r.states(&[dep, inbox])).expect("deposit proves");
+    r.land(p, &[&depositor]);
     assert_eq!(vault_balance(r.note.as_ref().unwrap()), 5_000, "the vault's note holds the deposit");
     assert_eq!(vault_balance(&r.state.get_account_by_id(dep)), 10_000 - 1_000 - FEE - 5_000);
 
     // 2 of 3 pays a public payee
     let pay = proposal(&r, 0, 1_200);
     let p = r.m.private_tx(execute(&r, &pay, &[0, 1]), r.pre(), Some(r.fee()), r.states(&[payee, inbox])).expect("2 of 3 proves");
-    r.land(p);
+    r.land(p, &[]);
     assert_eq!(vault_balance(r.note.as_ref().unwrap()), 3_800);
     assert_eq!(vault_balance(&r.state.get_account_by_id(payee)), 1 + 1_200, "the payee was credited publicly");
     assert_eq!(vault_balance(&r.state.get_account_by_id(inbox)), 1 + 4 * FEE, "four fees reached the inbox");

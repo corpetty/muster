@@ -94,10 +94,11 @@ impl Live {
     }
 
     /// Sends a proven transaction and waits until the zone holds its new notes.
-    async fn land(&mut self, step: &str, secs: f64, p: Proven) {
-        let size = borsh::to_vec(&p.tx).unwrap().len();
-        let fee = p.tx.message().execution.fee.as_ref().map(|_| "in the proof").unwrap_or("none");
-        self.c.send_transaction(LeeTransaction::PrivacyPreserving(p.tx)).await.expect("sendTransaction");
+    async fn land(&mut self, step: &str, secs: f64, p: Proven, keys: &[&PrivateKey]) {
+        let tx = p.signed(keys);
+        let size = borsh::to_vec(&tx).unwrap().len();
+        let fee = tx.message().execution.fee.as_ref().map(|_| "in the proof").unwrap_or("none");
+        self.c.send_transaction(LeeTransaction::PrivacyPreserving(tx)).await.expect("sendTransaction");
         let fee_id = self.m.fee_account().unwrap();
         let (post, fee_post) = (p.post.clone(), p.fee_post.clone().expect("the fee note decrypts"));
         until(step, async || {
@@ -158,8 +159,8 @@ async fn private_multisig_on_a_live_v04_zone() {
     let nonce = l.c.get_accounts_nonces(vec![dep]).await.unwrap()[0].0;
     let states = l.states(&[dep, inbox]).await;
     let t = Instant::now();
-    let p = l.m.top_up_fee_tx(&depositor, nonce, 4 * reserve + reserve, None, reserve, inbox, states).expect("top-up proves");
-    l.land("1. top-up of the group's fee account", t.elapsed().as_secs_f64(), p).await;
+    let p = l.m.top_up_fee_tx(dep, nonce, 4 * reserve + reserve, None, reserve, inbox, states).expect("top-up proves");
+    l.land("1. top-up of the group's fee account", t.elapsed().as_secs_f64(), p, &[&depositor]).await;
 
     // 2. create at the private PDA
     let s: Vec<Signer> = (0..3).map(|_| Signer::random()).collect();
@@ -171,15 +172,15 @@ async fn private_multisig_on_a_live_v04_zone() {
     let (fee, states) = (l.fee().await, l.states(&[inbox]).await);
     let t = Instant::now();
     let p = l.m.private_tx(Instruction::Create { zone, config }, None, Some(fee), states).expect("create proves");
-    l.land("2. create at the private PDA", t.elapsed().as_secs_f64(), p).await;
+    l.land("2. create at the private PDA", t.elapsed().as_secs_f64(), p, &[]).await;
     assert_eq!(l.m.state_of(l.note.as_ref().unwrap()).unwrap().config.threshold, 2);
 
     // 3. a deposit into the vault
     let nonce = l.c.get_accounts_nonces(vec![dep]).await.unwrap()[0].0;
     let (pre, fee, states) = (l.pre().await, l.fee().await, l.states(&[dep, inbox]).await);
     let t = Instant::now();
-    let p = l.m.deposit_tx(&depositor, nonce, 5_000, pre, Some(fee), states).expect("deposit proves");
-    l.land("3. deposit into the vault", t.elapsed().as_secs_f64(), p).await;
+    let p = l.m.deposit_tx(dep, nonce, 5_000, pre, Some(fee), states).expect("deposit proves");
+    l.land("3. deposit into the vault", t.elapsed().as_secs_f64(), p, &[&depositor]).await;
     assert_eq!(vault_balance(l.note.as_ref().unwrap()), 5_000);
 
     // 4. below threshold refuses while proving; 2 of 3 pays the public payee
@@ -194,7 +195,7 @@ async fn private_multisig_on_a_live_v04_zone() {
     let (pre, fee, states) = (l.pre().await, l.fee().await, l.states(&[payee, inbox]).await);
     let t = Instant::now();
     let p = l.m.private_tx(exec(&[0, 1]), pre, Some(fee), states).expect("2 of 3 proves");
-    l.land("4. 2 of 3 pay a public payee", t.elapsed().as_secs_f64(), p).await;
+    l.land("4. 2 of 3 pay a public payee", t.elapsed().as_secs_f64(), p, &[]).await;
     until("the payee's credit", async || l.c.get_account_balance(payee).await.unwrap_or(0) == 1_201).await;
     assert_eq!(vault_balance(l.note.as_ref().unwrap()), 3_800);
     eprintln!("live_private04: all passed");

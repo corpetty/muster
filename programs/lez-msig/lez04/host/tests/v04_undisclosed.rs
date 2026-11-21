@@ -64,7 +64,7 @@ fn create(m: &Msig) -> lee::PrivacyPreservingTransaction {
         targets: vec![],
         limits: vec![],
     };
-    m.private_tx(Instruction::Create { zone: ZONE, config }, None, None, Default::default()).expect("proves").tx
+    m.private_tx(Instruction::Create { zone: ZONE, config }, None, None, Default::default()).expect("proves").signed(&[])
 }
 
 fn claims(tx: &lee::PrivacyPreservingTransaction) -> Vec<ProgramImageClaim> {

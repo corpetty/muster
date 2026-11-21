@@ -15,4 +15,10 @@
     the transaction makes.
 - `with_undisclosed(header, proof)` (D18): private executions claim only that some immutable
   program ran, against the header's mirror commitment.
-- `vault_balance`, `native_state`.
+- `Proven` holds a proof unsigned: `hash()` is what a public payer signs in its own keystore,
+  `signed(keys)` / `with_signatures(sigs)` make the transaction.
+- `fee_inbox`, `private_reserve` (LEZ's private fee at the next block's ceilings),
+  `vault_balance`, `native_state`.
+- `exec.rs`: `exec_request(json) -> json`, the executor on 0.4. It has v0.3's surface (derive / exec /
+  fund / scan / send) plus `feeNote` → `feePost` and a `topup` mode; it prices the fee from
+  `getFeeState` and proves undisclosed when the program is immutable. `bin/msig_exec04` is its CLI.
