@@ -4005,10 +4005,16 @@ proc msigPrivFor(chain: string, program, createKey: seq[byte]): MsigPrivate =
     c.onNote = proc(n: int, note: seq[byte], hash: string) =
       try: room.publishNote(moduleKeystore(), cc, n, note, hash)
       except CatchableError: discard
+    # on LEZ v0.4 the group fee account's new note goes to every member the same way (D17)
+    c.onFeeNote = proc(n: int, note: seq[byte], hash: string) =
+      try: room.publishNote(moduleKeystore(), cc, n, note, hash, kind = "feenote")
+      except CatchableError: discard
     gMsigPriv[ck] = c
   result = gMsigPriv[ck]
   let ln = latestNote(gSession.roomEvents(), ks, gSession.topic, ck)
   if ln.found: result.learn(ln.n, ln.note)
+  let fn = latestNote(gSession.roomEvents(), ks, gSession.topic, ck, kind = "feenote")
+  if fn.found: result.learnFee(fn.n, fn.note)
 
 proc msigLiveOf(a: LezMsigAccount): MsigLive =
   if a.private: return msigPrivFor(a.chain, a.program, a.createKey)

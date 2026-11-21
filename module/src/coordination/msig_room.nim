@@ -217,6 +217,9 @@ proc liveMsigPropose*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor
 ##   lmsig/<ck>/gms/<who>        the group secret, sealed to <who>; only the opener's counts
 ##   lmsig/<ck>/note/<n>/<who>   the note after the n-th transaction (0 is Create), sealed to
 ##                               <who>, with the transaction's hash; only a member's counts
+##   lmsig/<ck>/feenote/<n>/<who> on LEZ v0.4, the group fee account's n-th note (D17), sealed
+##                               the same way: every transaction pays its fee from it, and a
+##                               top-up changes it alone, so it is numbered on its own (exo-05f)
 
 proc ceremonyOf*(events: seq[Event], room, createKey: string): Option[MsigCeremony] =
   for c in ceremonies(events, room):
@@ -236,23 +239,27 @@ proc groupSecretOf*(events: seq[Event], ks: Keystore, room, createKey: string): 
       if g.len == 32: return some(g)
     except CatchableError: discard
 
-proc publishNote*(s: CoordinationSession, ks: Keystore, c: MsigCeremony, n: int, note: seq[byte], hash: string) =
-  ## Seal the multisig's new note to every member, after the chain included `hash`.
+proc publishNote*(s: CoordinationSession, ks: Keystore, c: MsigCeremony, n: int, note: seq[byte], hash: string,
+                  kind = "note") =
+  ## Seal the multisig's new note (`kind` "note"), or its fee account's ("feenote"), to every
+  ## member, after the chain included `hash`.
   let me = memberId(ks)
   for m in c.members:
-    s.publishAuthored(ks, Event(key: "lmsig/" & c.createKey & "/note/" & $n & "/" & m, value: $(%*{
+    s.publishAuthored(ks, Event(key: "lmsig/" & c.createKey & "/" & kind & "/" & $n & "/" & m, value: $(%*{
       "author": me, "hash": hash, "sealed": hx(sealTo(encIdentityFromBytes(unhx(m)).x, note))})))
 
-proc latestNote*(events: seq[Event], ks: Keystore, room, createKey: string): tuple[found: bool, n: int, note: seq[byte], hash: string] =
-  ## The newest note sealed to this member by a member of the multisig. Only one transaction
-  ## spending a note can land (its nullifier), so each number has one note; the first counts.
+proc latestNote*(events: seq[Event], ks: Keystore, room, createKey: string,
+                 kind = "note"): tuple[found: bool, n: int, note: seq[byte], hash: string] =
+  ## The newest note (`kind` "note", or the fee account's, "feenote") sealed to this member by a
+  ## member of the multisig. Only one transaction spending a note can land (its nullifier), so
+  ## each number has one note; the first counts.
   let c = ceremonyOf(events, room, createKey)
   if c.isNone: return
   let me = memberId(ks)
   result.n = -1
   for e in events:
     let p = e.key.split('/')
-    if p.len != 5 or p[0] != "lmsig" or p[1] != c.get.createKey or p[2] != "note" or p[4] != me: continue
+    if p.len != 5 or p[0] != "lmsig" or p[1] != c.get.createKey or p[2] != kind or p[4] != me: continue
     try:
       let n = parseInt(p[3])
       if n <= result.n: continue

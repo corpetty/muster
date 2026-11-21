@@ -94,3 +94,12 @@
     live_private04 -- --nocapture` and `MSIG_LIVE_WAIT_S=900`. A test enables LEE's test-utils
     through its dev-dependencies, and LEE refuses them in a release build unless debug assertions
     are on. Those assertions make proving about 38% slower than `msig_bench04`'s figures.
+14. **Muster's room drives the private posture on 0.4** (2026-11-21, exo-05f): `lez_msig_private_e2e`
+    passed 9/9 on a local 0.4.0-rc3 zone through `msig_exec04` (lez04's executor, the same JSON as
+    v0.3's plus `feeNote` / `feePost` / `topup`). The group's fee account has its own notes in the
+    room (`lmsig/<ck>/feenote/<n>/<who>`), numbered apart from the vault's: a top-up changes only
+    the fee note, every other step both. A member who lost both recovers both from the chain.
+    Run with `MUSTER_LEZ_VERSION=v0.4.0-rc3 RISC0_DEV_MODE=1 MUSTER_LEZ_MSIG_PROGRAM=<hex>
+    module/tests/run-suite.sh e2e lez_msig_private`, after `cargo build --release -p msig_host04
+    --bin msig_exec04` in `programs/lez-msig/lez04`. Hosted in Basecamp it still needs the
+    `lez_msig_module` rebuilt from lez04.
