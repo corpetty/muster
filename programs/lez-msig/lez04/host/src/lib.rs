@@ -24,13 +24,13 @@ use lee::{
     privacy_preserving_transaction::{circuit::{ProgramCatalog, Proof}, message::Message as PpMessage, witness_set::WitnessSet as PpWitnessSet},
     program::Program,
     public_transaction, PrivacyPreservingTransaction, PrivateKey, ProgramId, ProvingInput, PublicAccountEvidence,
-    PublicExecutionContext, PublicKey, RecipientEncryption, Signature, RootCall, SenderPresentation, Simulation, TransactionEntry,
+    PublicExecutionContext, PublicKey, Recipient, RecipientEncryption, Signature, RootCall, SenderPresentation, Simulation, TransactionEntry,
 };
 use lee_core::{
     account::{Account, AccountId, Actor, ActorState, Nonce},
     native_token::{Message as NativeMessage, NATIVE_TOKEN_PROGRAM_ID},
     program::{MessageBody, ProgramHeader},
-    Commitment, EncryptionScheme, FeeTransfer, MembershipProof, NullifierWitness, PrivateAction, PrivateWitness,
+    Commitment, EncryptionScheme, EphemeralSecretKey, FeeTransfer, MembershipProof, NullifierWitness, PrivateAction, PrivateWitness,
     RegularKey, SharedSecretKey, WitnessKind, DUMMY_COMMITMENT_HASH,
 };
 pub use msig_core;
@@ -121,9 +121,15 @@ enum Fee {
     Credit { amount: u128, inbox: AccountId },
 }
 
-/// No durable async message is sealed by these transactions; one would be a bug.
-fn no_seal(body: &MessageBody) -> Result<RecipientEncryption, lee::error::LeeError> {
-    Err(lee::error::LeeError::InvalidInput(format!("no seal for an async message to {:?}", body.to)))
+/// The seal for a durable async message: the one recipient whose address it goes to, under a fresh
+/// ephemeral key. A message to anyone else is refused, since only the recipients a caller names
+/// are ever paid privately (a private payee, exo-05f).
+fn seal_for(seals: &[Recipient], body: &MessageBody) -> Result<RecipientEncryption, lee::error::LeeError> {
+    seals
+        .iter()
+        .find(|r| r.address() == body.to.account_id)
+        .map(|r| RecipientEncryption { recipient: r.clone(), esk: EphemeralSecretKey(random32()) })
+        .ok_or_else(|| lee::error::LeeError::InvalidInput(format!("no seal for an async message to {:?}", body.to)))
 }
 
 impl Msig {
@@ -265,11 +271,28 @@ impl Msig {
         fee: Option<PrivateFee>,
         public_states: HashMap<Actor, ActorState>,
     ) -> Result<Proven, lee::error::LeeError> {
-        let mut actors = self.private_public_actors(&op);
+        self.private_tx_sealed(op, pre, fee, public_states, &[])
+    }
+
+    /// `private_tx`, paying private payees: each credit to one of `seals`' addresses is not
+    /// declared public but sealed to that recipient and published, for its owner alone to open and
+    /// claim in a transaction of its own. Nothing in the proof names the payee.
+    pub fn private_tx_sealed(
+        &self,
+        op: Instruction,
+        pre: Option<(Account, MembershipProof)>,
+        fee: Option<PrivateFee>,
+        public_states: HashMap<Actor, ActorState>,
+        seals: &[Recipient],
+    ) -> Result<Proven, lee::error::LeeError> {
+        let private: Vec<AccountId> = seals.iter().map(Recipient::address).collect();
+        let mut actors: Vec<Actor> =
+            self.private_public_actors(&op).into_iter().filter(|x| !private.contains(&x.account_id)).collect();
         let message = Program::serialize_message(self.envelope(op))?;
         let root = TransactionEntry::Sync(RootCall { to: self.root(), message });
         let fee = fee.map(Fee::Note);
-        self.prove(root, &mut actors, vec![], vec![self.pda_witness(pre)], fee, public_states, BTreeMap::new(), self.account())
+        self.prove(root, &mut actors, vec![], vec![self.pda_witness(pre)], fee, public_states, BTreeMap::new(),
+                   self.account(), seals)
     }
 
     /// A deposit into the private vault: a native transfer from the public account `from`, which
@@ -287,7 +310,7 @@ impl Msig {
         let message = borsh::to_vec(&NativeMessage::Transfer { to: self.account(), amount }).expect("borsh");
         let root = TransactionEntry::Sync(RootCall { to: sender, message });
         self.prove(root, &mut vec![sender], vec![from], vec![self.pda_witness(pre)], fee.map(Fee::Note), public_states,
-                   BTreeMap::from([(from, Nonce(from_nonce))]), self.account())
+                   BTreeMap::from([(from, Nonce(from_nonce))]), self.account(), &[])
     }
 
     /// A top-up of the group's fee account (D17) from the public account `from`, which signs the
@@ -323,7 +346,7 @@ impl Msig {
             address_openings: Default::default(),
         };
         self.prove(root, &mut vec![sender], vec![from], vec![witness], Some(Fee::Credit { amount: fee_amount, inbox }),
-                   public_states, BTreeMap::from([(from, Nonce(from_nonce))]), to)
+                   public_states, BTreeMap::from([(from, Nonce(from_nonce))]), to, &[])
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -337,6 +360,7 @@ impl Msig {
         public_states: HashMap<Actor, ActorState>,
         nonces: BTreeMap<AccountId, Nonce>,
         promote: AccountId,
+        seals: &[Recipient],
     ) -> Result<Proven, lee::error::LeeError> {
         let payer = self.fee_account().expect("private");
         let transfer = fee.map(|f| {
@@ -372,7 +396,7 @@ impl Msig {
             &programs,
             |_| SenderPresentation::Canonical,
             |_, body: &MessageBody| body.to.account_id == promote,
-            no_seal,
+            |body: &MessageBody| seal_for(seals, body),
         )?;
         let actions = &output.execution.private_actions;
         let post = self.decrypt(actions);

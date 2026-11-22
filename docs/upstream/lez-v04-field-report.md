@@ -245,7 +245,21 @@ indexers outside your workspace will hit this the first time a fee shares a proo
 cannot link `fee_core` (ours is Nim) need not copy the constants, and say when they will be
 re-pinned.
 
-### 7. A test cannot prove at release speed
+### 7. A private payment below the private fee cannot be claimed from itself
+
+**What happens** [measured, `lez04/host/tests/live_exec04.rs`, local 0.4.0-rc3 zone]:
+- lez-msig pays a private payee by an async message sealed to its `Recipient`, and that works well.
+  The proof never names the payee, and only the payee's keys open the published message.
+- The payee then claims it in a private transaction of its own, which pays the flat private fee:
+  5,704,443 reserved at base fee 8–9.
+- So a payee with no other funded private account can only claim a payment larger than that fee.
+  A smaller one is stuck until the payee funds a private account some other way.
+
+**Ask, for discussion:** a cheaper claim (a claim's proof verifies one message and makes one note),
+or a way for the sender to pay the receiver's claim fee in the sending proof. Payroll, refunds and
+other small private payments from a vault all hit this.
+
+### 8. A test cannot prove at release speed
 
 `test-utils` refuses to compile in a release build [from source, `lee/state_machine/src/lib.rs`],
 and a crate's tests get it whenever they use LEE's test helpers through dev-dependencies. So an
@@ -256,7 +270,7 @@ at about 38% slower proving [measured]. We moved our benchmark into a binary to 
 **Ask:** split the state-mutation helpers from the harmless ones (`TestPrivateKeys`,
 `signer_nonces`), so a release test can use the latter.
 
-### 8. Things that surprised us, documented here for other program authors
+### 9. Things that surprised us, documented here for other program authors
 
 - **A fresh public account must be admitted by its key** [measured]: funding one takes
   `--to-pk`. A program's own fresh PDA needs `PublicAccountEvidence::Pda` on Create.

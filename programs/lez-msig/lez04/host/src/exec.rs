@@ -11,8 +11,10 @@
 //!
 //! Requests (hex lowercase, no 0x; amounts and nonces as decimal strings):
 //!   {"mode":"derive","program","gms","createKey"} → {"account","feeAccount"}
-//!   {"mode":"exec","rpc","program","gms","createKey","pre"|null,"feeNote","op"}
-//!       → {"hash","post","feePost","account","root","fee","proveMs"}: proved and sent.
+//!   {"mode":"exec","rpc","program","gms","createKey","pre"|null,"feeNote","op","recipients"?}
+//!       → {"hash","post","feePost","account","root","fee","proveMs"}: proved and sent. recipients
+//!         are private payees (lee_core::Recipient, borsh hex): a payment to one of their addresses
+//!         is sealed to it and published, for it alone to claim; any other payee is public.
 //!   {"mode":"fund","rpc","program","gms","createKey","pre","feeNote","payerKey","payerNonce","amount"}
 //!       → {"sign","message","proof","post","feePost","account","root","fee","proveMs"}: not sent.
 //!   {"mode":"topup","rpc","program","gms","createKey","feeNote"|null,"payerKey","payerNonce","amount"}
@@ -33,7 +35,7 @@ use lee::{
     privacy_preserving_transaction::{
         circuit::Proof, message::Message as PpMessage, witness_set::WitnessSet as PpWitnessSet, PrivacyPreservingTransaction,
     },
-    PublicKey, Signature,
+    PublicKey, Recipient, Signature,
 };
 use lee_core::{
     account::{Account, AccountId, Actor, ActorState},
@@ -194,12 +196,21 @@ async fn run(req: Value) -> Result<Value, String> {
     match mode {
         "exec" => {
             let op: Instruction = borsh::from_slice(&bytes(&req, "op")?.ok_or("missing op")?).map_err(|e| format!("op: {e}"))?;
+            // private payees: each credit to one of their addresses is sealed to it, not declared
+            let mut seals: Vec<Recipient> = vec![];
+            for r in req.get("recipients").and_then(Value::as_array).map(Vec::as_slice).unwrap_or(&[]) {
+                let b = hex::decode(r.as_str().ok_or("a recipient is hex")?).map_err(|e| format!("recipient: {e}"))?;
+                seals.push(borsh::from_slice(&b).map_err(|e| format!("recipient: {e}"))?);
+            }
             let mut ids = vec![inbox];
             if let Some(Outflow::Pay { to, .. }) = claims(&op).ok().and_then(|cl| cl.outflow) {
-                ids.push(AccountId::new(to));
+                let to = AccountId::new(to);
+                if !seals.iter().any(|r| r.address() == to) {
+                    ids.push(to);
+                }
             }
             let st = states(&c, &ids).await?;
-            let p = m.private_tx(op, pre, Some(fee), st).map_err(proved)?;
+            let p = m.private_tx_sealed(op, pre, Some(fee), st, &seals).map_err(proved)?;
             let prove_ms = t.elapsed().as_millis();
             let post = p.post.clone().ok_or("the proof's notes do not decrypt to the multisig's account")?;
             let fee_post = p.fee_post.clone().ok_or("the fee account's new note does not decrypt")?;

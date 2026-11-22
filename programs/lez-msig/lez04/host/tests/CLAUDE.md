@@ -10,6 +10,10 @@ from a public account (its first fee paid out of the credit), a private Create, 
 from a public account, a 2-of-3 payment to a public payee, every step's fee from the group's fee
 account; below threshold and a spent nonce refused while proving.
 
+`v04_private_payee.rs`: a private vault paying a PRIVATE payee: the credit sealed to its `Recipient`
+and published, the payee's address nowhere in the transaction, only the payee opening it, the payee
+claiming it in its own proof with the fee out of the credit.
+
 `v04_undisclosed.rs`: D18. The program deployed through the loader (segments, then an immutable
 header); a private Create proved undisclosed names no program and lands; a claim against a header the
 zone never saw is refused.
@@ -37,5 +41,6 @@ Passed on a local 0.4.0-rc3 zone, 2026-11-20, and on the devnet with real proofs
 
 `live_exec04.rs`: the executor's JSON surface against a real v0.4 sequencer, as Muster calls it:
 derive, a top-up and a deposit signed outside the executor, Create, 1 of 2 answered `refused` with
-its code, 2 of 3 paying a public payee, scan reading both newest notes back. Passed on a local
+its code, 2 of 3 paying a public payee, 2 of 3 paying a private payee (`recipients`) whose credit it
+finds, opens and claims on chain, scan reading both newest notes back. Passed on a local
 0.4.0-rc3 zone, 2026-11-21.

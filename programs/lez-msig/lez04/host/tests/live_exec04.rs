@@ -3,11 +3,15 @@
 //! and MSIG_LIVE_PROGRAM are set (see live_private04.rs). Each signature the payer makes is made
 //! here, as Muster's keystore makes it, from the `sign` the executor answered; no key goes in:
 //!   derive → topup (sign, send) → exec Create → fund (sign, send) → exec 1 of 2 (refused) →
-//!   exec 2 of 3 → scan finds both newest notes.
+//!   exec 2 of 3 → exec 2 of 3 to a PRIVATE payee (recipients): its credit sealed, found and opened
+//!   by the payee alone, and claimed in its own transaction, the fee out of the credit → scan
+//!   finds both newest notes.
 
 use std::time::{Duration, Instant};
 
-use lee::{PrivateKey, PublicKey, Signature};
+use key_protocol::key_management::group_key_holder::GroupKeyHolder;
+use lee::{PrivateKey, PublicKey, Recipient, Signature};
+use lee_core::{program::Publication, PrivateAccountKind};
 use lee_core::account::AccountId;
 use msig_core::sign::Signer;
 use msig_core::*;
@@ -79,9 +83,9 @@ async fn the_executor_drives_a_private_multisig_on_a_live_v04_zone() {
     let payer = PrivateKey::try_new(rand::random()).unwrap();
     let payer_pk = PublicKey::new_from_private_key(&payer);
     let payer_id = AccountId::from(&payer_pk);
-    fund(&rpc, &payer_id, 40_000_000, &payer_pk);
+    fund(&rpc, &payer_id, 80_000_000, &payer_pk);
     let deadline = Instant::now() + Duration::from_secs(wait);
-    while c.get_account_balance(payer_id).await.unwrap_or(0) < 40_000_000 {
+    while c.get_account_balance(payer_id).await.unwrap_or(0) < 80_000_000 {
         assert!(Instant::now() < deadline, "timed out funding the payer");
         tokio::time::sleep(Duration::from_secs(3)).await;
     }
@@ -89,7 +93,7 @@ async fn the_executor_drives_a_private_multisig_on_a_live_v04_zone() {
     let pk = hex::encode(payer_pk.value());
 
     // top up the fee account; the payer signs
-    let t = ok(req("topup", json!({"feeNote": null, "payerKey": pk, "payerNonce": nonce().await, "amount": "25000000"}))).await;
+    let t = ok(req("topup", json!({"feeNote": null, "payerKey": pk, "payerNonce": nonce().await, "amount": "40000000"}))).await;
     sign_and_send(&rpc, &t, &payer).await;
     let mut fee_note = t["feePost"].as_str().unwrap().to_string();
     landed(&fee_account, &fee_note).await;
@@ -110,7 +114,7 @@ async fn the_executor_drives_a_private_multisig_on_a_live_v04_zone() {
     eprintln!("create: {} proved in {} ms", e["hash"], e["proveMs"]);
 
     // a deposit; the payer signs
-    let f = ok(req("fund", json!({"pre": note, "feeNote": fee_note, "payerKey": pk, "payerNonce": nonce().await, "amount": "5000"}))).await;
+    let f = ok(req("fund", json!({"pre": note, "feeNote": fee_note, "payerKey": pk, "payerNonce": nonce().await, "amount": "15000000"}))).await;
     sign_and_send(&rpc, &f, &payer).await;
     note = f["post"].as_str().unwrap().to_string();
     fee_note = f["feePost"].as_str().unwrap().to_string();
@@ -143,6 +147,62 @@ async fn the_executor_drives_a_private_multisig_on_a_live_v04_zone() {
         tokio::time::sleep(Duration::from_secs(3)).await;
     }
     eprintln!("pay 2 of 3: proved in {} ms", e["proveMs"]);
+
+    // a private payee: the credit is sealed to it, and it alone opens and claims it
+    let payee = GroupKeyHolder::new().derive_regular_shared_account_keys(&rand::random());
+    let to = Recipient { npk: payee.generate_nullifier_public_key(), vpk: payee.generate_viewing_public_key(),
+                         kind: PrivateAccountKind::Regular, opening: None };
+    let address = to.address();
+    let pay2 = Proposal { multisig: msig, zone, epoch: 0, nonce: 1, action: Action::Transfer { to: address.as_ref().try_into().unwrap(), amount: 7_000_000 },
+                          expires_ms: 9_000_000_000_000, proposer: s[0].key() };
+    let exec2 = Instruction::Execute { proposal: pay2.clone(), approvals: vec![s[0].approve(&pay2), s[1].approve(&pay2)], executor: None };
+    let e = ok(req("exec", json!({"pre": note, "feeNote": fee_note, "op": op(&exec2),
+                                  "recipients": [hex::encode(borsh::to_vec(&to).unwrap())]}))).await;
+    note = e["post"].as_str().unwrap().to_string();
+    fee_note = e["feePost"].as_str().unwrap().to_string();
+    landed(&account, &note).await;
+    let vk = &payee.viewing_secret_key;
+    let (position, body, rho) = c.get_publications(0, 256).await.unwrap().into_iter().find_map(|(pos, p)| match p {
+        Publication::Sealed(m) => m.open(payee.generate_nullifier_public_key(), &vk.d, &vk.z).map(|(b, _, rho)| (pos, b, rho)),
+        _ => None,
+    }).expect("the payee finds a message sealed to it");
+    assert_eq!(body.to.account_id, address);
+    let q = c.get_fee_state().await.unwrap();
+    let claim_fee = msig_host04::private_reserve(0, q.next_base_fee_exec_ceiling, q.next_base_fee_stor_ceiling);
+    let inbox = msig_host04::fee_inbox();
+    let inbox_state = msig_host04::native_state(&c.get_account(inbox).await.unwrap().unwrap_or_default());
+    let input = lee::ProvingInput {
+        claims: vec![],
+        root: lee::TransactionEntry::Async(lee_core::MessageWitness {
+            body, rho: Some(rho),
+            membership_proof: c.get_message_path(position).await.unwrap().expect("the message's path"),
+            filler: lee_core::DummyOutput::default(),
+        }),
+        public_context: lee::PublicExecutionContext::new(vec![lee_core::account::Actor::native_balance(inbox)], []),
+        private_witnesses: vec![lee_core::PrivateWitness {
+            vpk: payee.generate_viewing_public_key(), random_seed: rand::random(),
+            kind: lee_core::WitnessKind::Regular(lee_core::RegularKey::Authorized(payee.authorization_secret_key)),
+            nullifier: lee_core::NullifierWitness::Init { commitment_root: lee_core::DUMMY_COMMITMENT_HASH },
+            address_openings: Default::default(),
+        }],
+        dummy_inputs: vec![], ciphertext_padding: None, recoveries: vec![], private_promotions: Default::default(),
+        fee: Some(lee_core::FeeTransfer { payer: address, recipient: inbox, amount: claim_fee, refund_to: None }),
+    };
+    let sim = lee::Simulation { public_actor_states: [(lee_core::account::Actor::native_balance(inbox), inbox_state)].into(), admitted_accounts: None };
+    let (output, proof) = lee::execute_and_prove(input, &sim, &lee::privacy_preserving_transaction::circuit::ProgramCatalog::default(),
+        |_| lee::SenderPresentation::Canonical, |_, _| false,
+        |b| Err(lee::error::LeeError::InvalidInput(format!("no seal {:?}", b.to)))).expect("the claim proves");
+    let claimed = output.execution.private_actions.iter().find_map(|a| {
+        let ss = lee_core::SharedSecretKey::decapsulate(&a.encrypted_post_state.epk, &vk.d, &vk.z)?;
+        let (_, acc) = lee_core::EncryptionScheme::decrypt(&a.encrypted_post_state.ciphertext, &ss, &a.nullifier)?;
+        output.execution.private_actions.iter().any(|x| x.commitment == lee_core::Commitment::new(&address, &acc)).then_some(acc)
+    }).expect("the payee's new note");
+    let msg = lee::privacy_preserving_transaction::message::Message::from_circuit_output(Default::default(), output);
+    let claim = lee::PrivacyPreservingTransaction::new(msg.clone(), lee::privacy_preserving_transaction::witness_set::WitnessSet::for_message(&msg, proof, &[]));
+    c.send_transaction(common::transaction::LeeTransaction::PrivacyPreserving(claim)).await.expect("the claim is sent");
+    landed(&hex::encode(address.as_ref() as &[u8]), &hex::encode(borsh::to_vec(&claimed).unwrap())).await;
+    assert_eq!(msig_host04::vault_balance(&claimed), 7_000_000 - claim_fee, "the payee holds the payment less its claim's fee");
+    eprintln!("private payee: paid 7000000 sealed, claimed by the payee alone (fee {claim_fee})");
 
     // a member who lost both notes reads them back from the chain
     let sc = ok(req("scan", json!({}))).await;
