@@ -161,10 +161,38 @@ Work done while waiting for feedback, each item in its own draft PR:
 - **M3: chat_module, limited** (PR #388). Each multisig's discussion runs in a chat group that
   follows its members. With a patched module exposing `remove_group_member`, removal was proven
   on the live fleet: the removed member reads nothing after.
+- **M1: Muster's own client on the devnet** (exo-50c, PR #387). Every step declares a gas limit
+  fitted to what it meters, so a refusal no longer costs about 16M. Muster's three-member room
+  flow passed 7/7 against the devnet program.
+- **M1: the private posture on 0.4** (exo-05f, PR #387), 2026-11-21:
+  - **D17 decided:** every private transaction pays its fee inside its proof from a group fee
+    account derived from the GMS, witnessed `FeeOnly`. Members top it up from a public account in
+    one proof that pays its own fee out of the credit, so a group needs no funds to start.
+  - **D18 decided:** the program is deployed immutable and proved undisclosed; a transaction
+    names no program.
+  - On the devnet with real proofs: top-up, Create, deposit and a 2-of-3 payment (104 s, 257 s,
+    233 s and 292 s to prove), each fee about 5.7M.
+  - **Through Muster's real UI on the devnet** (two runners, real proofs): a private 2-of-2 was
+    opened, topped up, created, funded, approved on the card and settled, in 925 s end to end.
+- **M1: the 0.4 prover as a Logos module** (exo-cc7, PR #387). `lez_msig_module` 0.2.0 is built
+  from the 0.4 workspace and loads in `logoscore`. Muster takes the prover that matches the zone's
+  line and names the version to install when it doesn't. The UI has "Top up the fee account".
+- **M1: P.1/P.2 on 0.4 with real proving** (`BENCHMARKS.md`, 64-core EPYC):
+  - a payment proves in about 182 s + 11.5 s per approval (v0.3: 136 s + 15 s);
+  - paying the fee inside the proof costs about 95 s on every step;
+  - the transaction is 229–238 KB, flat in M.
+- **M1: a private payee and a private Call** (PR #387). Both run on LEE's 0.4 state, and the private
+  payee also on a local zone. A private payee's credit is sealed to it, and it alone opens and
+  claims it. A Call runs with the vault's seed inside the proof.
+- **Reports to the teams** (`docs/upstream/`): LEZ (costs, latency, and nine findings with asks),
+  chat (removal, addresses, membership timing), and the module builder (packaging).
 - **Not done:**
-  - the private posture on 0.4;
-  - Muster's client on 0.4;
-  - a laptop-class benchmark.
+  - D19, in-program rotation (exo-3dc);
+  - a private payee from the room (exo-ea3);
+  - deposits from outside the group arriving as sealed messages;
+  - a laptop-class benchmark;
+  - the Basecamp dogfood journey;
+  - `lez_msig_module` 0.2.0 in the catalogue.
 
 ## 3. Milestones
 
@@ -176,24 +204,26 @@ starting 2026-11-23. Milestones 2 and 3 can overlap.
 
 The devnet runs LEZ 0.4.0-rc3, so M1 is the 0.4 port (exo-0d3.9), deployed where people can reach
 it.
-- **Public posture on 0.4:** done locally (PR #387). Next, deploy it on the devnet (needs the
-  funder funded, Q2).
+- **Public posture on 0.4:** done, on the devnet, and from Muster's room (PR #387).
 - **Private posture on 0.4**, on top of the decisions in `docs/design/lez-msig.md` §9:
-  - **D17:** the fee every private execution now pays inside the proof;
-  - **D18:** the program deployed immutable and proved undisclosed;
-  - deposits arrive as sealed messages that the next execution collects;
-  - the new private addresses.
+  - **D17:** the fee every private execution now pays inside the proof. Decided and done.
+  - **D18:** the program deployed immutable and proved undisclosed. Decided and done.
+  - Deposits from outside the group, arriving as sealed messages that the next execution
+    collects. Not done; members deposit inside the proof today.
+  - The new private addresses. Done.
 - **In-program rotation (D19):** removing a member is one approved action. In that transaction the
   vault moves to a successor under a new group secret, carrying its config and balance. A retired
   vault forwards late deposits (a sweep). This is James Zaki's pattern, and it answers the
   revocation question.
-- **Muster's client on 0.4:** the transaction codec, the chain seam and the prover module.
+- **Muster's client on 0.4:** the transaction codec, the chain seam and the prover module. Done,
+  and run through the real UI on the devnet.
 - **Already done for v0.3:**
   - the room follows the program's members (#382);
   - spending limits from the room (#383);
   - real proving from a room (#386);
   - the idle benchmark (#385).
-- P.1/P.2 rerun on 0.4 with real proving, and on a laptop-class machine.
+- P.1/P.2 rerun on 0.4 with real proving (done, 64-core EPYC), and on a laptop-class machine (not
+  yet).
 - **Dogfood:** install Muster in Basecamp. Two people open a 2-of-3 private multisig on the
   devnet, fund it, pay out, add a member, remove one (the vault rotates), and watch the removed
   member lose the room.
