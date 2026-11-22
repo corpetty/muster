@@ -1252,7 +1252,7 @@ Item {
                     objectName: "msigPrivateNote"
                     Layout.fillWidth: true
                     visible: parent.st.private === true
-                    text: qsTr("Private: only the members can read this. On chain each action is one proof, with no member, approval or settings in it; a payment to a public account shows that account and the amount.")
+                    text: qsTr("Private: only the members can read this. On chain each action is one proof, with no member, approval or settings in it; a payment to a public account shows that account and the amount. On LEZ v0.4 anyone can pay this vault's address from a public account; the payment shows up here once the group's next transaction collects it.")
                     color: Theme.palette.textSecondary
                     font.pixelSize: MusterStyle.caption
                     wrapMode: Text.WordWrap
