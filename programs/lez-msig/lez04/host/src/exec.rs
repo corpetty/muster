@@ -20,6 +20,10 @@
 //!   {"mode":"topup","rpc","program","gms","createKey","feeNote"|null,"payerKey","payerNonce","amount"}
 //!       → {"sign","message","proof","feePost","feeAccount","root","fee","proveMs"}: not sent; the fee
 //!         comes out of `amount`.
+//!   exec's Create registers the vault's recovery binding, so anyone can pay its address publicly;
+//!   exec's "collect" ([positions]) collects such deposits in the same proof (→ "collected").
+//!   {"mode":"inbound","rpc","program","gms","createKey","from"?}
+//!       → {"deposits":[{"position","amount","from"}],"next"}: payments to the vault from outside.
 //!   {"mode":"scan","rpc","program","gms","createKey","from"?}
 //!       → {"found","post","block","hash","feeFound","feePost","scanned"}: the newest notes on chain.
 //!   {"mode":"send","rpc","message","proof","witnesses":[{"signature","publicKey"}]} → {"hash"}
@@ -159,6 +163,9 @@ async fn run(req: Value) -> Result<Value, String> {
     if mode == "scan" {
         return scan(&req, &c, &m).await;
     }
+    if mode == "inbound" {
+        return inbound(&req, &c, &m).await;
+    }
     let m = undisclosed(&c, m).await?;
     let fee_note = account(&req, "feeNote")?;
     let inbox = fee_inbox();
@@ -210,13 +217,29 @@ async fn run(req: Value) -> Result<Value, String> {
                 }
             }
             let st = states(&c, &ids).await?;
-            let p = m.private_tx_sealed(op, pre, Some(fee), st, &seals).map_err(proved)?;
+            // the vault's recovery binding at Create, so anyone can pay its address from a public
+            // account; and the deposits the caller asks to collect (positions from `inbound`)
+            let recoveries = if matches!(op, Instruction::Create { .. }) { vec![m.vault_binding()] } else { vec![] };
+            let mut claims = vec![];
+            let mut collected = vec![];
+            for pos in req.get("collect").and_then(Value::as_array).map(Vec::as_slice).unwrap_or(&[]) {
+                let pos = pos.as_str().and_then(|x| x.parse::<u64>().ok()).ok_or("collect lists positions as decimal strings")?;
+                let page = c.get_publications(pos, 1).await.map_err(|e| format!("getPublications: {e}"))?;
+                let body = page.into_iter().find(|(p, _)| *p == pos).and_then(|(_, p)| m.inbound(&p))
+                    .ok_or(format!("no deposit to this vault at position {pos}"))?;
+                let path = c.get_message_path(pos).await.map_err(|e| format!("getMessagePath: {e}"))?
+                    .ok_or(format!("no path for position {pos}"))?;
+                claims.push(m.claim(body, path));
+                collected.push(pos.to_string());
+            }
+            let extras = crate::Extras { seals, recoveries, claims };
+            let p = m.private_tx_with(op, pre, Some(fee), st, extras).map_err(proved)?;
             let prove_ms = t.elapsed().as_millis();
             let post = p.post.clone().ok_or("the proof's notes do not decrypt to the multisig's account")?;
             let fee_post = p.fee_post.clone().ok_or("the fee account's new note does not decrypt")?;
             let hash = send(&c, p.signed(&[])).await?;
             Ok(json!({"hash": hash, "post": hexb(&post), "feePost": hexb(&fee_post), "account": id_hex(&a),
-                      "root": root, "fee": amount_fee.to_string(), "proveMs": prove_ms}))
+                      "root": root, "fee": amount_fee.to_string(), "proveMs": prove_ms, "collected": collected}))
         }
         "fund" => {
             let pre = pre.ok_or("fund needs the multisig's current note")?;
@@ -272,6 +295,32 @@ async fn scan(req: &Value, c: &SequencerClient, m: &Msig) -> Result<Value, Strin
         out["feePost"] = json!(hexb(&f));
     }
     Ok(out)
+}
+
+/// Deposits to the vault from outside the group: every publication from `from` (default 0) addressed
+/// to the vault whose recovery opens with the group's keys. Whether one was collected already is
+/// the caller's record (a collected one is refused at proving). → {deposits: [{position, amount,
+/// from}], next}.
+async fn inbound(req: &Value, c: &SequencerClient, m: &Msig) -> Result<Value, String> {
+    const PAGE: u64 = 256;
+    let mut at: u64 = req.get("from").and_then(Value::as_str).and_then(|s| s.parse().ok()).unwrap_or(0);
+    let mut deposits = vec![];
+    loop {
+        let page = c.get_publications(at, PAGE as _).await.map_err(|e| format!("getPublications: {e}"))?;
+        let Some((last, _)) = page.last() else { break };
+        let next = last + 1;
+        for (pos, p) in &page {
+            if let Some(body) = m.inbound(p) {
+                let amount = match borsh::from_slice::<lee_core::native_token::Message>(&body.message) {
+                    Ok(lee_core::native_token::Message::Credit(a)) => a.to_string(),
+                    _ => "0".into(),
+                };
+                deposits.push(json!({"position": pos.to_string(), "amount": amount, "from": id_hex(&body.from.account_id)}));
+            }
+        }
+        at = next;
+    }
+    Ok(json!({"deposits": deposits, "next": at.to_string()}))
 }
 
 /// A proved deposit or top-up, signed by its payer elsewhere, sent. Every signature is checked

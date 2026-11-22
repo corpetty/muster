@@ -14,6 +14,9 @@
   - `decrypt` / `decrypt_fee` read the new notes back. A note's commitment is not in the same
     `PrivateAction` as its ciphertext, so a decrypted account is matched against every commitment
     the transaction makes.
+- `private_tx_with(…, Extras)`: payees sealed to, recovery bindings registered, deposits collected.
+  `vault_binding` (registered at Create) lets anyone pay the vault's address publicly; `inbound` finds
+  such a deposit in a publication, `claim` collects it in the next private transaction.
 - `with_undisclosed(header, proof)` (D18): private executions claim only that some immutable
   program ran, against the header's mirror commitment.
 - `Proven` holds a proof unsigned: `hash()` is what a public payer signs in its own keystore,

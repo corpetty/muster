@@ -259,7 +259,30 @@ re-pinned.
 or a way for the sender to pay the receiver's claim fee in the sending proof. Payroll, refunds and
 other small private payments from a vault all hit this.
 
-### 8. A test cannot prove at release speed
+### 8. Receiving into a private vault from a public account
+
+**What works** [measured, `v04_private_inbound.rs`, `live_exec04.rs` on a local zone]:
+- The vault's Create registers its recovery binding.
+- Anyone can then pay the vault's address from a public account. The zone publishes the credit in
+  the clear, and the group recovers it with its keys and collects it inside its next private
+  transaction (`ProvingInput.claims`), once only.
+- Without the binding, the payment is refused (`UnboundAsyncDestination`).
+
+**What we hit:**
+- **The wallet CLI cannot make that payment** [measured]. `auth-transfer send --to` declares the
+  destination public, so the transaction reverts ("declared public but not admitted"). For an
+  unowned private account the CLI wants `--to-npk`/`--to-vpk` and sends a sealed private transfer,
+  which needs the payer to hold private funds. We built the public transaction ourselves.
+- **Finding deposits means reading every publication** [from source]: `getPublications` pages by
+  position only, so a vault's client walks the whole stream, and remembers which ones it collected.
+
+**Asks:**
+- A wallet option to pay a bound private address from a public account (leave the destination
+  undeclared).
+- `getPublications` filtered by destination address for clear publications. Their addresses are
+  already public, so the filter discloses nothing new.
+
+### 9. A test cannot prove at release speed
 
 `test-utils` refuses to compile in a release build [from source, `lee/state_machine/src/lib.rs`],
 and a crate's tests get it whenever they use LEE's test helpers through dev-dependencies. So an
@@ -270,7 +293,7 @@ at about 38% slower proving [measured]. We moved our benchmark into a binary to 
 **Ask:** split the state-mutation helpers from the harmless ones (`TestPrivateKeys`,
 `signer_nonces`), so a release test can use the latter.
 
-### 9. Things that surprised us, documented here for other program authors
+### 10. Things that surprised us, documented here for other program authors
 
 - **A fresh public account must be admitted by its key** [measured]: funding one takes
   `--to-pk`. A program's own fresh PDA needs `PublicAccountEvidence::Pda` on Create.

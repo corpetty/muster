@@ -29,8 +29,9 @@ use lee::{
 use lee_core::{
     account::{Account, AccountId, Actor, ActorState, Nonce},
     native_token::{Message as NativeMessage, NATIVE_TOKEN_PROGRAM_ID},
-    program::{MessageBody, ProgramHeader},
-    Commitment, EncryptionScheme, EphemeralSecretKey, FeeTransfer, MembershipProof, NullifierWitness, PrivateAction, PrivateWitness,
+    program::{MessageBody, ProgramHeader, Publication},
+    Commitment, DummyOutput, EncryptedNote, EncryptionScheme, EphemeralSecretKey, FeeTransfer, MessageWitness,
+    PrivateAccountKind, MembershipProof, NullifierWitness, PrivateAction, PrivateWitness,
     RegularKey, SharedSecretKey, WitnessKind, DUMMY_COMMITMENT_HASH,
 };
 pub use msig_core;
@@ -119,6 +120,18 @@ impl Proven {
 enum Fee {
     Note(PrivateFee),
     Credit { amount: u128, inbox: AccountId },
+}
+
+/// The ciphertext padding every private transaction here asks for; a claim's filler note matches it.
+const PAD: u32 = 1024;
+
+/// What a private transaction carries besides its instruction: private payees to seal to
+/// (exo-ea3), recovery bindings it registers on chain, and deposits it collects (claims).
+#[derive(Default)]
+pub struct Extras {
+    pub seals: Vec<Recipient>,
+    pub recoveries: Vec<RecipientEncryption>,
+    pub claims: Vec<MessageWitness>,
 }
 
 /// The seal for a durable async message: the one recipient whose address it goes to, under a fresh
@@ -285,14 +298,74 @@ impl Msig {
         public_states: HashMap<Actor, ActorState>,
         seals: &[Recipient],
     ) -> Result<Proven, lee::error::LeeError> {
-        let private: Vec<AccountId> = seals.iter().map(Recipient::address).collect();
+        self.private_tx_with(op, pre, fee, public_states, Extras { seals: seals.to_vec(), ..Default::default() })
+    }
+
+    /// `private_tx` with everything a private transaction may also carry (`Extras`): payees sealed
+    /// to, recovery bindings registered (the vault's at Create), deposits collected.
+    pub fn private_tx_with(
+        &self,
+        op: Instruction,
+        pre: Option<(Account, MembershipProof)>,
+        fee: Option<PrivateFee>,
+        public_states: HashMap<Actor, ActorState>,
+        extras: Extras,
+    ) -> Result<Proven, lee::error::LeeError> {
+        let private: Vec<AccountId> = extras.seals.iter().map(Recipient::address).collect();
         let mut actors: Vec<Actor> =
             self.private_public_actors(&op).into_iter().filter(|x| !private.contains(&x.account_id)).collect();
         let message = Program::serialize_message(self.envelope(op))?;
         let root = TransactionEntry::Sync(RootCall { to: self.root(), message });
         let fee = fee.map(Fee::Note);
         self.prove(root, &mut actors, vec![], vec![self.pda_witness(pre)], fee, public_states, BTreeMap::new(),
-                   self.account(), seals)
+                   self.account(), &extras)
+    }
+
+    /// The vault as a recipient: its private PDA's keys. Bound on chain (`vault_binding` in Create's
+    /// recoveries), it lets anyone pay the vault's address from a public account; the payment is
+    /// published in the clear for the group to collect (`inbound`, `claim`).
+    pub fn vault_recipient(&self) -> Recipient {
+        let k = &self.keys().pda;
+        Recipient {
+            npk: k.generate_nullifier_public_key(),
+            vpk: k.generate_viewing_public_key(),
+            kind: PrivateAccountKind::Pda { account_id: self.program, seed: seed(&self.create_key) },
+            opening: None,
+        }
+    }
+
+    /// The vault's recovery binding, for a private transaction's `recoveries`.
+    pub fn vault_binding(&self) -> RecipientEncryption {
+        RecipientEncryption { recipient: self.vault_recipient(), esk: EphemeralSecretKey(random32()) }
+    }
+
+    /// A deposit to the vault from outside the group, from a publication the zone holds: its body
+    /// when the message is addressed to the vault and its recovery opens with the group's keys.
+    pub fn inbound(&self, publication: &Publication) -> Option<MessageBody> {
+        let Publication::Clear { body, recovery } = publication else { return None };
+        if body.to.account_id != self.account() {
+            return None;
+        }
+        let vsk = &self.keys.as_ref()?.pda.viewing_secret_key;
+        Recipient::recover(body.to.account_id, recovery, &vsk.d, &vsk.z).map(|_| body.clone())
+    }
+
+    /// The claim that collects a deposit inside the next private transaction: its body and the
+    /// membership path of its leaf (`getMessagePath`), with a filler note the padding's length.
+    pub fn claim(&self, body: MessageBody, membership_proof: MembershipProof) -> MessageWitness {
+        let throwaway = lee_core::encryption::ViewingPublicKey::from_seed(&random32(), &random32());
+        let (_, epk) = SharedSecretKey::encapsulate(&throwaway);
+        let mut pad = vec![0u8; PAD as usize];
+        getrandom_vec(&mut pad);
+        MessageWitness {
+            body,
+            rho: None,
+            membership_proof,
+            filler: DummyOutput {
+                commitment_seed: random32(),
+                note: EncryptedNote { ciphertext: lee_core::encryption::Ciphertext::from_inner(pad), epk },
+            },
+        }
     }
 
     /// A deposit into the private vault: a native transfer from the public account `from`, which
@@ -310,7 +383,7 @@ impl Msig {
         let message = borsh::to_vec(&NativeMessage::Transfer { to: self.account(), amount }).expect("borsh");
         let root = TransactionEntry::Sync(RootCall { to: sender, message });
         self.prove(root, &mut vec![sender], vec![from], vec![self.pda_witness(pre)], fee.map(Fee::Note), public_states,
-                   BTreeMap::from([(from, Nonce(from_nonce))]), self.account(), &[])
+                   BTreeMap::from([(from, Nonce(from_nonce))]), self.account(), &Extras::default())
     }
 
     /// A top-up of the group's fee account (D17) from the public account `from`, which signs the
@@ -346,7 +419,7 @@ impl Msig {
             address_openings: Default::default(),
         };
         self.prove(root, &mut vec![sender], vec![from], vec![witness], Some(Fee::Credit { amount: fee_amount, inbox }),
-                   public_states, BTreeMap::from([(from, Nonce(from_nonce))]), to, &[])
+                   public_states, BTreeMap::from([(from, Nonce(from_nonce))]), to, &Extras::default())
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -360,7 +433,7 @@ impl Msig {
         public_states: HashMap<Actor, ActorState>,
         nonces: BTreeMap<AccountId, Nonce>,
         promote: AccountId,
-        seals: &[Recipient],
+        extras: &Extras,
     ) -> Result<Proven, lee::error::LeeError> {
         let payer = self.fee_account().expect("private");
         let transfer = fee.map(|f| {
@@ -375,13 +448,13 @@ impl Msig {
             FeeTransfer { payer, recipient: inbox, amount, refund_to: None }
         });
         let input = ProvingInput {
-            claims: vec![],
+            claims: extras.claims.clone(),
             root,
             public_context: PublicExecutionContext::new(actors.clone(), authorized),
             private_witnesses: witnesses,
             dummy_inputs: vec![],
-            ciphertext_padding: Some(1024),
-            recoveries: vec![],
+            ciphertext_padding: Some(PAD),
+            recoveries: extras.recoveries.clone(),
             private_promotions: Default::default(),
             fee: transfer,
         };
@@ -396,7 +469,7 @@ impl Msig {
             &programs,
             |_| SenderPresentation::Canonical,
             |_, body: &MessageBody| body.to.account_id == promote,
-            |body: &MessageBody| seal_for(seals, body),
+            |body: &MessageBody| seal_for(&extras.seals, body),
         )?;
         let actions = &output.execution.private_actions;
         let post = self.decrypt(actions);
@@ -444,6 +517,11 @@ fn random32() -> [u8; 32] {
     let mut b = [0u8; 32];
     getrandom(&mut b);
     b
+}
+
+fn getrandom_vec(b: &mut [u8]) {
+    use std::io::Read;
+    std::fs::File::open("/dev/urandom").and_then(|mut f| f.read_exact(b)).expect("/dev/urandom");
 }
 
 fn getrandom(b: &mut [u8; 32]) {

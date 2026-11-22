@@ -10,6 +10,10 @@ from a public account (its first fee paid out of the credit), a private Create, 
 from a public account, a 2-of-3 payment to a public payee, every step's fee from the group's fee
 account; below threshold and a spent nonce refused while proving.
 
+`v04_private_inbound.rs`: deposits from outside the group: Create registers the vault's recovery
+binding, an outsider pays the vault's address publicly, the group finds the deposit (`inbound`) and
+collects it while paying out (`claim`), once only; an unbound vault cannot be paid publicly.
+
 `v04_private_payee.rs`: a private vault paying a PRIVATE payee: the credit sealed to its `Recipient`
 and published, the payee's address nowhere in the transaction, only the payee opening it, the payee
 claiming it in its own proof with the fee out of the credit.
@@ -44,7 +48,8 @@ Passed on a local 0.4.0-rc3 zone, 2026-11-20, and on the devnet with real proofs
 `docs/labbook/lez-v04-port.md` trap 13).
 
 `live_exec04.rs`: the executor's JSON surface against a real v0.4 sequencer, as Muster calls it:
-derive, a top-up and a deposit signed outside the executor, Create, 1 of 2 answered `refused` with
+derive, a top-up and a deposit signed outside the executor, Create (binding the vault), an outsider's
+public payment listed by `inbound` and collected by the next exec, 1 of 2 answered `refused` with
 its code, 2 of 3 paying a public payee, 2 of 3 paying a private payee (`recipients`) whose credit it
 finds, opens and claims on chain, scan reading both newest notes back. Passed on a local
 0.4.0-rc3 zone, 2026-11-21.

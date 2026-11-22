@@ -2,8 +2,9 @@
 //! Logos module depend on) against a REAL LEZ v0.4 sequencer, exo-05f. Skipped unless MSIG_LIVE_RPC
 //! and MSIG_LIVE_PROGRAM are set (see live_private04.rs). Each signature the payer makes is made
 //! here, as Muster's keystore makes it, from the `sign` the executor answered; no key goes in:
-//!   derive → topup (sign, send) → exec Create → fund (sign, send) → exec 1 of 2 (refused) →
-//!   exec 2 of 3 → exec 2 of 3 to a PRIVATE payee (recipients): its credit sealed, found and opened
+//!   derive → topup (sign, send) → exec Create (the vault's recovery binding) → fund (sign, send) →
+//!   an outsider pays the vault publicly; inbound lists it → exec 1 of 2 (refused) →
+//!   exec 2 of 3, collecting the outsider's deposit → exec 2 of 3 to a PRIVATE payee (recipients): its credit sealed, found and opened
 //!   by the payee alone, and claimed in its own transaction, the fee out of the credit → scan
 //!   finds both newest notes.
 
@@ -121,6 +122,35 @@ async fn the_executor_drives_a_private_multisig_on_a_live_v04_zone() {
     landed(&account, &note).await;
     eprintln!("fund: proved in {} ms", f["proveMs"]);
 
+    // anyone pays the vault's address from a public account (here the test's own funded account):
+    // Create registered the vault's recovery binding, so the credit is published for the group. The
+    // vault is left undeclared: it is no public account. LEZ's wallet CLI cannot send this (it
+    // declares a `--to` public), so the transaction is built here.
+    {
+        let vault = AccountId::new(hex::decode(&account).unwrap().try_into().unwrap());
+        let root = lee_core::account::Actor::native_balance(payer_id);
+        let q = c.get_fee_state().await.unwrap();
+        let gas = 200_000u64;
+        let fee = lee::fees::FeeDeclaration { payer: payer_id, gas_limit: gas, tip: 0,
+                                              max_fee: (gas as u128 + 2_000) * q.next_base_fee_exec_ceiling.max(q.next_base_fee_stor_ceiling) as u128 * 2 };
+        let message = lee::program::Program::serialize_message(lee_core::native_token::Message::Transfer { to: vault, amount: 3_000 }).unwrap();
+        let n = c.get_accounts_nonces(vec![payer_id]).await.unwrap()[0];
+        let msg = lee::public_transaction::Message::new(root, message, [root], std::collections::BTreeMap::from([(payer_id, n)]), Some(fee), vec![]);
+        let tx = lee::PublicTransaction::new(msg.clone(), lee::public_transaction::WitnessSet::for_message(&msg, &[&payer]));
+        c.send_transaction(common::transaction::LeeTransaction::Public(tx)).await.expect("the outsider's payment is sent");
+    }
+    let deadline = Instant::now() + Duration::from_secs(wait);
+    let deposit = loop {
+        let d = ok(req("inbound", json!({}))).await;
+        if let Some(x) = d["deposits"].as_array().and_then(|a| a.first()).cloned() {
+            break x;
+        }
+        assert!(Instant::now() < deadline, "timed out waiting for the outsider's deposit");
+        tokio::time::sleep(Duration::from_secs(3)).await;
+    };
+    assert_eq!(deposit["amount"], "3000");
+    eprintln!("inbound: {deposit}");
+
     // a public payee; 1 of 2 is refused while proving, 2 of 3 pays
     let payee_pk = PublicKey::new_from_private_key(&PrivateKey::try_new(rand::random()).unwrap());
     let payee = AccountId::from(&payee_pk);
@@ -137,7 +167,11 @@ async fn the_executor_drives_a_private_multisig_on_a_live_v04_zone() {
     let r = exec_request(req("exec", json!({"pre": note, "feeNote": fee_note, "op": op(&exec(&[0]))}))).await;
     assert_eq!(r["error"], "refused", "{r}");
     assert!(r["detail"].as_str().unwrap().contains("below-threshold"), "{r}");
-    let e = ok(req("exec", json!({"pre": note, "feeNote": fee_note, "op": op(&exec(&[0, 1]))}))).await;
+    let e = ok(req("exec", json!({"pre": note, "feeNote": fee_note, "op": op(&exec(&[0, 1])),
+                                  "collect": [deposit["position"].clone()]}))).await;
+    assert_eq!(e["collected"], json!([deposit["position"].clone()]));
+    let vault: lee_core::account::Account = borsh::from_slice(&hex::decode(e["post"].as_str().unwrap()).unwrap()).unwrap();
+    assert_eq!(msig_host04::vault_balance(&vault), 15_000_000 + 3_000 - 1_200, "the outsider's deposit collected, the payment made");
     note = e["post"].as_str().unwrap().to_string();
     fee_note = e["feePost"].as_str().unwrap().to_string();
     landed(&account, &note).await;
