@@ -105,14 +105,15 @@ proc chainFor(i: int): MsigPrivate =
   result = newMsigPrivate(rpc, url, kss[i], Chain, program, PayerLabel, prover, gms.get, createKey)
   let s = sessions[i]
   let ks = kss[i]
+  let c = result
   result.onNote = proc(n: int, note: seq[byte], hash: string) =
-    s.publishNote(ks, cer, n, note, hash)
+    s.publishNote(ks, cer, n, note, hash, cursor = c.inboundCursor)
   result.onFeeNote = proc(n: int, note: seq[byte], hash: string) =
     s.publishNote(ks, cer, n, note, hash, kind = "feenote")
 proc refresh(c: MsigPrivate, i: int) =
   pollAll()
   let ln = latestNote(sessions[i].roomEvents(), kss[i], r.topic, ck)
-  if ln.found: c.learn(ln.n, ln.note)
+  if ln.found: c.learn(ln.n, ln.note, ln.cursor)
   let fn = latestNote(sessions[i].roomEvents(), kss[i], r.topic, ck, kind = "feenote")
   if fn.found: c.learnFee(fn.n, fn.note)
 let chains = @[chainFor(0), chainFor(1), chainFor(2)]
@@ -304,5 +305,33 @@ if v04:
                                        "params": [chains[2].txHashOf(ref10.id)]})).toLowerAscii()
     doAssert body.len > 200 and hexOf(paidTo) notin body, "the chain's copy does not name the private payee"
   echo "10. a private payee: proposed with its recipient, settled sealed to it; the chain's copy names no payee OK"
+
+# ── 11. a deposit from outside the group (LEZ v0.4, exo-05f) ───────────────────
+if v04:
+  # anyone pays the vault's address from a public account (here Alice's own, as any outsider's):
+  # Create bound the vault, so the zone publishes the credit for the group; the next settled
+  # transaction collects it, from the cursor the room carries beside the note
+  let payer = chains[0].payer()
+  let before11 = chains[0].readMsig(a).balance
+  var m = LezMessage4(root: LezActor(account: payer, program: NativeTokenProgram),
+                      message: nativeTransfer04(a, 2500.u128),
+                      actors: @[LezActor(account: payer, program: NativeTokenProgram)],
+                      nonces: @[(account: payer, nonce: rpc.getAccount04(payer).nonce)],
+                      fee: some LezFee(payer: payer, gasLimit: 200_000, tip: 0,
+                                       maxFee: (202_000'u64 * rpc.feeCeiling() * 2).stuint(128)))
+  let h = messageHash(m)
+  let ws = @[LezWitness(signature: kss[0].lezMemberSign(PayerLabel, h), xonly: kss[0].lezMemberKey(PayerLabel))]
+  let sent = rpc.sendTransaction(leeTxPublic(m, ws))
+  waitFor("the outsider's deposit", proc(): bool = rpc.getTransaction(sent).known)
+  let take = propose(0, MsigAction(kind: akTransfer, to: recipient, amount: 100.u128))
+  approve(1, take)
+  let (f11, _) = settleAndWatch(1, take)
+  doAssert f11.status == fsFinal, $f11
+  for i in 0 .. 2: chains[i].refresh(i)
+  doAssert chains[2].readMsig(a).balance == before11 + 2500.u128 - 100.u128,
+    "the deposit collected with the payment: " & $chains[2].readMsig(a).balance
+  doAssert chains[1].inboundCursor.len > 0 and chains[2].inboundCursor == chains[1].inboundCursor,
+    "the room carries the deposits' cursor beside the note"
+  echo "11. an outsider's public payment to the vault, collected by the next settled transaction OK"
 
 echo "lez_msig_private_e2e: all passed"

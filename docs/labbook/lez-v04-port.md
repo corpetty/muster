@@ -127,3 +127,14 @@
     MSIG_MEMBER_FUND=60000000 scripts/lez-msig-private-self-test.sh`: two runners, the hosted
     `lez_msig_module` 0.2.0 proving for real, every proof undisclosed. The top-up, Create, deposit and
     settled 2-of-2 payment were all final in 925 s, and the payee was paid exactly.
+18. **Deposits from outside the group, from the room** (2026-11-22, exo-05f): a private Create
+    registers the vault's recovery binding, so anyone can pay the vault's address from a public
+    account; the zone publishes the credit in the clear. Every private transaction then collects
+    deposits from a cursor into the publication stream (at most 4 per transaction, a private
+    transaction holding at most 8 private actions), and the room carries the cursor beside each
+    sealed note. A member who recovers the note from the chain recovers the cursor too: a claim's
+    nullifier (`Nullifier::for_message(nsk, commitment, position)`) appears among the transaction's
+    private actions, so the first deposit no block collected is the cursor.
+    `lez_msig_private_e2e` step 11 on a local zone: an outsider's public payment, collected by the
+    next settled transaction. LEZ's wallet CLI cannot make that payment (it declares `--to` public);
+    Muster builds it (`lez/tx.nim` `nativeTransfer04`).

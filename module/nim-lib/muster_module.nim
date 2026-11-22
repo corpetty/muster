@@ -4009,7 +4009,7 @@ proc msigPrivFor(chain: string, program, createKey: seq[byte]): MsigPrivate =
     let cc = cer.get
     # once the chain includes a transaction this member sent, its new note goes to every member
     c.onNote = proc(n: int, note: seq[byte], hash: string) =
-      try: room.publishNote(moduleKeystore(), cc, n, note, hash)
+      try: room.publishNote(moduleKeystore(), cc, n, note, hash, cursor = c.inboundCursor)
       except CatchableError: discard
     # on LEZ v0.4 the group fee account's new note goes to every member the same way (D17)
     c.onFeeNote = proc(n: int, note: seq[byte], hash: string) =
@@ -4018,7 +4018,7 @@ proc msigPrivFor(chain: string, program, createKey: seq[byte]): MsigPrivate =
     gMsigPriv[ck] = c
   result = gMsigPriv[ck]
   let ln = latestNote(gSession.roomEvents(), ks, gSession.topic, ck)
-  if ln.found: result.learn(ln.n, ln.note)
+  if ln.found: result.learn(ln.n, ln.note, ln.cursor)
   let fn = latestNote(gSession.roomEvents(), ks, gSession.topic, ck, kind = "feenote")
   if fn.found: result.learnFee(fn.n, fn.note)
 

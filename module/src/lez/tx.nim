@@ -282,6 +282,14 @@ proc nativeTransfer*(amount: UInt128): seq[byte] =
   ## The native token program's instruction: borsh Transfer { amount: u128 } (variant 0).
   @[0'u8] & @(amount.toBytesLE())
 
+proc nativeTransfer04*(to: seq[byte], amount: UInt128): seq[byte] =
+  ## LEZ v0.4's native token message: borsh Transfer { to: AccountId, amount: u128 } (variant 0;
+  ## lee_core::native_token::Message at v0.4.0-rc3). Sent to the payer's native balance; a payee
+  ## the transaction leaves undeclared is credited by an async message (a bound private address's
+  ## published in the clear, exo-05f).
+  need32(to, "a payee")
+  @[0'u8] & to & @(amount.toBytesLE())
+
 proc defaultFee*(payer: seq[byte]): LezFee =
   ## The LEZ wallet's own default declaration: gas 2_000_000, tip 0,
   ## max_fee (gas + 100_000) × 64 = 134_400_000.

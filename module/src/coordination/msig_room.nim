@@ -241,16 +241,18 @@ proc groupSecretOf*(events: seq[Event], ks: Keystore, room, createKey: string): 
     except CatchableError: discard
 
 proc publishNote*(s: CoordinationSession, ks: Keystore, c: MsigCeremony, n: int, note: seq[byte], hash: string,
-                  kind = "note") =
+                  kind = "note", cursor = "") =
   ## Seal the multisig's new note (`kind` "note"), or its fee account's ("feenote"), to every
-  ## member, after the chain included `hash`.
+  ## member, after the chain included `hash`. `cursor` (v0.4) is where the next transaction collects
+  ## deposits from outside the group: a position in the zone's public stream, so it rides in clear.
   let me = memberId(ks)
   for m in c.members:
-    s.publishAuthored(ks, Event(key: "lmsig/" & c.createKey & "/" & kind & "/" & $n & "/" & m, value: $(%*{
-      "author": me, "hash": hash, "sealed": hx(sealTo(encIdentityFromBytes(unhx(m)).x, note))})))
+    var v = %*{"author": me, "hash": hash, "sealed": hx(sealTo(encIdentityFromBytes(unhx(m)).x, note))}
+    if cursor.len > 0: v["cursor"] = %cursor
+    s.publishAuthored(ks, Event(key: "lmsig/" & c.createKey & "/" & kind & "/" & $n & "/" & m, value: $v))
 
 proc latestNote*(events: seq[Event], ks: Keystore, room, createKey: string,
-                 kind = "note"): tuple[found: bool, n: int, note: seq[byte], hash: string] =
+                 kind = "note"): tuple[found: bool, n: int, note: seq[byte], hash, cursor: string] =
   ## The newest note (`kind` "note", or the fee account's, "feenote") sealed to this member by a
   ## member of the multisig. Only one transaction spending a note can land (its nullifier), so
   ## each number has one note; the first counts.
@@ -267,5 +269,5 @@ proc latestNote*(events: seq[Event], ks: Keystore, room, createKey: string,
       let j = parseJson(e.value)
       if j{"author"}.getStr().toLowerAscii() notin c.get.members: continue
       let note = ks.sealOpen(unhx(j{"sealed"}.getStr()))
-      result = (true, n, note, j{"hash"}.getStr())
+      result = (true, n, note, j{"hash"}.getStr(), j{"cursor"}.getStr())
     except CatchableError: discard

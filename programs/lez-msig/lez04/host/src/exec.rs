@@ -21,11 +21,13 @@
 //!       → {"sign","message","proof","feePost","feeAccount","root","fee","proveMs"}: not sent; the fee
 //!         comes out of `amount`.
 //!   exec's Create registers the vault's recovery binding, so anyone can pay its address publicly;
-//!   exec's "collect" ([positions]) collects such deposits in the same proof (→ "collected").
+//!   exec's "collect" ([positions]) collects such deposits in the same proof (→ "collected"), and
+//!   "collectFrom" (a cursor) collects every one from there, up to 4, answering "inboundNext".
 //!   {"mode":"inbound","rpc","program","gms","createKey","from"?}
 //!       → {"deposits":[{"position","amount","from"}],"next"}: payments to the vault from outside.
 //!   {"mode":"scan","rpc","program","gms","createKey","from"?}
-//!       → {"found","post","block","hash","feeFound","feePost","scanned"}: the newest notes on chain.
+//!       → {"found","post","block","hash","feeFound","feePost","scanned","inboundNext"}: the newest
+//!         notes on chain, and the deposits' cursor (the first deposit no block collected).
 //!   {"mode":"send","rpc","message","proof","witnesses":[{"signature","publicKey"}]} → {"hash"}
 //! Errors: {"error":"refused"|"failed","detail"}; a program refusal names its MsigError code and is
 //! found at proving time, before anything is sent or paid (RFP U.7).
@@ -222,8 +224,20 @@ async fn run(req: Value) -> Result<Value, String> {
             let recoveries = if matches!(op, Instruction::Create { .. }) { vec![m.vault_binding()] } else { vec![] };
             let mut claims = vec![];
             let mut collected = vec![];
+            let mut positions: Vec<u64> = vec![];
             for pos in req.get("collect").and_then(Value::as_array).map(Vec::as_slice).unwrap_or(&[]) {
-                let pos = pos.as_str().and_then(|x| x.parse::<u64>().ok()).ok_or("collect lists positions as decimal strings")?;
+                positions.push(pos.as_str().and_then(|x| x.parse::<u64>().ok()).ok_or("collect lists positions as decimal strings")?);
+            }
+            // collectFrom: the room's cursor into the publication stream. Every deposit to the vault
+            // from there is collected, up to MAX_COLLECT per transaction (a private transaction holds
+            // at most 8 private actions), and the answer's inboundNext is the cursor to keep.
+            let mut inbound_next: Option<u64> = None;
+            if let Some(from) = req.get("collectFrom").and_then(Value::as_str).and_then(|x| x.parse::<u64>().ok()) {
+                let (found, next) = deposits_from(&c, &m, from, MAX_COLLECT).await?;
+                positions.extend(found);
+                inbound_next = Some(next);
+            }
+            for pos in positions {
                 let page = c.get_publications(pos, 1).await.map_err(|e| format!("getPublications: {e}"))?;
                 let body = page.into_iter().find(|(p, _)| *p == pos).and_then(|(_, p)| m.inbound(&p))
                     .ok_or(format!("no deposit to this vault at position {pos}"))?;
@@ -238,8 +252,12 @@ async fn run(req: Value) -> Result<Value, String> {
             let post = p.post.clone().ok_or("the proof's notes do not decrypt to the multisig's account")?;
             let fee_post = p.fee_post.clone().ok_or("the fee account's new note does not decrypt")?;
             let hash = send(&c, p.signed(&[])).await?;
-            Ok(json!({"hash": hash, "post": hexb(&post), "feePost": hexb(&fee_post), "account": id_hex(&a),
-                      "root": root, "fee": amount_fee.to_string(), "proveMs": prove_ms, "collected": collected}))
+            let mut out = json!({"hash": hash, "post": hexb(&post), "feePost": hexb(&fee_post), "account": id_hex(&a),
+                      "root": root, "fee": amount_fee.to_string(), "proveMs": prove_ms, "collected": collected});
+            if let Some(n) = inbound_next {
+                out["inboundNext"] = json!(n.to_string());
+            }
+            Ok(out)
         }
         "fund" => {
             let pre = pre.ok_or("fund needs the multisig's current note")?;
@@ -267,6 +285,7 @@ async fn scan(req: &Value, c: &SequencerClient, m: &Msig) -> Result<Value, Strin
     let tip = c.get_last_block_id().await.map_err(|e| format!("getLastBlockId: {e}"))?;
     let mut at: u64 = req.get("from").and_then(Value::as_str).and_then(|s| s.parse().ok()).unwrap_or(1).max(1);
     let (mut found, mut fee): (Option<(Account, u64, String)>, Option<Account>) = (None, None);
+    let mut spent = std::collections::HashSet::new();
     while at <= tip {
         let end = (at + STEP - 1).min(tip);
         let blocks = c.get_block_range(at, end).await.map_err(|e| format!("getBlockRange {at}..{end}: {e}"))?;
@@ -274,6 +293,7 @@ async fn scan(req: &Value, c: &SequencerClient, m: &Msig) -> Result<Value, Strin
             for tx in &b.body.transactions {
                 if let LeeTransaction::PrivacyPreserving(pp) = tx {
                     let actions = &pp.message().execution.private_actions;
+                    spent.extend(actions.iter().map(|x| x.nullifier));
                     if let Some(a) = m.decrypt(actions) {
                         found = Some((a, b.header.block_id, hex::encode(tx.hash().as_ref() as &[u8])));
                     }
@@ -285,7 +305,24 @@ async fn scan(req: &Value, c: &SequencerClient, m: &Msig) -> Result<Value, Strin
         }
         at = end + 1;
     }
-    let mut out = json!({"found": found.is_some(), "feeFound": fee.is_some(), "scanned": tip.to_string()});
+    // the deposits' cursor, for a member whose room lost it with the note: the first deposit to
+    // the vault whose claim nullifier no block holds, else the stream's end
+    let mut inbound_next: Option<u64> = None;
+    let mut at = 0u64;
+    'stream: loop {
+        let page = c.get_publications(at, 256).await.map_err(|e| format!("getPublications: {e}"))?;
+        let Some((last, _)) = page.last() else { break };
+        let end = last + 1;
+        for (pos, p) in &page {
+            if m.inbound(p).is_some() && !m.deposit_nullifier(p, *pos).is_some_and(|n| spent.contains(&n)) {
+                inbound_next = Some(*pos);
+                break 'stream;
+            }
+        }
+        at = end;
+    }
+    let mut out = json!({"found": found.is_some(), "feeFound": fee.is_some(), "scanned": tip.to_string(),
+                         "inboundNext": inbound_next.unwrap_or(at).to_string()});
     if let Some((a, block, hash)) = found {
         out["post"] = json!(hexb(&a));
         out["block"] = json!(block.to_string());
@@ -295,6 +332,31 @@ async fn scan(req: &Value, c: &SequencerClient, m: &Msig) -> Result<Value, Strin
         out["feePost"] = json!(hexb(&f));
     }
     Ok(out)
+}
+
+/// The most deposits one transaction collects: each claim is a private action, and a private
+/// transaction holds at most 8 (fee_core MAX_PRIVATE_ACTIONS), the vault and the fee account among them.
+const MAX_COLLECT: usize = 4;
+
+/// The positions of deposits to the vault from `from` on, at most `max`, and the cursor after the
+/// last one read: past the last collected one when `max` cut the list, else the stream's end.
+async fn deposits_from(c: &SequencerClient, m: &Msig, from: u64, max: usize) -> Result<(Vec<u64>, u64), String> {
+    let mut at = from;
+    let mut found = vec![];
+    loop {
+        let page = c.get_publications(at, 256).await.map_err(|e| format!("getPublications: {e}"))?;
+        let Some((last, _)) = page.last() else { return Ok((found, at)) };
+        let end = last + 1;
+        for (pos, p) in &page {
+            if m.inbound(p).is_some() {
+                found.push(*pos);
+                if found.len() == max {
+                    return Ok((found, pos + 1));
+                }
+            }
+        }
+        at = end;
+    }
 }
 
 /// Deposits to the vault from outside the group: every publication from `from` (default 0) addressed

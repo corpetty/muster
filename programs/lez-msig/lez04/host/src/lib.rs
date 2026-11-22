@@ -30,7 +30,7 @@ use lee_core::{
     account::{Account, AccountId, Actor, ActorState, Nonce},
     native_token::{Message as NativeMessage, NATIVE_TOKEN_PROGRAM_ID},
     program::{MessageBody, ProgramHeader, Publication},
-    Commitment, DummyOutput, EncryptedNote, EncryptionScheme, EphemeralSecretKey, FeeTransfer, MessageWitness,
+    Commitment, Nullifier, DummyOutput, EncryptedNote, EncryptionScheme, EphemeralSecretKey, FeeTransfer, MessageWitness,
     PrivateAccountKind, MembershipProof, NullifierWitness, PrivateAction, PrivateWitness,
     RegularKey, SharedSecretKey, WitnessKind, DUMMY_COMMITMENT_HASH,
 };
@@ -348,6 +348,13 @@ impl Msig {
         }
         let vsk = &self.keys.as_ref()?.pda.viewing_secret_key;
         Recipient::recover(body.to.account_id, recovery, &vsk.d, &vsk.z).map(|_| body.clone())
+    }
+
+    /// The nullifier a deposit's claim spends: once the chain holds it, the deposit is collected.
+    /// Read from blocks, it tells a member who lost the room's cursor which deposits are taken.
+    pub fn deposit_nullifier(&self, publication: &Publication, position: u64) -> Option<Nullifier> {
+        let k = &self.keys.as_ref()?.pda;
+        Some(Nullifier::for_message(&k.nullifier_secret_key(), &publication.commitment(), position))
     }
 
     /// The claim that collects a deposit inside the next private transaction: its body and the

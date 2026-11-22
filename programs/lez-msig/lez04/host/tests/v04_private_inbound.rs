@@ -116,9 +116,16 @@ fn an_outsider_pays_the_vault_and_the_group_collects_it_once() {
     let claim = r.m.claim(body.clone(), r.state.get_proof_for_position(pos).expect("its leaf"));
 
     // the next private transaction collects it while 2 of 3 pay out
+    let publication = r.state.publications_from(pos).next().map(|(_, p)| p).unwrap();
+    let spent = r.m.deposit_nullifier(&publication, pos).unwrap();
+    assert!(!r.state.is_spent(&spent), "not collected yet");
     let extras = Extras { claims: vec![claim], ..Default::default() };
     let p = r.m.private_tx_with(r.pay(0, 1_000), r.pre(), Some(r.fee()), r.states(&[payee, inbox]), extras).expect("proves");
+    let tx = p.signed(&[]);
+    assert!(tx.message().execution.private_actions.iter().any(|a| a.nullifier == spent),
+            "the transaction names the deposit's nullifier, as anyone reading blocks sees");
     r.land(p, &[]);
+    assert!(r.state.is_spent(&spent), "collected: its nullifier is spent");
     assert_eq!(vault_balance(r.note.as_ref().unwrap()), 2_000, "the deposit collected, the payment made");
     assert_eq!(vault_balance(&r.state.get_account_by_id(payee)), 1 + 1_000);
 
