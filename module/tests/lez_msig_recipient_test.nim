@@ -7,7 +7,7 @@
 ##   3. the driver: a private multisig's payment to a private payee carries its recipient in the
 ##      effect and is approvable only when that recipient derives the address the proposal pays;
 ##      a mismatch, a non-transfer, or a public multisig is refused, and its approval matches no
-##      signature (canonicalize's sentinel).
+##      signature (canonicalize's sentinel); the card says the payee is private.
 
 import std/[json, os, options, sequtils, strutils]
 import stint
@@ -15,6 +15,7 @@ import ../src/dcbor/dcbor
 import ../src/drivers/driver
 import ../src/drivers/lez_msig
 import ../src/coordination/intent_events
+import ../src/coordination/effect_summary
 import ../src/lez/msig
 
 proc hb(s: string): seq[byte] =
@@ -71,6 +72,8 @@ check("does not derive" in priv.signRefusal(wrong), "a recipient for another add
 check(decode(canonicalize(priv, wrong).bytes).arr.len == 2, "and canonicalizes to a sentinel")
 check("for a transfer" in priv.signRefusal(effectFromJson(lezMsigEffect(pay(paidTo, akCancel), rec))), "only a transfer has a payee")
 check("private multisig" in newLezMsigDriver(acct(false)).signRefusal(good), "a public multisig cannot seal a payment")
+check("a private payee" in effectSummary(lezMsigEffect(pay(paidTo), rec)).text, "the card names a private payee")
+check("private payee" notin effectSummary(lezMsigEffect(pay(paidTo))).text, "and only then")
 check(payeeOf(effectFromJson(lezMsigEffect(pay(paidTo)))).len == 0 and
       priv.signRefusal(effectFromJson(lezMsigEffect(pay(paidTo)))) == "", "a payment without a payee is unchanged")
 

@@ -153,8 +153,13 @@ proc effectSummary*(effectJson: string, label: proc (who: string): string = nil,
     case p.action.kind
     of msigbytes.akTransfer:
       let to = msigbytes.hexOf(p.action.to)
+      # a private payee (LEZ v0.4, exo-ea3): the effect carries its recipient; the driver checks it
+      # derives `to` before anyone may approve
+      let priv = j{"payee"}.getStr().len > 0
       return EffectSummary(kind: "payment", amount: inDecimals($p.action.amount, 9), unit: "LEZ", to: to,
-        text: "a LEZ multisig payment: " & inDecimals($p.action.amount, 9) & " LEZ → " & short(to) & tail)
+        text: "a LEZ multisig payment: " & inDecimals($p.action.amount, 9) & " LEZ → " &
+              (if priv: "a private payee " & short(to) & " (sealed to it; it claims it, paying the private fee)"
+               else: short(to)) & tail)
     of msigbytes.akCall:
       let prog = msigbytes.hexOf(p.action.program)
       return EffectSummary(kind: "contract-call", to: prog,

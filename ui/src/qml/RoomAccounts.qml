@@ -1351,8 +1351,21 @@ Item {
                     id: msigPayTo
                     objectName: "msigPayTo"
                     Layout.fillWidth: true
-                    placeholderText: qsTr("recipient's LEZ account (hex or base58)")
+                    // on LEZ v0.4 a private multisig can pay a PRIVATE payee: the payee hands over its
+                    // recipient (lee_core::Recipient, hex, about 2.4 KB), and the payment is sealed to it
+                    // (exo-ea3)
+                    readonly property bool privatePayee: /^[0-9a-fA-F]{200,}$/.test(text.trim())
+                    placeholderText: qsTr("recipient's LEZ account (hex or base58), or a private payee's recipient (hex)")
                     font.family: MusterStyle.mono
+                }
+                LogosText {
+                    objectName: "msigPrivatePayeeNote"
+                    Layout.fillWidth: true
+                    visible: msigPayTo.privatePayee
+                    text: qsTr("A private payee: the payment is sealed to it, and nothing on chain names it. It claims the payment in a transaction of its own, which pays the private fee (about 5.7M base units on LEZ v0.4), so a smaller payment cannot be claimed from itself.")
+                    color: Theme.palette.textSecondary
+                    font.pixelSize: MusterStyle.caption
+                    wrapMode: Text.WordWrap
                 }
                 RowLayout {
                     Layout.fillWidth: true
@@ -1368,8 +1381,10 @@ Item {
                         enabled: msigPayTo.text.trim().length > 0 && msigBox.payBase !== "" && msigBox.payBase !== "0"
                         text: qsTr("Propose this payment")
                         variant: LogosButton.Variant.Secondary
-                        onClicked: acc.lezMsigProposeRequested(String(acc.msigAccount.id),
-                            JSON.stringify({ kind: "transfer", to: msigPayTo.text.trim(), amount: msigBox.payBase }))
+                        onClicked: acc.lezMsigProposeRequested(String(acc.msigAccount.id), JSON.stringify(
+                            msigPayTo.privatePayee
+                                ? { kind: "transfer", recipient: msigPayTo.text.trim(), amount: msigBox.payBase }
+                                : { kind: "transfer", to: msigPayTo.text.trim(), amount: msigBox.payBase }))
                     }
                 }
                 RowLayout {
