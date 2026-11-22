@@ -14,6 +14,10 @@ account; below threshold and a spent nonce refused while proving.
 and published, the payee's address nowhere in the transaction, only the payee opening it, the payee
 claiming it in its own proof with the fee out of the credit.
 
+`v04_private_call.rs`: a private Call: the native program at the vault's own balance (`rows[0]`), the
+seed authorizing the vault inside the proof, a public payee credited; a target outside the allowlist
+refused while proving.
+
 `v04_undisclosed.rs`: D18. The program deployed through the loader (segments, then an immutable
 header); a private Create proved undisclosed names no program and lands; a claim against a header the
 zone never saw is refused.

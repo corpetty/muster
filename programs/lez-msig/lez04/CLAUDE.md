@@ -21,4 +21,6 @@ Build: `cargo test -p msig_host04` (the guest comes from `artifacts/`; `MSIG_BUI
 rzup's toolchain). The private posture runs on LEE's state, on a local zone and on the devnet with real
 proofs (exo-05f): fee-account top-up, Create, deposit, payment, every fee in the proof from the group's
 fee account (D17), proved undisclosed (D18). Muster drives it through `msig_exec04`
-(`lez_msig_private_e2e`). Not yet: a private payee, a call, and the module installed in Basecamp.
+(`lez_msig_private_e2e`), and through the real UI on the devnet (`scripts/lez-msig-private-self-test.sh`). A
+private payee (sealed, claimed by it alone) and a private Call run on LEE's state; a private payee from the
+room is exo-ea3.
