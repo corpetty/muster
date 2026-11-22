@@ -200,11 +200,12 @@ proc newMsigProposal*(events: seq[Event], ks: Keystore, d: LezMsigDriver, st: Ms
 
 proc liveMsigPropose*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor, policy: string,
                       d: LezMsigDriver, p: MsigProposal, nowSec: int64, msgSeq: uint64,
-                      bindingCtx: LinkContext): tuple[intentId, approval: string] =
+                      bindingCtx: LinkContext, payee: seq[byte] = @[]): tuple[intentId, approval: string] =
   ## Propose into the room, then approve it in-app: the program refuses an action its
-  ## proposer did not sign, so proposing IS the proposer's approval.
+  ## proposer did not sign, so proposing IS the proposer's approval. `payee` is a private payee's
+  ## recipient (LEZ v0.4, exo-ea3), carried in the effect beside the proposal.
   let ttl = max(60'i64, int64(p.expiresMs div 1000) - nowSec)
-  let id = liveProposeIntent(s, ks, driverFor, policy, lezMsigEffect(p), nowSec, msgSeq,
+  let id = liveProposeIntent(s, ks, driverFor, policy, lezMsigEffect(p, payee), nowSec, msgSeq,
                              d.account.accountId, ttlSec = ttl)
   (id, liveContribute(s, ks, driverFor, id, "", "", bindingCtx, uint64(nowSec)))
 

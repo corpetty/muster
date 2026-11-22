@@ -19,7 +19,7 @@
 ## `topUp` funds the fee account from this member's public account, signed like a deposit. On
 ## v0.3 the prover answers no `feePost`, and none of this applies.
 
-import std/[json, options, strutils, tables]
+import std/[json, options, sequtils, strutils, tables]
 import stint
 import ../lez/msig
 import ../lez/tx as leztx     # LezShard
@@ -99,10 +99,14 @@ proc submitted(c: MsigPrivate, a: JsonNode, fund: bool, topUp = false): MsigSent
   c.jobs[id] = PrivJob(n: c.noteN + 1, feeN: c.feeNoteN + 1, fund: fund, topUp: topUp)
   MsigSent(ok: true, hash: id)
 
-proc sendOp*(c: MsigPrivate, op: seq[byte]): MsigSent =
+proc sendOp*(c: MsigPrivate, op: seq[byte], recipients: seq[seq[byte]] = @[]): MsigSent =
   ## The program's instruction (msig_core::Instruction, borsh), proved over the latest note.
+  ## `recipients` are private payees (lee_core::Recipient borsh, LEZ v0.4, exo-ea3): a payment to
+  ## one of their addresses is sealed to it rather than paid in the clear.
   var r = c.request("exec")
   r["op"] = %hexOf(op)
+  if recipients.len > 0:
+    r["recipients"] = %recipients.mapIt(hexOf(it))
   c.submitted(c.prover.submit(r), fund = false)
 
 proc recover*(c: MsigPrivate, fromBlock = 1'u64): MsigSent =

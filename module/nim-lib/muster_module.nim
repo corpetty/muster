@@ -4305,12 +4305,20 @@ proc musterCoordinateProposeLezMsig(actionJson: string): string =
   let (ok, d, err) = msigAccountOfPolicy()
   if not ok: return err
   var action: MsigAction
+  var payee: seq[byte]
   var ttlMs = 7'u64 * 24 * 3600 * 1000
   try:
-    let j = parseJson(actionJson)
+    var j = parseJson(actionJson)
+    # a private payee (LEZ v0.4, exo-ea3): the transfer pays the address its recipient derives,
+    # and the recipient travels in the effect so any member's prover can seal the payment to it
+    if j{"kind"}.getStr() == "transfer" and j{"recipient"}.getStr().len > 0:
+      payee = hexToBytes(j["recipient"].getStr())
+      j["to"] = %msigbytes.hexOf(msigbytes.recipientAddress(msigbytes.decodeRecipient(payee)))
     action = msigActionOf(j)
     if j.hasKey("expiresInS"): ttlMs = uint64(j["expiresInS"].getBiggestInt()) * 1000
   except CatchableError as e: return $(%*{"error": "bad-action", "detail": e.msg})
+  if payee.len > 0 and not d.account.private:
+    return $(%*{"error": "bad-action", "detail": "a private payee needs a private multisig: a public one cannot seal a payment"})
   let ks = moduleKeystore()
   let mine = ks.lezMemberKey(myMsigLabel(ks, d.account))
   let m = d.account.config.memberOf(mine)
@@ -4326,7 +4334,7 @@ proc musterCoordinateProposeLezMsig(actionJson: string): string =
     let p = newMsigProposal(gSession.roomEvents(), ks, d, st, action, uint64(epochTime() * 1000) + ttlMs)
     inc gMsgSeq
     let (id, approval) = liveMsigPropose(gSession, ks, driverFor, gCoordKind, d, p, int64(epochTime()), gMsgSeq,
-                                         intentLinkContext(""))
+                                         intentLinkContext(""), payee)
     $(%*{"intentId": id, "nonce": $p.nonce, "epoch": $p.epoch, "approval": approval,
          "proposal": msigbytes.proposalJson(p)})
   except CatchableError as e: $(%*{"error": "refused", "detail": e.msg})

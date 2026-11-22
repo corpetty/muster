@@ -9,3 +9,7 @@ test-utils in a release build, and the tests' dev-dependencies enable them.
 
 `msig_exec04.rs`: `exec::exec_request` as a CLI, one JSON request on stdin, one answer on stdout;
 Muster's `CliMsigProver` runs it against a v0.4 zone.
+
+`msig_recipient_vectors04.rs`: ground truth for Muster's Nim reading of a private payee: a
+`lee_core::Recipient` as borsh and the address it derives, plain and blinded
+(`module/tests/vectors/lez-msig/v04-recipients.json`).

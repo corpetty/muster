@@ -116,9 +116,11 @@ proc lezMsigAccountOf*(chain, address, config: string): tuple[ok: bool, account:
 proc newLezMsigDriver*(a: LezMsigAccount): LezMsigDriver = LezMsigDriver(account: a)
 
 # ── the effect ────────────────────────────────────────────────────────────────
-proc lezMsigEffect*(p: MsigProposal): string =
-  ## The room's effect for a proposal: its exact bytes.
-  $(%*{"effect": "lez-msig", "proposal": hexOf(borsh(p))})
+proc lezMsigEffect*(p: MsigProposal, payee: seq[byte] = @[]): string =
+  ## The room's effect for a proposal: its exact bytes, and for a payment to a private payee on
+  ## LEZ v0.4 its recipient (lee_core::Recipient borsh, exo-ea3).
+  if payee.len > 0: $(%*{"effect": "lez-msig", "proposal": hexOf(borsh(p)), "payee": hexOf(payee)})
+  else: $(%*{"effect": "lez-msig", "proposal": hexOf(borsh(p))})
 
 proc fieldOf(e: Effect, name: string): CborValue =
   for (k, v) in e.fields:
@@ -131,6 +133,24 @@ proc proposalOf*(e: Effect): MsigProposal =
   let b = e.fieldOf("proposal")
   if b.kind != ckBytes: raise newException(ValueError, "the effect carries no proposal")
   decodeProposal(b.b)
+
+proc payeeOf*(e: Effect): seq[byte] =
+  ## A private payee's recipient the effect carries; empty when it pays a public account.
+  let b = e.fieldOf("payee")
+  if b.kind == ckBytes: b.b else: @[]
+
+proc payeeRefusal(d: LezMsigDriver, e: Effect, p: MsigProposal): string =
+  ## A private payee must be a recipient that derives the very address the proposal pays (the
+  ## approvals sign only the address), and only a private multisig can seal a payment to it.
+  let b = payeeOf(e)
+  if b.len == 0: return ""
+  if not d.account.private: return "a private payee needs a private multisig: a public one cannot seal a payment"
+  if p.action.kind != akTransfer: return "a private payee is for a transfer"
+  try:
+    if recipientAddress(decodeRecipient(b)) != p.action.to:
+      return "the private payee's recipient does not derive the address the proposal pays"
+  except CatchableError as err: return "the private payee is not a recipient: " & err.msg
+  ""
 
 proc refusalOf(d: LezMsigDriver, p: MsigProposal): string =
   if p.multisig != d.account.address: return "the proposal names another multisig (" & hexOf(p.multisig) & ")"
@@ -169,7 +189,8 @@ method canonicalize*(d: LezMsigDriver, e: Effect): Materialization =
   try: p = proposalOf(e)
   except CatchableError as err:
     return Materialization(bytes: encode(cbArray(@[cbText(ApproveDomain), cbText("invalid: " & err.msg)])))
-  let why = d.refusalOf(p)
+  var why = d.refusalOf(p)
+  if why.len == 0: why = d.payeeRefusal(e, p)
   if why.len > 0:
     return Materialization(bytes: encode(cbArray(@[cbText(ApproveDomain), cbText("invalid: " & why)])))
   let id = proposalId(p)
@@ -187,8 +208,11 @@ method expectMaterialization*(d: LezMsigDriver, m: Materialization) =
   d.pending = (if id.len == 32: approveMsg(id) else: @[])
 
 method signRefusal*(d: LezMsigDriver, e: Effect): string =
-  try: d.refusalOf(proposalOf(e))
-  except CatchableError as err: "not a lez-msig proposal: " & err.msg
+  try:
+    let p = proposalOf(e)
+    result = d.refusalOf(p)
+    if result.len == 0: result = d.payeeRefusal(e, p)
+  except CatchableError as err: result = "not a lez-msig proposal: " & err.msg
 
 proc contributionOf*(signer, sig: seq[byte]): seq[byte] =
   encode(cbMap(@[(cbText("signer"), cbBytes(signer)), (cbText("sig"), cbBytes(sig))]))

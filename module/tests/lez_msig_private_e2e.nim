@@ -175,12 +175,13 @@ if v04:
   waitFor("the payee exists", proc(): bool = rpc.getAccount04(recipient).balance > 0.u128)
 let before = rpc.getAccount(recipient).balance
 var seqNo = 100'u64
-proc propose(i: int, action: MsigAction): string =
+proc propose(i: int, action: MsigAction, payee: seq[byte] = @[]): string =
   inc seqNo
   chains[i].refresh(i)
   let p = newMsigProposal(sessions[i].roomEvents(), kss[i], drv, chains[i].readMsig(a).state, action,
                           uint64(epochTime() * 1000) + 3_600_000)
-  let (id, approval) = liveMsigPropose(sessions[i], kss[i], roomDriverFor, policy, drv, p, int64(epochTime()), seqNo, bindCtx())
+  let (id, approval) = liveMsigPropose(sessions[i], kss[i], roomDriverFor, policy, drv, p, int64(epochTime()), seqNo, bindCtx(),
+                                       payee)
   doAssert approval.len > 0 and not approval.startsWith("refused"), "the proposer's own approval: " & approval
   pollAll()
   id
@@ -281,5 +282,27 @@ let (f9, _) = settleAndWatch(1, after)
 doAssert f9.status == fsFinal, $f9
 waitFor("the payee credited " & "1600", proc(): bool = rpc.getAccount(recipient).balance == before + 1600.u128, 60)   # a deferred public effect
 echo "9. a payment settles from the recovered note OK"
+
+# ── 10. a private payee (LEZ v0.4, exo-ea3) ──────────────────────────────────
+if v04:
+  # the recipient a payee shares (fixed keys, from LEZ's own crates: tests/vectors/lez-msig/v04-recipients.json)
+  let vec = parseJson(readFile(currentSourcePath.parentDir / "vectors" / "lez-msig" / "v04-recipients.json"))
+  let rec = hexToBytes(vec["recipients"][1]["recipient"].getStr())
+  let paidTo = recipientAddress(decodeRecipient(rec))
+  let priv = propose(1, MsigAction(kind: akTransfer, to: paidTo, amount: 1000.u128), rec)
+  doAssert payeeOf(effectFromJson(effectJsonOf(r.alice.roomEvents(), priv))) == rec, "the room carries the recipient"
+  approve(2, priv)
+  let (f10, ref10) = settleAndWatch(2, priv)
+  doAssert f10.status == fsFinal, $f10
+  for i in 0 .. 2: chains[i].refresh(i)
+  doAssert chains[0].readMsig(a).balance == 2400.u128, "the vault paid: " & $chains[0].readMsig(a).balance
+  block:
+    let c = newHttpClient()
+    defer: c.close()
+    c.headers = newHttpHeaders({"Content-Type": "application/json"})
+    let body = c.postContent(url, $(%*{"jsonrpc": "2.0", "id": 1, "method": "getTransaction",
+                                       "params": [chains[2].txHashOf(ref10.id)]})).toLowerAscii()
+    doAssert body.len > 200 and hexOf(paidTo) notin body, "the chain's copy does not name the private payee"
+  echo "10. a private payee: proposed with its recipient, settled sealed to it; the chain's copy names no payee OK"
 
 echo "lez_msig_private_e2e: all passed"

@@ -25,6 +25,9 @@ The LEZ *wallet* rails (public / shield / deshield / private transfers) live in
   - It is held byte for byte to vectors the program's own host generates
     (`tests/vectors/lez-msig`). The rules are the program's (`programs/lez-msig/core`), not
     re-implemented here.
+- `msig.nim` also reads a private payee on LEZ v0.4 (exo-ea3): `decodeRecipient` (lee_core::Recipient
+  borsh, regular accounts only) and `recipientAddress` (its account id, blinded by its opening), held
+  to `tests/vectors/lez-msig/v04-recipients.json` from LEZ's crates.
 - `msig_gas.nim`: the gas limit and fee cap a lez-msig step declares on LEZ v0.4, where a refusal
   burns its whole limit (exo-50c). A model per step (signatures, members, config changes, a call's
   allowance), held above every step measured on LEE's own state (`tests/vectors/lez-msig/v04-gas.json`
