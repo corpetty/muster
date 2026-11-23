@@ -108,6 +108,53 @@ reaches.
   remove the link afterwards so that no later session mistakes it for this
   branch's build.
 
+## Load on `bugger` (muster)
+
+This section is muster's own; it is not in exophial's seed. It holds until the
+operator says `bugger`'s hardware is fixed. Then remove it, don't loosen it.
+
+`bugger`'s memory hardware is failing, and heavy parallel compiling brings the
+fault out. On 2026-11-23 the host hard-reset twice, at 19:52 and 20:42 UTC.
+Both times one session had several subagents running `module/tests/run-suite.sh`
+at once, one of them at `JOBS=24`. Each reset came after a burst of
+*uncorrected* memory errors: `Uncorrected hardware memory error`, `Poison`, and
+the kernel sending SIGBUS to `cc1`, `nim` and `gcc`. The errors hit many cores
+and physical addresses. On restart the firmware reported one error record saved
+from before the reset (`BERT: … Skipped 1 error records`). Under them runs a
+storm of corrected errors on `mc0` (rows 2 and 3, six channels, about 9,000 so
+far; `~/gpu-diag/README.md`). The uncorrected errors began in the boot of
+2026-11-04. The cause is the hardware, not muster's code, and a session cannot
+fix it. A session can avoid being what sets it off, and can avoid losing work
+when that happens.
+
+`BUILD_MEM` above is about how much memory the host has. This section is
+about whether that memory works, so it applies even where builds run uncapped.
+
+- **One heavy job on the host at a time, across every session.** A heavy job is
+  a `run-suite.sh` run (any group), a runner build (`make build`, `build-lgx`,
+  `appimage`, `build-nim`), or any flake evaluation. Before starting one, check
+  that no other session is running one:
+  `pgrep -af 'run-suite\.sh|nix (build|run|eval|develop)'`.
+  If one is running, wait for it or ask the operator. Don't add a second.
+- **Never fan out subagents that each run the suite or a build.** Subagents may
+  edit and read in parallel, but their test runs go one at a time, either
+  through the coordinator or one after another. The resets came from exactly
+  this fan-out.
+- **Leave `JOBS` at the suite's default (8) or lower.** Don't raise it to speed
+  up a run. Single default-`JOBS` runs went through 2026-11-04 to 2026-11-20
+  without a reset, but that shows the risk is lower, not that it is safe.
+- **Commit or stash before a heavy job.** A reset loses whatever is uncommitted
+  in the working tree and the session.
+- **Watch the counter.** Before and after a heavy job, run
+  `journalctl -k -b | grep -c 'Uncorrected hardware memory error'`. If it rose,
+  stop starting heavy jobs and tell the operator the count and the time. Treat
+  that run's results as suspect: a SIGBUS-killed `cc1` can look like a failing
+  test, and poisoned data that wasn't caught can corrupt a result silently.
+  Rerun before believing a red or a green.
+- **A crash after a reset is not a bug in the code.** When a session resumes
+  after a reset, check `journalctl --list-boots` and the previous boot's tail
+  (`journalctl -b -1 -n 40`) before debugging a mysterious failure.
+
 ## Side repos (muster)
 
 This section is muster's own; it is not in exophial's seed.
