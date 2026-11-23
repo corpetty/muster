@@ -308,7 +308,7 @@ class MusterUi
     // lezMsigStateJson ({epoch, balance, config, queue, myKey} or {error}).
     SLOT(void lezMsigOpen(const QString &specJson))
     // Propose from the room's lez-msig account: actionJson {kind: transfer, to, amount} |
-    // {kind: config, changes} | {kind: cancel, nonces}. Lands on lezMsigProposeJson
+    // {kind: config, changes} | {kind: cancel, nonces} | {kind: spend, limit, to, amount}. Lands on lezMsigProposeJson
     // ({intentId, nonce, epoch} or {error, detail}).
     SLOT(void lezMsigPropose(const QString &actionJson))
     // A deposit into a PRIVATE lez-msig's vault from this member's own LEZ account (exo-efa):

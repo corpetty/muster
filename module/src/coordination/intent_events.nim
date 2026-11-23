@@ -118,6 +118,16 @@ proc effectFromJson*(effectJson: string): Effect =
           return Effect(schemaId: "muster.effect.lez-msig.v1",
                         fields: @[("payee", cbBytes(payee)), ("proposal", cbBytes(raw))])
         return Effect(schemaId: "muster.effect.lez-msig.v1", fields: @[("proposal", cbBytes(raw))])
+      of "lez-msig-spend":
+        # a spend under a lez-msig's spending limit (exo-0d3.12): its exact bytes, which every
+        # limit signer's signature covers
+        var raw: seq[byte]
+        var h = j{"spend"}.getStr()
+        if h.len >= 2 and h[0] == '0' and h[1] in {'x', 'X'}: h = h[2 .. ^1]
+        for i in 0 ..< h.len div 2:
+          try: raw.add byte(parseHexInt(h[2*i .. 2*i+1]))
+          except ValueError: discard
+        return Effect(schemaId: "muster.effect.lez-msig-spend.v1", fields: @[("spend", cbBytes(raw))])
       of "lez-multisig-config":
         # A pointer to on-chain config proposal #index of a LEZ multisig (exo-267.6): add or
         # remove a member (a 32-byte LEZ account), or change the threshold.
@@ -334,6 +344,7 @@ proc effectSchema*(effectJson: string): tuple[id: string, known: bool] =
     of "safe-tx": return ("muster.effect.safe-tx.v1", true)
     of "btc-spend": return ("muster.effect.btc-spend.v1", true)
     of "lez-msig": return ("muster.effect.lez-msig.v1", true)   # a lez-msig proposal's bytes (exo-0d3)
+    of "lez-msig-spend": return ("muster.effect.lez-msig-spend.v1", true)   # a spend under its limit (exo-0d3.12)
     of "lez-multisig-proposal":                              # v2: the LEZ v0.3 port (exo-eb6.4.4)
       return ((if j{"lez"}.getStr() == "v0.3": "muster.effect.lez-multisig-proposal.v2"
                else: "muster.effect.lez-multisig-proposal.v1"), true)

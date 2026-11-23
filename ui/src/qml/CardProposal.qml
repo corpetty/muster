@@ -1008,6 +1008,8 @@ ColumnLayout {
         spacing: 2
         readonly property var m: cardRoot.msig || ({})
         readonly property var a: (cardRoot.msig && cardRoot.msig.action) ? cardRoot.msig.action : ({})
+        // a spend under a spending limit (exo-0d3.12): signed by the limit's own signers, no quorum
+        readonly property var sp: (cardRoot.msig && cardRoot.msig.spend) ? cardRoot.msig.spend : null
         function abbr(h) { h = String(h || ""); return h.length > 16 ? h.slice(0, 8) + "…" + h.slice(-6) : h; }
         // base units → LEZ as an exact decimal string (9 decimals), never through a float
         function lez(base) {
@@ -1022,6 +1024,9 @@ ColumnLayout {
             Layout.fillWidth: true
             wrapMode: Text.WrapAnywhere
             text: parent.m.error ? "⚠ " + String(parent.m.error)
+                : parent.sp !== null
+                  ? qsTr("Spends %1 LEZ to %2 under spending limit %3, without the quorum")
+                        .arg(parent.lez(parent.sp.amount)).arg(String(parent.sp.to)).arg(String(parent.sp.limit))
                 : parent.a.kind === "transfer"
                   ? qsTr("Pays %1 LEZ to %2").arg(parent.lez(parent.a.amount)).arg(String(parent.a.to))
                 : parent.a.kind === "call"
@@ -1043,7 +1048,12 @@ ColumnLayout {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
             visible: !parent.m.error
-            text: qsTr("Proposal #%1 · settings v%2 · expires %3 · id %4")
+            text: parent.sp !== null
+                  ? qsTr("Spend #%1 · settings v%2 · expires %3 · signs %4")
+                        .arg(String(parent.sp.nonce)).arg(String(parent.sp.epoch))
+                        .arg(new Date(Number(parent.sp.expiresMs)).toLocaleString(Qt.locale(), Locale.ShortFormat))
+                        .arg(parent.abbr(parent.sp.spendMsg))
+                  : qsTr("Proposal #%1 · settings v%2 · expires %3 · id %4")
                   .arg(String(parent.m.nonce)).arg(String(parent.m.epoch))
                   .arg(new Date(Number(parent.m.expiresMs)).toLocaleString(Qt.locale(), Locale.ShortFormat))
                   .arg(parent.abbr(parent.m.proposalId))
@@ -1055,7 +1065,9 @@ ColumnLayout {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
             visible: !parent.m.error
-            text: qsTr("Decoded from the exact bytes your approval signs. Any change to the multisig's settings voids it; so does its expiry.")
+            text: parent.sp !== null
+                  ? qsTr("Decoded from the exact bytes your signature signs. Only the limit's signers count, up to its amount each period. Any change to the multisig's settings voids it; so does its expiry.")
+                  : qsTr("Decoded from the exact bytes your approval signs. Any change to the multisig's settings voids it; so does its expiry.")
             color: Theme.palette.textTertiary
             font.pixelSize: MusterStyle.cardCaption
         }

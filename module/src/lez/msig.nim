@@ -404,6 +404,14 @@ proc decodePublicEnvelope*(b: openArray[byte]): tuple[createKey: Key32, op: Msig
   result.op = r.rinstruction()
   if r.i != r.b.len: bad("trailing bytes after the envelope")
 
+proc decodeSpend*(b: openArray[byte]): MsigSpend =
+  ## A spend under a limit, as its signers sign it: exact bytes only.
+  var r = Reader(b: @b)
+  result.multisig = r.rfixed(32); result.zone = r.rfixed(32); result.epoch = r.ru64()
+  result.limit = r.ru32(); result.nonce = r.ru64(); result.to = r.rfixed(32)
+  result.amount = r.ru128(); result.expiresMs = r.ru64()
+  if r.i != r.b.len: bad("trailing bytes after the spend")
+
 proc decodeMsigConfig*(b: openArray[byte]): MsigConfig =
   var r = Reader(b: @b)
   result = r.rconfig()
@@ -556,6 +564,11 @@ proc proposalJson*(p: MsigProposal): JsonNode =
      "action": actionJson(p.action), "expiresMs": $p.expiresMs, "proposer": hexOf(p.proposer),
      "proposalId": hexOf(proposalId(p))}
 
+proc spendJson*(s: MsigSpend): JsonNode =
+  %*{"multisig": hexOf(s.multisig), "zone": hexOf(s.zone), "epoch": $s.epoch, "limit": int(s.limit),
+     "nonce": $s.nonce, "to": hexOf(s.to), "amount": $s.amount, "expiresMs": $s.expiresMs,
+     "spendMsg": hexOf(spendMsg(s))}
+
 proc configJson*(c: MsigConfig): JsonNode =
   %*{"members": c.members.mapIt(memberJson(it)), "threshold": int(c.threshold),
      "timelockMs": $c.timelockMs, "openExecution": c.openExecution,
@@ -602,3 +615,50 @@ proc recipientAddress*(r: LezRecipient): Key32 =
   let id = recipientAccountId(r)
   if r.opening.isNone: id
   else: @(sha256(bytesOf(BlindedPrefix) & id & r.opening.get))
+
+# ── a config change, as the program applies it (core/src/rules.rs apply_changes) ──
+proc applyChanges*(c: MsigConfig, changes: seq[MsigChange]): MsigConfig =
+  ## The config after an executed config change, or a ValueError naming why the program would
+  ## refuse it. The room folds executed changes with this; the chain's own state is what
+  ## settlement re-reads, and the program's check is the one that counts. The checks are the
+  ## program's, except that a key is not checked to be a curve point (it was one when added).
+  result = c
+  for ch in changes:
+    case ch.kind
+    of ccAddMember:
+      if result.memberOf(ch.member.key).isSome: raise newException(ValueError, "member keys must be distinct")
+      result.members.add ch.member
+    of ccRemoveMember:
+      if result.memberOf(ch.removed).isNone: raise newException(ValueError, "not a member: " & hexOf(ch.removed))
+      if result.limits.anyIt(ch.removed in it.signers):
+        raise newException(ValueError, "a spending limit's signer: remove the limit first")
+      result.members = result.members.filterIt(it.key != ch.removed)
+    of ccSetRoles, ccSetWeight:
+      let k = (if ch.kind == ccSetRoles: ch.rolesKey else: ch.weightKey)
+      var found = false
+      for m in result.members.mitems:
+        if m.key == k:
+          found = true
+          if ch.kind == ccSetRoles: m.roles = ch.roles else: m.weight = ch.weight
+      if not found: raise newException(ValueError, "not a member: " & hexOf(k))
+    of ccSetThreshold: result.threshold = ch.threshold
+    of ccSetTimelock: result.timelockMs = ch.timelockMs
+    of ccSetOpenExecution: result.openExecution = ch.open
+    of ccSetActions: result.actions = ch.actions
+    of ccSetTargets: result.targets = ch.targets
+    of ccAddLimit: result.limits.add ch.limit
+    of ccRemoveLimit:
+      let before = result.limits.len
+      result.limits = result.limits.filterIt(it.id != ch.limitId)
+      if result.limits.len == before: raise newException(ValueError, "unknown spending limit " & $ch.limitId)
+  let r = result
+  if r.members.len == 0 or r.members.len > 32: raise newException(ValueError, "between 1 and 32 members")
+  for i, m in r.members:
+    if r.members[0 ..< i].anyIt(it.key == m.key): raise newException(ValueError, "member keys must be distinct")
+    if m.weight == 0: raise newException(ValueError, "every weight is at least 1")
+    if m.roles == 0 or (m.roles and not RoleAll) != 0: raise newException(ValueError, "every member holds a known role")
+  if r.threshold == 0 or r.threshold > approvalWeight(r, r.members.mapIt(it.key)):
+    raise newException(ValueError, "the threshold is between 1 and the approvers' total weight")
+  if not r.members.anyIt((it.roles and RolePropose) != 0): raise newException(ValueError, "someone must be able to propose")
+  if not r.openExecution and not r.members.anyIt((it.roles and RoleExecute) != 0):
+    raise newException(ValueError, "someone must be able to execute")

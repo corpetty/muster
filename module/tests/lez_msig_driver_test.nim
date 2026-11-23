@@ -175,4 +175,58 @@ block:
   doAssert m.discloses.anyIt(it.field == "approvals" and it.to == obChainObserver), "the public posture shows approvals"
   echo "5. profile, manifest and conformance green OK"
 
+# ── 6. a spend under a limit (exo-0d3.12) ─────────────────────────────────────
+block:
+  # limit 7: members 2 and 3 sign, 1 of them is enough, up to 500 per day
+  var c = cfg(2)
+  c.limits = @[MsigLimit(id: 7, signers: @[keys[1], keys[2]], threshold: 1, amount: 500.u128, periodMs: 86_400_000)]
+  let d = newLezMsigDriver(account(c))
+  let sp = MsigSpend(multisig: a, zone: zone, epoch: 0, limit: 7, nonce: 3, to: fill(0x0e), amount: 200.u128,
+                     expiresMs: 9_000_000_000_000'u64)
+  let e = effectFromJson(lezMsigSpendEffect(sp))
+  doAssert e.schemaId == LezMsigSpendSchema and e.isSpend and msigSpendOf(e) == sp
+  doAssert d.signRefusal(e) == ""
+  doAssert d.describeFor(e).threshold == 1, "the limit's threshold, not the quorum's"
+  let m = canonicalize(d, e)
+  let v = decode(m.bytes)
+  doAssert v.arr.len == 4 and v.arr[2].b == spendMsg(sp) and v.arr[3].u == 7, "the spend message and its limit"
+  proc spendSig(i: int, s: MsigSpend): Contribution =
+    var h: array[32, byte]
+    let sm = spendMsg(s)
+    for j in 0 ..< 32: h[j] = sm[j]
+    Contribution(bytes: contributionOf(keys[i], ks[i].lezMemberSign(label, h)))
+  doAssert d.identifyContributor(m, spendSig(1, sp)) == ContributorPrefix & hexOf(keys[1])
+  doAssert d.identifyContributor(m, spendSig(0, sp)) == "", "member 1 is not the limit's signer"
+  var other = sp
+  other.amount = 201.u128
+  doAssert d.identifyContributor(m, spendSig(2, other)) == "", "a signature over another spend"
+  d.expectMaterialization(m)
+  doAssert d.verifyContribution(spendSig(2, sp), 0) and not d.verifyContribution(spendSig(0, sp), 0)
+  doAssert d.mayContribute(e, @[ContributorPrefix & hexOf(keys[1])]) == elYes
+  doAssert d.mayContribute(e, @[ContributorPrefix & hexOf(keys[0])]) == elNo
+  # in-app: the member's key among the limit's signers signs the spend message
+  let ins = d.signInApp(e, ks[2], default(array[32, byte]))
+  doAssert ins.handled and d.identifyContributor(m, Contribution(bytes: ins.contribution)) == ContributorPrefix & hexOf(keys[2])
+  # refusals
+  other = sp
+  other.amount = 501.u128
+  doAssert "over the limit" in d.signRefusal(effectFromJson(lezMsigSpendEffect(other)))
+  doAssert decode(canonicalize(d, effectFromJson(lezMsigSpendEffect(other))).bytes).arr.len == 2, "a sentinel"
+  other = sp
+  other.limit = 8
+  doAssert "no spending limit 8" in d.signRefusal(effectFromJson(lezMsigSpendEffect(other)))
+  other = sp
+  other.multisig = fill(9)
+  doAssert "another multisig" in d.signRefusal(effectFromJson(lezMsigSpendEffect(other)))
+  # a proposal through the same driver still verifies against the quorum
+  let pe = effectFromJson(lezMsigEffect(proposal(0, 400)))
+  let pm = canonicalize(d, pe)
+  doAssert d.identifyContributor(pm, approval(0, proposal(0, 400))).len > 0
+  doAssert d.describeFor(pe).threshold == 2
+  let man = d.manifest(e)
+  doAssert man.declared and consistencyFailures(man).len == 0 and man.agreement.threshold == 1
+  doAssert man.touches.anyIt(hexOf(fill(0x0e)) in it.target), "the payee"
+  doAssert d.profile.bypasses == @["spending-limit"]
+  echo "6. a spend: the limit's signers sign its exact bytes, its threshold is the limit's, the quorum is not asked OK"
+
 echo "lez_msig_driver_test: all passed"

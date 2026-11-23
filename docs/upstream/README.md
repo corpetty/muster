@@ -23,6 +23,10 @@ Field reports (performance and findings from real use, kept current; each ends w
 - [`lez-v04-field-report.md`](lez-v04-field-report.md) — for the **LEZ** team: lez-msig on
   0.4.0-rc3 (devnet and local): what each step meters and costs, refusals burning the whole gas
   limit with no estimate RPC, a PDA unable to pay its own fee, version detection, deploy resume.
+- [`chat-module-field-report.md`](chat-module-field-report.md) — for the **chat** team: a
+  `chat_module` group per multisig, its roster following the members; removal on GroupV3
+  (logos-chat-module#103), one-session addresses, two-minute membership changes, every member an
+  admin, no address proof.
 
 Notes offered (not asks):
 

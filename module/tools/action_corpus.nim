@@ -111,7 +111,8 @@ let frostRecovery = frostFixtureRecoveryHex()
 
 proc lezMsigFill(x: byte): seq[byte] = (result = newSeq[byte](32); for i in 0 ..< 32: result[i] = x)
 let lezMsigCfg = block:
-  ## a 2-of-3 lez-msig over BIP-340 test-vector keys, a one-hour time lock (exo-0d3)
+  ## a 2-of-3 lez-msig over BIP-340 test-vector keys, a one-hour time lock (exo-0d3), and a
+  ## spending limit: any 1 of the three may spend up to 0.00001 LEZ a day (exo-0d3.12)
   var members: seq[MsigMember]
   for k in ["f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
             "dff1d77f2a671c5f36183726db2341be58feae1da2deced843240f7b502ba659",
@@ -120,7 +121,9 @@ let lezMsigCfg = block:
   let a = LezMsigAccount(chain: "lez:local", program: lezMsigFill(0x11), createKey: lezMsigFill(0x22),
                          zone: lezMsigFill(0x2e), address: multisigPublic(lezMsigFill(0x11), lezMsigFill(0x22)),
                          config: MsigConfig(members: members, threshold: 2, timelockMs: 3_600_000,
-                                            openExecution: true, actions: ActAll))
+                                            openExecution: true, actions: ActAll,
+                                            limits: @[MsigLimit(id: 1, signers: members.mapIt(it.key), threshold: 1,
+                                                                amount: 10_000.u128, periodMs: 86_400_000)]))
   %*{"chain": "lez:local", "config": configJsonOf(a)}
 
 proc configOf(kind: string): JsonNode =
@@ -286,6 +289,11 @@ proc effectJsonFor(kind, variant: string, d: Driver): string =
                   else: MsigAction(kind: akConfig, changes: @[MsigChange(kind: ccSetTimelock, timelockMs: 0)]))
     lezMsigEffect(MsigProposal(multisig: a.address, zone: a.zone, epoch: 0, nonce: 0, action: action,
                                expiresMs: 1_800_000_000_000'u64, proposer: a.config.members[0].key))
+  of "lez-msig/spend":
+    # a spend under the limit, as the room composes it: no quorum, no time lock (exo-0d3.12)
+    let a = LezMsigDriver(d).account
+    lezMsigSpendEffect(MsigSpend(multisig: a.address, zone: a.zone, epoch: 0, limit: 1, nonce: 1, to: lezMsigFill(0x0e),
+                                 amount: 1000.u128, expiresMs: 1_800_000_000_000'u64))
   of "xmr-msig/spend":
     # a spend from the members' 2-of-3 Monero multisig wallet: 0.25 XMR to one subaddress,
     # in atomic units, the network fee capped at 0.001 XMR (ADR-020)
@@ -300,7 +308,7 @@ const Variants* = [
   ("invoke", "module-call"), ("invoke", "lez-transfer"),
   ("btc-p2wsh", "spend"), ("btc-tapscript", "spend"), ("btc-frost", "spend"),
   ("lez-multisig", "transfer"), ("lez-multisig", "vault-init"), ("lez-frost", "transfer"),
-  ("lez-msig", "transfer"), ("lez-msig", "config"),
+  ("lez-msig", "transfer"), ("lez-msig", "config"), ("lez-msig", "spend"),
   ("evm-split", "split"), ("evm-split", "settle-up"), ("lez-split", "split"), ("btc-split", "split"), ("btc-split", "settle-up"),
   ("monero-split", "request"), ("xmr-msig", "spend")]
 

@@ -113,6 +113,12 @@ let sp = MsigSpend(multisig: a, zone: zone, epoch: 5, limit: 7, nonce: 10, to: f
                    expiresMs: 1_800_000_000_000'u64)
 same(borsh(sp), "spend", "the spend")
 same(spendMsg(sp), "spend_msg", "what a limit's signer signs")
+doAssert decodeSpend(borsh(sp)) == sp, "a spend decodes back to itself"
+for bad in [borsh(sp)[0 ..< ^1], borsh(sp) & @[0'u8]]:
+  try:
+    discard decodeSpend(bad)
+    doAssert false, "only exact bytes decode"
+  except MsigDecodeError: discard
 let spSig = btckeys.schnorrSign(secrets[0], spendMsg(sp), aux)
 same(spSig, "spend_sig1", "member 1's spend signature, signed here")
 same(envelopePublic(createKey, MsigInstruction(kind: ikSpend, spend: sp, spendApprovals: @[MsigSigned(key: k1, sig: spSig)],
