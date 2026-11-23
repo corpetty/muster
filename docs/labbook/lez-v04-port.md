@@ -138,3 +138,16 @@
     `lez_msig_private_e2e` step 11 on a local zone: an outsider's public payment, collected by the
     next settled transaction. LEZ's wallet CLI cannot make that payment (it declares `--to` public);
     Muster builds it (`lez/tx.nim` `nativeTransfer04`).
+19. **The two lines' provers side by side** (2026-11-23, exo-cc7): one module name, `lez_msig_module`,
+    for two builds (0.1.0 for v0.3, 0.2.0 for v0.4) meant a host held one or the other, and the
+    builder resolves a dependency by name, so the catalogue could not carry both. The v0.4 executor is
+    now `lez_msig_v04_module` (0.2.0). `muster_module` declares both optional (`~0.1.0`, `~0.2.0`),
+    reads the zone's line once per RPC, and calls that line's module (`proverModuleFor`); the card's
+    "What this needs" names it. `make build` now puts both in the runner (`LEZ_MSIG_DIR` is gone).
+20. **risc0's recursion circuit answers 403** (2026-11-23, exo-ba5): `risc0-circuit-recursion`
+    4.0.4's `build.rs` downloads `zkr/744b999f…8849.zip` from risc0's S3 bucket, which now answers
+    403 Forbidden. A cargo build in a fresh `target/` fails ("failed to run custom build command for
+    `risc0-circuit-recursion`"); a nix build fails on any machine whose store lacks the zip. Cargo:
+    `RECURSION_SRC_PATH=<a copy of the zip>`. Nix: both prover flakes list a second URL, the copy
+    attached to the `muster-v0.4.0` release, pinned by the same hash; S3 stays first so the store
+    path is unchanged.

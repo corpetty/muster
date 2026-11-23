@@ -311,6 +311,14 @@ at about 38% slower proving [measured]. We moved our benchmark into a binary to 
   build with LEZ (`risc0-zkos-v1compat`). We seed lockfiles from LEZ's own. A published lockfile
   or template for program authors, or a move to an unyanked release, would help everyone outside
   your workspace.
+- **risc0's recursion circuit no longer downloads** [measured, 2026-11-23]:
+  `risc0-circuit-recursion` 4.0.4's `build.rs` fetches
+  `risc0-artifacts.s3.us-west-2.amazonaws.com/zkr/744b999f…8849.zip`, and the bucket now answers
+  403 Forbidden. LEZ's own flake fetches the same file, so a machine without it in its nix store
+  cannot build LEZ or any program against it, and a cargo build in a fresh `target/` fails in
+  `build.rs`. We fall back to a copy attached to `muster-v0.4.0`, pinned by its hash, and use
+  `RECURSION_SRC_PATH` for cargo. A copy you host, or a word with risc0, would unblock every program
+  author at once.
 
 ## Reproduce
 
