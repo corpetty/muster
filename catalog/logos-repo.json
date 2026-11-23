@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "name": "muster",
   "displayName": "Muster",
-  "description": "Muster: rooms where people agree on a payment, a bill split or a decision, then settle it. Publishes muster_module and muster_ui, and lez_msig_module (the private multisig's prover, optional, linux-amd64); every other dependency comes from the official Logos catalogue. Unsigned.",
+  "description": "Muster: rooms where people agree on a payment, a bill split or a decision, then settle it. Publishes muster_module and muster_ui, and the private multisig's provers, lez_msig_module (LEZ v0.3) and lez_msig_v04_module (LEZ v0.4), optional, linux-amd64; every other dependency comes from the official Logos catalogue. Unsigned.",
   "homepage": "https://github.com/corpetty/muster/tree/main/catalog",
   "indexUrl": "https://raw.githubusercontent.com/corpetty/muster/main/catalog/index.json",
   "trustedSigners": []
