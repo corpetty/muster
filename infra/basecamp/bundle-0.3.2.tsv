@@ -2,10 +2,11 @@
 # (scripts/release-appimage.sh): muster_module's and muster_ui's dependencies, closed over
 # their own, at the newest version each range admits in the Logos Official index of
 # 2026-10-28 — what Basecamp 0.3.2's Package Manager would install for Muster 0.3.4.
-# delivery 0.4.0 (muster accepts >=0.3.2) carries logos.test's new RLN registry, and the
-# RLN modules are the ones it is built against (0.12.0, 5.1.0; #350).
+# delivery 0.3.3 (muster accepts >=0.3.2) carries logos.test's new RLN registry, and the
+# RLN modules are the ones it is built against (0.12.0, 5.1.0; #350). It is the code first
+# released as 0.4.0, which Logos Official withdrew; 0.4.0's URL answers 404 since (Muster 0.4.0).
 # name<TAB>url<TAB>sha256
-delivery_module	https://github.com/logos-co/logos-modules-release/releases/download/delivery_module-v0.4.0/delivery_module-0.4.0.lgx	cfecd6f216c152e9185c5e631983b6e5b5ceefa30952e131bf010324f9b3b410
+delivery_module	https://github.com/logos-co/logos-modules-release/releases/download/delivery_module-v0.3.3/delivery_module-0.3.3.lgx	fd538b07488dfb512bd17a14006676b2590b7f50158b86c1d372fea689a3044d
 lez_core	https://github.com/logos-co/logos-modules-release/releases/download/lez_core-v0.5.1/lez_core-0.5.1.lgx	1f19bbb1ee8e64206497ce9e61e1990c2e289f405847d678d1172ed08d6b0fd0
 keystore_module	https://github.com/logos-co/logos-modules-release/releases/download/keystore_module-v0.1.0/keystore_module-0.1.0.lgx	25e657ed66b495ef027b97f7d4e5e8d0e2e5f0f3cdd481ff47ddeb0905064a24
 eth_rpc_module	https://github.com/logos-co/logos-modules-release/releases/download/eth_rpc_module-v0.1.0/eth_rpc_module-0.1.0.lgx	0d6300f5b314d8e09861513bb157f544f736a3dd91fd62c884facd646b2f58e9
