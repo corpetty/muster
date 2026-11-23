@@ -3412,7 +3412,7 @@ dependencies = [
 
 [[package]]
 name = "lez_msig_module"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "borsh",
  "hex",

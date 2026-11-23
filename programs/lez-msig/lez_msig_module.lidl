@@ -1,5 +1,5 @@
 module lez_msig_module {
-  version "0.1.0"
+  version "0.1.1"
   description "lez-msig on a LEZ v0.3 zone (docs/design/lez-msig.md): proves and sends the private posture's transactions, for Muster, and gives any module or integrator the public posture's key-free operations (state, propose, spend, check, prepare, send_public; docs/design/lez-msig-signing.md). Holds no key: the group secret arrives with each request and is dropped with its job. JSON in, JSON out; a failure is {error, detail}."
   category "blockchain"
   depends []
