@@ -113,11 +113,13 @@ proof.
   | step | 0.4 (s) | 0.3 (s) |
   |---|---|---|
   | public → one private account (fee-account top-up) | 75 | (none) |
-  | public → the vault, plus the fee witness (deposit) | 169 | 92 (no fee) |
-  | create (3 / 10 members) | 184 / 192 | 130 / 140 |
-  | pay with M = 1 / 3 / 5 / 10 approvals | 195 / 209 / 235 / 298 | 151 / 172 / 209 / 288 |
+  | public → the vault, plus the fee witness (deposit) | 169 | 77 (no fee) |
+  | create (3 / 10 members) | 184 / 192 | 110 / 117 |
+  | pay with M = 1 / 3 / 5 / 10 approvals | 195 / 209 / 235 / 298 | 126 / 144 / 171 / 232 |
 
-  - A payment proves in about 182 s + 11.5 s·M (0.3: 136 s + 15 s·M).
+  The 0.3 column is the idle run on the same machine (2026-11-19).
+  - A payment proves in about 182 s + 11.5 s·M (0.3: 111 s + 12.0 s·M): about 70 s more at the
+    base, the same per approval.
   - **The in-proof fee costs about 95 s on every step**: the deposit and the top-up are the same
     transfer, and the deposit's extra private account, the fee witness, is the difference.
   - Transactions are 229–238 KB, flat in M (0.3: 228 KB).

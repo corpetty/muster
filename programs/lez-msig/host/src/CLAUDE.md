@@ -9,3 +9,6 @@
   `bin/msig_exec` and the Logos module `lez_msig_module` both call it.
 - `bin/msig_bench.rs`: RFP P.1/P.2 with real proving (it refuses `RISC0_DEV_MODE`).
 - `bin/msig_vectors.rs`: ground truth for muster's Nim port (`module/tests/vectors/lez-msig`).
+- `public.rs`: the public posture's key-free operations (state, propose, spend, check, prepare,
+  send_public) for integrators without Muster; `exec_request` routes them, so `msig_exec` and the
+  Logos module carry them too (`docs/design/lez-msig-signing.md`).
