@@ -12,8 +12,14 @@
 ## A deposit (`fund`) is a native transfer from this member's public LEZ account into the
 ## vault: the prover proves it, the keystore signs its hash, and the prover sends it. No key
 ## leaves the keystore, and the group secret goes only to the prover, for the job.
+##
+## On LEZ v0.4 (exo-05f) every transaction pays its fee inside its proof from the group's fee
+## account (D17), whose note travels beside the multisig's: each request carries `feeNote`, each
+## answer the new one (`feePost`), and `onFeeNote` hands it to the host to seal into the room.
+## `topUp` funds the fee account from this member's public account, signed like a deposit. On
+## v0.3 the prover answers no `feePost`, and none of this applies.
 
-import std/[json, options, strutils, tables]
+import std/[json, options, sequtils, strutils, tables]
 import stint
 import ../lez/msig
 import ../lez/tx as leztx     # LezShard
@@ -26,10 +32,13 @@ import ./msig_prover
 type
   PrivJob = object
     n: int                        ## the note this transaction makes
-    fund: bool
+    feeN: int                     ## the fee account's note it makes (v0.4)
+    fund: bool                    ## a deposit or a top-up: signed here, then sent by the prover
+    topUp: bool                   ## a top-up makes no multisig note
     scan: bool                    ## a read of the newest note from the chain, sending nothing
     txHash, failed: string
-    post: seq[byte]
+    post, feePost: seq[byte]
+    cursor: string                ## inboundNext: where the next collection starts (v0.4)
     applied: bool
 
   MsigPrivate* = ref object of MsigLive
@@ -39,25 +48,38 @@ type
     note*: seq[byte]              ## the latest note (lee_core Account, borsh); empty before Create
     noteN*: int                   ## its number; -1 before Create
     onNote*: proc(n: int, note: seq[byte], hash: string) {.closure.}
+    feeNote*: seq[byte]           ## the group fee account's latest note (v0.4); empty before a top-up
+    feeNoteN*: int                ## its number; -1 before the first top-up
+    inboundCursor*: string        ## v0.4: where the next deposits from outside are collected from
+    onFeeNote*: proc(n: int, note: seq[byte], hash: string) {.closure.}
     jobs: Table[string, PrivJob]
 
 proc newMsigPrivate*(rpc: LezRpc, rpcUrl: string, ks: Keystore, chain: string, program: seq[byte],
                      payerLabel: string, prover: MsigProver, gms, createKey: seq[byte]): MsigPrivate =
   MsigPrivate(rpc: rpc, rpcUrl: rpcUrl, ks: ks, chain: chain, program: program, payerLabel: payerLabel,
-              prover: prover, gms: gms, createKey: createKey, noteN: -1)
+              prover: prover, gms: gms, createKey: createKey, noteN: -1, feeNoteN: -1)
 
-proc learn*(c: MsigPrivate, n: int, note: seq[byte]) =
-  ## A note the room carries; the newest one is the state.
+proc learn*(c: MsigPrivate, n: int, note: seq[byte], cursor = "") =
+  ## A note the room carries; the newest one is the state. `cursor` is the deposits' cursor sealed
+  ## beside it (v0.4): the next transaction collects deposits from outside the group from there.
   if n > c.noteN and note.len > 0:
     c.note = note
     c.noteN = n
+    if cursor.len > 0: c.inboundCursor = cursor
+
+proc learnFee*(c: MsigPrivate, n: int, note: seq[byte]) =
+  ## The fee account's note the room carries (v0.4); the newest one pays the next fee.
+  if n > c.feeNoteN and note.len > 0:
+    c.feeNote = note
+    c.feeNoteN = n
 
 proc unz(h: string): seq[byte] =
   for i in 0 ..< h.len div 2: result.add byte(parseHexInt(h[2*i .. 2*i+1]))
 
 proc request(c: MsigPrivate, mode: string): JsonNode =
   %*{"mode": mode, "rpc": c.rpcUrl, "program": hexOf(c.program), "gms": hexOf(c.gms),
-     "createKey": hexOf(c.createKey), "pre": (if c.note.len > 0: %hexOf(c.note) else: newJNull())}
+     "createKey": hexOf(c.createKey), "pre": (if c.note.len > 0: %hexOf(c.note) else: newJNull()),
+     "feeNote": (if c.feeNote.len > 0: %hexOf(c.feeNote) else: newJNull())}
 
 proc derive*(c: MsigPrivate): seq[byte] =
   ## The multisig's private PDA, which only a holder of the group secret can derive.
@@ -75,16 +97,22 @@ method readMsig*(c: MsigPrivate, account: seq[byte]): MsigRead =
     result.state = st.get
   result.balance = noteBalance(n)
 
-proc submitted(c: MsigPrivate, a: JsonNode, fund: bool): MsigSent =
+proc submitted(c: MsigPrivate, a: JsonNode, fund: bool, topUp = false): MsigSent =
   if a.hasKey("error"): return MsigSent(ok: false, error: a{"error"}.getStr() & ": " & a{"detail"}.getStr())
   let id = "job:" & a{"job"}.getStr()
-  c.jobs[id] = PrivJob(n: c.noteN + 1, fund: fund)
+  c.jobs[id] = PrivJob(n: c.noteN + 1, feeN: c.feeNoteN + 1, fund: fund, topUp: topUp)
   MsigSent(ok: true, hash: id)
 
-proc sendOp*(c: MsigPrivate, op: seq[byte]): MsigSent =
+proc sendOp*(c: MsigPrivate, op: seq[byte], recipients: seq[seq[byte]] = @[]): MsigSent =
   ## The program's instruction (msig_core::Instruction, borsh), proved over the latest note.
+  ## `recipients` are private payees (lee_core::Recipient borsh, LEZ v0.4, exo-ea3): a payment to
+  ## one of their addresses is sealed to it rather than paid in the clear. On v0.4 the same proof
+  ## collects deposits paid to the vault from outside the group, from the room's cursor.
   var r = c.request("exec")
   r["op"] = %hexOf(op)
+  r["collectFrom"] = %(if c.inboundCursor.len > 0: c.inboundCursor else: "0")
+  if recipients.len > 0:
+    r["recipients"] = %recipients.mapIt(hexOf(it))
   c.submitted(c.prover.submit(r), fund = false)
 
 proc recover*(c: MsigPrivate, fromBlock = 1'u64): MsigSent =
@@ -97,18 +125,42 @@ proc recover*(c: MsigPrivate, fromBlock = 1'u64): MsigSent =
   let a = c.prover.submit(r)
   if a.hasKey("error"): return MsigSent(ok: false, error: a{"error"}.getStr() & ": " & a{"detail"}.getStr())
   let id = "job:" & a{"job"}.getStr()
-  c.jobs[id] = PrivJob(n: c.noteN + 1, scan: true)
+  c.jobs[id] = PrivJob(n: c.noteN + 1, feeN: c.feeNoteN + 1, scan: true)
   MsigSent(ok: true, hash: id)
+
+proc payerCovers(c: MsigPrivate, amount: UInt128): string =
+  ## "" when this member's public account holds `amount`; else why not. Checked before proving:
+  ## a proof over funds that are not there fails minutes later, once the job runs.
+  try:
+    let bal = c.account(c.payer()).balance
+    if bal < amount: return "your LEZ account holds " & $bal & ", less than " & $amount
+  except CatchableError as e: return "could not read your LEZ account: " & e.msg
+  ""
 
 proc fund*(c: MsigPrivate, amount: UInt128): MsigSent =
   ## A deposit into the vault from this member's own public LEZ account.
   if c.note.len == 0: return MsigSent(ok: false, error: "the multisig is not created yet")
+  let short = c.payerCovers(amount)
+  if short.len > 0: return MsigSent(ok: false, error: short)
   var r = c.request("fund")
   try: r["payerNonce"] = % $c.rpc.getAccount(c.payer()).nonce
   except CatchableError as e: return MsigSent(ok: false, error: "could not read the payer's nonce: " & e.msg)
   r["payerKey"] = %hexOf(c.ks.lezMemberKey(c.payerLabel))
   r["amount"] = % $amount
   c.submitted(c.prover.submit(r), fund = true)
+
+proc topUp*(c: MsigPrivate, amount: UInt128): MsigSent =
+  ## A top-up of the group's fee account (v0.4, D17) from this member's own public LEZ account:
+  ## proved by the prover, signed in the keystore, sent by the prover. The fee account pays this
+  ## transaction's own fee out of `amount`, so a group with no funds can start.
+  let short = c.payerCovers(amount)
+  if short.len > 0: return MsigSent(ok: false, error: short)
+  var r = c.request("topup")
+  try: r["payerNonce"] = % $c.rpc.getAccount04(c.payer()).nonce
+  except CatchableError as e: return MsigSent(ok: false, error: "could not read the payer's nonce: " & e.msg)
+  r["payerKey"] = %hexOf(c.ks.lezMemberKey(c.payerLabel))
+  r["amount"] = % $amount
+  c.submitted(c.prover.submit(r), fund = true, topUp = true)
 
 method sendMsig*(c: MsigPrivate, shards: seq[LezShard], instruction: seq[byte]): MsigSent =
   MsigSent(ok: false, error: "a private multisig sends through its prover (sendOp)")
@@ -134,14 +186,21 @@ method included*(c: MsigPrivate, hash: string): bool =
     of "proving": return false
     of "done":
       j.post = unz(a{"post"}.getStr())
+      j.feePost = unz(a{"feePost"}.getStr())
+      j.cursor = a{"inboundNext"}.getStr()
       if j.scan:
         # nothing was sent: the note the chain holds, or none newer than the room's
         c.prover.forget(id)
         j.applied = true
         c.jobs[hash] = j
+        # the deposits' cursor, read from the chain with the notes (v0.4)
+        if j.cursor.len > 0: c.inboundCursor = j.cursor
         if a{"found"}.getBool() and j.post.len > 0 and j.post != c.note:
-          c.learn(max(j.n, c.noteN + 1), j.post)
+          c.learn(max(j.n, c.noteN + 1), j.post, j.cursor)
           if c.onNote != nil: c.onNote(c.noteN, j.post, a{"hash"}.getStr())
+        if a{"feeFound"}.getBool() and j.feePost.len > 0 and j.feePost != c.feeNote:
+          c.learnFee(max(j.feeN, c.feeNoteN + 1), j.feePost)
+          if c.onFeeNote != nil: c.onFeeNote(c.feeNoteN, j.feePost, a{"hash"}.getStr())
         return true
       if j.fund:
         var h: array[32, byte]
@@ -169,6 +228,10 @@ method included*(c: MsigPrivate, hash: string): bool =
   if not j.applied:
     j.applied = true
     c.jobs[hash] = j
-    c.learn(j.n, j.post)
-    if c.onNote != nil: c.onNote(j.n, j.post, j.txHash)
+    if not j.topUp:
+      c.learn(j.n, j.post, j.cursor)
+      if c.onNote != nil: c.onNote(j.n, j.post, j.txHash)
+    if j.feePost.len > 0:
+      c.learnFee(j.feeN, j.feePost)
+      if c.onFeeNote != nil: c.onFeeNote(j.feeN, j.feePost, j.txHash)
   true

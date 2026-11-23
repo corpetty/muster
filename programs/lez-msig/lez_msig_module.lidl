@@ -1,6 +1,6 @@
 module lez_msig_module {
   version "0.1.0"
-  description "Proves and sends lez-msig's privacy-preserving transactions on a LEZ v0.3 zone, for Muster (docs/design/lez-msig.md). Holds no key: the group secret arrives with each request and is dropped with its job. JSON in, JSON out; a failure is {error, detail}."
+  description "lez-msig on a LEZ v0.3 zone (docs/design/lez-msig.md): proves and sends the private posture's transactions, for Muster, and gives any module or integrator the public posture's key-free operations (state, propose, spend, check, prepare, send_public; docs/design/lez-msig-signing.md). Holds no key: the group secret arrives with each request and is dropped with its job. JSON in, JSON out; a failure is {error, detail}."
   category "blockchain"
   depends []
 
@@ -15,6 +15,18 @@ module lez_msig_module {
   method send(request_json: tstr) -> tstr description "{rpc, message, proof, witnesses: [{signature, publicKey}]} -> {hash}: a proved message, signed elsewhere, sent. Each signature is checked against the message first, and a bad one answers {error: \"failed\", detail: \"bad-signature: ...\"}."
 
   method scan(request_json: tstr) -> tstr description "{rpc, program, gms, createKey, from? (a block id, default 1)} -> {job} at once; job(id) then answers {found, post (the multisig's newest note, Account borsh hex), block, hash, scanned}. Reads every block to the tip and decrypts each private action with the group's viewing key; for a member whose room never received the newest note. Shares the one-at-a-time slot with exec and fund."
+
+  method state(request_json: tstr) -> tstr description "The public posture (RFP-005 U.1, docs/design/lez-msig-signing.md): {rpc, program, createKey} -> {found, account, multisig, createKey, zone, epoch, nonceBase, freeNonces, config: {members: [{key, roles, weight}], threshold, timelockMs, openExecution, actions, targets, limits}, balance, usage, queue}. A public multisig's state as the program holds it. Reads only."
+
+  method propose(request_json: tstr) -> tstr description "{rpc, program, createKey, action: {kind: transfer, to, amount} | {kind: call, program, rows: [{account, program}], data} | {kind: config, changes: [{change: add-member | remove-member | set-roles | set-weight | set-threshold | set-timelock | set-open-execution | set-actions | set-targets | add-limit | remove-limit, ...}]} | {kind: cancel, nonces}, proposer (x-only key), expiresMs, nonce? (else the first free one not in taken), taken?} -> {proposal (borsh hex), proposalId, approveMsg (what each approver and the proposer sign, BIP-340), executeMsg, epoch, nonce}: a proposal at the chain's zone and epoch. Holds no key, sends nothing."
+
+  method spend(request_json: tstr) -> tstr description "{rpc, program, createKey, limit, to, amount, expiresMs, nonce?, taken?, nowMs?} -> {spend (borsh hex), spendMsg (what each of the limit's signers signs), periodMs, period (when nowMs is given), epoch, nonce}: a spend under a spending limit, no quorum. Holds no key, sends nothing."
+
+  method check(request_json: tstr) -> tstr description "{rpc, program, createKey, and an instruction: op (borsh hex) | {kind: execute | queue | execute-queued, proposal, approvals: [{key, sig}], executor?, atMs?} | {kind: spend, spend, approvals, period, periodMs}} -> {ok: true, epochAfter, window: {fromMs, toMs}} or {ok: false, refusal (the program's own error, its stable code first)}: what the program would do with it against the state now. Sends nothing."
+
+  method prepare(request_json: tstr) -> tstr description "{rpc, program, createKey, an instruction as in check (or {kind: create, zone, config}), payerKey (x-only), payerNonce? (else read), fee?: {gasLimit, tip, maxFee}} -> {sign (the message hash the payer signs, BIP-340), message (borsh hex), payer, payerNonce, rows}: an unsigned public transaction to the program. The payer signs in their own keystore; send_public carries the signature back. The payer gains no authority: the approvals inside are the program's only gate."
+
+  method send_public(request_json: tstr) -> tstr description "{rpc, message, witnesses: [{signature, publicKey}]} -> {hash}: a prepared public message, signed elsewhere, sent. Each signature is checked against the message first. On v0.3 a refused instruction is still included: judge the outcome by state(), never by inclusion."
 
   method job(job_id: tstr) -> tstr description "{job, state: proving | done | failed, startedMs, and when done the mode's answer, when failed {error, detail}}. Only the module that submitted the job may read it; an unknown id answers {error: \"unknown-job\"}."
 

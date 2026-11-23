@@ -658,6 +658,63 @@ Item {
                                 }
                             }
                         }
+                        // the zone's name in the room, and the lez-msig program on it (exo-0d3,
+                        // exo-cc7): a zone the client does not ship knowing, e.g. the LEZ 0.4 devnet
+                        LogosText {
+                            objectName: "settingsLezMsigNow"
+                            Layout.fillWidth: true
+                            elide: Text.ElideMiddle
+                            text: qsTr("LEZ zone id  ·  now: %1   ·   lez-msig program  ·  now: %2")
+                                  .arg(String((settings.s && settings.s.lez && settings.s.lez.chain) || "lez:testnet"))
+                                  .arg(String((settings.s && settings.s.lez && settings.s.lez.msigProgram) || qsTr("none")))
+                            color: Theme.palette.textSecondary
+                            font.family: MusterStyle.mono
+                            font.pixelSize: MusterStyle.caption
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Layout.maximumWidth: 460
+                            Layout.alignment: Qt.AlignLeft
+                            spacing: Theme.spacing.small
+                            LogosTextField {
+                                id: lezChainField
+                                objectName: "settingsLezChain"
+                                Layout.fillWidth: true
+                                placeholderText: qsTr("zone id, e.g. lez:devnet04")
+                                font.family: MusterStyle.mono
+                            }
+                            ActionButton {
+                                objectName: "settingsLezChainSave"
+                                text: qsTr("Save")
+                                enabled: lezChainField.text.length > 0
+                                onClicked: {
+                                    if (settings.backend) settings.backend.setSetting("lez-chain", lezChainField.text);
+                                    lezChainField.text = "";
+                                }
+                            }
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Layout.maximumWidth: 460
+                            Layout.alignment: Qt.AlignLeft
+                            spacing: Theme.spacing.small
+                            LogosTextField {
+                                id: lezMsigProgramField
+                                objectName: "settingsLezMsigProgram"
+                                Layout.fillWidth: true
+                                placeholderText: qsTr("lez-msig program's account id (64 hex)")
+                                font.family: MusterStyle.mono
+                            }
+                            ActionButton {
+                                objectName: "settingsLezMsigProgramSave"
+                                text: qsTr("Save")
+                                enabled: lezMsigProgramField.text.length > 0
+                                onClicked: {
+                                    if (settings.backend) settings.backend.setSetting("lez-msig-program", lezMsigProgramField.text);
+                                    lezMsigProgramField.text = "";
+                                }
+                            }
+                        }
 
                         // ── delivery config ──
                         LogosText {

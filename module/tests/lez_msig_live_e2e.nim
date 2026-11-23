@@ -20,7 +20,15 @@
 ##   7. member accounts (exo-1f9): Bob discloses an account of his own to the room, a second
 ##      multisig is set up with it as his approval key, and the program pays on Bob's approval
 ##      signed with that account.
+##   8. a spending limit (exo-0d3.12): added through the quorum and its time lock; once the
+##      room sees the change final, its copy of the config holds the limit (exo-0d3.13), and
+##      Bob alone spends under it in ONE Spend, with no quorum and no time lock; a spend over
+##      what the period has left is refused before anything is sent.
 ## Each member pays their own transaction's fee; approvals cost nothing on chain.
+## On a zone with slow blocks (the 0.4 devnet makes one about a minute apart),
+## MUSTER_LEZ_E2E_WAIT_SCALE multiplies every wait and the queue's landing slack, and
+## MUSTER_LEZ_E2E_FUND keeps each member's funding within the funder's means. Passed 7/7 on the
+## LEZ 0.4.0-rc3 devnet, 2026-11-20 (docs/labbook/lez-v04-port.md trap 12).
 
 import std/[os, json, strutils, sequtils, times, options, tables]
 import stint
@@ -36,7 +44,8 @@ import ../src/wallet/types
 import ../src/wallet/lez_multisig_live   # LezRpc
 import ../src/wallet/lez_msig_chain
 import ../src/settlement/settlement
-import ../src/coordination/[session, intent_events, intents, live, accounts, authorship, msig_room, member_accounts]
+import ../src/coordination/[session, intent_events, intents, live, accounts, authorship, msig_room, member_accounts,
+                            msig_members]
 import ./probes/live_room
 import ./probes/lez_funding
 
@@ -52,20 +61,22 @@ let program = hexToBytes(programText)
 echo "the lez-msig program: ", programText
 
 let rpc = newLezRpc(url)
+let waitScale = parseFloat(getEnv("MUSTER_LEZ_E2E_WAIT_SCALE", "1"))
+proc scaled(seconds: int): float = float(seconds) * waitScale
 var r = newRoom3("/muster/1/lez-msig-e2e/" & $epochTime().int & "/proto")
 let kss = @[Keystore(aliceKs), Keystore(bobKs), Keystore(room3CarolKs)]
 let sessions = @[r.alice, r.bob, r.carol]
 proc chainFor(i: int): MsigLive = newMsigLive(rpc, kss[i], Chain, program, PayerLabel)
 for i in 0 ..< 3:
   let payer = chainFor(i).payer()
-  fundFrom(url, payer, e2eFund())
+  fundFrom(url, payer, e2eFund(), kss[i].lezMemberKey(PayerLabel))
 echo "every member's own LEZ account is funded"
 
 proc pollAll() =
   for s in sessions: s.poll()
 
 proc waitFor(what: string, cond: proc(): bool, seconds = 120) =
-  let until = epochTime() + float(seconds)
+  let until = epochTime() + scaled(seconds)
   while not cond():
     doAssert epochTime() < until, "timed out waiting for " & what
     sleep(3000)
@@ -113,7 +124,11 @@ echo "2. created on chain at its PDA from Alice's own account; disclosed and res
 # ── 3. fund, propose, approve, execute ────────────────────────────────────────
 fundFrom(url, a, "5000")
 waitFor("the funded vault", proc(): bool = alice.readMsig(a).balance >= 5000.u128)
-let recipient = hexToBytes("0e".repeat(32))
+# a recipient that exists: on LEZ v0.4 a credit to an account no one has used yet waits as a
+# pending message until its owner claims it, so the balance below would not move
+let recipient = publicAccountId(kss[0].lezMemberKey("lez-msig-e2e/recipient"))
+fundFrom(url, recipient, "1", kss[0].lezMemberKey("lez-msig-e2e/recipient"))
+waitFor("the recipient exists", proc(): bool = rpc.getAccount(recipient).balance >= 1.u128)
 let before = rpc.getAccount(recipient).balance
 let drv = LezMsigDriver(roomDriverFor(policy))
 var seqNo = 100'u64
@@ -145,7 +160,7 @@ proc settleAndWatch(id: string, seconds = 180, slackMs = 0'u64): Finality =
   let (st, asm0) = settle(id, slackMs)
   doAssert asm0.ok, asm0.error & ": " & asm0.detail
   let txRef = st.submit(asm0.tx, aliceKs)
-  let until = epochTime() + float(seconds)
+  let until = epochTime() + scaled(seconds)
   while true:
     result = st.watch(txRef)
     if result.status != fsPending or epochTime() > until: return
@@ -177,13 +192,13 @@ echo "4. R.2: approvals from epoch 0 are refused after the change, by name (", s
 # ── 5. the time lock ─────────────────────────────────────────────────────────
 let pay2 = propose(2, MsigAction(kind: akTransfer, to: recipient, amount: 300.u128), alice.readMsig(a).state)
 approve(1, pay2)
-let (qst, qasm) = settle(pay2, slackMs = 45_000)
+let (qst, qasm) = settle(pay2, slackMs = uint64(45_000 * waitScale))
 doAssert qasm.ok, qasm.detail
 doAssert parseJson(qasm.tx.payload)["msig"].getStr() == $ikQueue, "a time-locked multisig queues"
 let qref = qst.submit(qasm.tx, aliceKs)
 var qf = qst.watch(qref)
 var sawQueued = false
-let until = epochTime() + 240
+let until = epochTime() + scaled(240)
 while qf.status == fsPending and epochTime() < until:
   if "queued" in qf.detail and not sawQueued:
     sawQueued = true
@@ -250,7 +265,7 @@ block:
   doAssert asm3.ok, asm3.error & ": " & asm3.detail
   let ref3 = st3.submit(asm3.tx, aliceKs)
   var f3 = st3.watch(ref3)
-  let until3 = epochTime() + 180
+  let until3 = epochTime() + scaled(180)
   while f3.status == fsPending and epochTime() < until3:
     sleep(3000)
     f3 = st3.watch(ref3)
@@ -271,7 +286,7 @@ block:
   doAssert asm4.ok, asm4.error & ": " & asm4.detail
   let ref4 = st4.submit(asm4.tx, aliceKs)
   var f4 = st4.watch(ref4)
-  let until4 = epochTime() + 180
+  let until4 = epochTime() + scaled(180)
   while f4.status == fsPending and epochTime() < until4:
     sleep(3000)
     f4 = st4.watch(ref4)
@@ -280,3 +295,56 @@ block:
 echo "7. a multisig set up with Bob's disclosed account: the program paid on his approval, and on his proposal, signed with it OK"
 
 echo "lez_msig_live_e2e: all passed"
+
+# ── 8. a spending limit, and a spend under it with no quorum (exo-0d3.12) ──────
+block:
+  # the settler's client reports each config change final, as the app's pump does; the room's
+  # copy of the config follows (exo-0d3.13)
+  r.alice.publish(finalEvent(lock))
+  pollAll()
+  let rdf: DriverFor = proc(kind: string): Driver =
+    driverForPolicy(kind, reconcileLezMsig(r.alice.roomEvents(), reduceAccounts(r.alice.roomEvents())),
+                    proc(k: string): Driver = newUnsupportedDriver(k))
+  doAssert LezMsigDriver(rdf(policy)).account.epoch == 1 and LezMsigDriver(rdf(policy)).account.config.timelockMs == 30_000
+  let keys = alice.readMsig(a).state.config.members.mapIt(it.key)
+  let lim = MsigLimit(id: 1, signers: @[keys[1], keys[2]], threshold: 1, amount: 1000.u128, periodMs: 3_600_000)
+  let addLimit = propose(0, MsigAction(kind: akConfig, changes: @[MsigChange(kind: ccAddLimit, limit: lim)]),
+                         alice.readMsig(a).state)
+  approve(1, addLimit)
+  let fl = settleAndWatch(addLimit, seconds = 240, slackMs = 45_000)
+  doAssert fl.status == fsFinal, $fl
+  doAssert alice.readMsig(a).state.config.limits.len == 1 and alice.readMsig(a).state.epoch == 2
+  r.alice.publish(finalEvent(addLimit))
+  pollAll()
+  let d2 = LezMsigDriver(rdf(policy))
+  doAssert d2.account.epoch == 2 and d2.account.config.limits.len == 1, "the room's copy holds the limit"
+  let paidBefore = rpc.getAccount(recipient).balance
+  inc seqNo
+  let sp = newMsigSpend(r.bob.roomEvents(), d2, alice.readMsig(a).state, 1, recipient, 400.u128,
+                        uint64(epochTime() * 1000) + 3_600_000)
+  let (sid, sap) = liveMsigSpend(r.bob, bobKs, rdf, policy, d2, sp, int64(epochTime()), seqNo, bindCtx())
+  doAssert sap.len > 0 and not sap.startsWith("refused"), sap
+  pollAll()
+  doAssert intentState(r.alice.roomEvents(), rdf, sid) == "executable", "1 of the limit's signers is enough"
+  let sst = LezMsigSettlement(settlementFor(d2, chainFor(0), Account(chain: Chain, form: afPublic, id: "")))
+  let sasm = sst.assemble(d2, effectFromJson(effectJsonOf(r.alice.roomEvents(), sid)), contributionsOf(sid))
+  doAssert sasm.ok, sasm.error & ": " & sasm.detail
+  doAssert parseJson(sasm.tx.payload)["msig"].getStr() == $ikSpend, "a Spend: no Queue despite the time lock"
+  let sref = sst.submit(sasm.tx, aliceKs)
+  var sf = sst.watch(sref)
+  let sUntil = epochTime() + 120
+  while sf.status == fsPending and epochTime() < sUntil:
+    sleep(3000)
+    sf = sst.watch(sref)
+  doAssert sf.status == fsFinal, $sf
+  doAssert rpc.getAccount(recipient).balance == paidBefore + 400.u128, "the program paid under the limit"
+  # 400 of 1000 spent this period: 700 more is over, and nothing is sent
+  inc seqNo
+  let over = newMsigSpend(r.carol.roomEvents(), d2, alice.readMsig(a).state, 1, recipient, 700.u128,
+                          uint64(epochTime() * 1000) + 3_600_000)
+  let (oid, _) = liveMsigSpend(r.carol, room3CarolKs, rdf, policy, d2, over, int64(epochTime()), seqNo, bindCtx())
+  pollAll()
+  let oasm = LezMsigSettlement(settlementFor(d2, chainFor(0), Account(chain: Chain, form: afPublic, id: ""))).assemble(
+    d2, effectFromJson(effectJsonOf(r.alice.roomEvents(), oid)), contributionsOf(oid))
+  doAssert not oasm.ok and "over-limit" in oasm.detail, oasm.detail
+echo "8. a limit added through the quorum; Bob alone spent under it in one Spend, no quorum, no time lock; over the period's rest refused OK"

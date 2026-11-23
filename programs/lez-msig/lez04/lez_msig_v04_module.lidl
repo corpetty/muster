@@ -1,0 +1,26 @@
+module lez_msig_v04_module {
+  version "0.2.0"
+  description "lez_msig_module for LEZ v0.4, as its own module so a host can hold it beside the v0.3 one (lez_msig_module). Proves and sends lez-msig's privacy-preserving transactions on a LEZ v0.4 zone, for Muster (docs/design/lez-msig.md). Holds no key: the group secret arrives with each request and is dropped with its job. On v0.4 every transaction pays its fee inside its proof from the group's fee account, whose note (feeNote) travels with each request and comes back new (feePost); the fee is priced from the zone's getFeeState, and an immutable program is proved without naming it. JSON in, JSON out; a failure is {error, detail}."
+  category "blockchain"
+  depends []
+
+  method health() -> tstr description "Liveness: {ok: true, busy (a proof is running), devMode (RISC0_DEV_MODE set), prover: \"local\", line: \"v0.4\", programImageId (hex of the embedded program's image id)}. Never waits on a proof."
+
+  method derive(request_json: tstr) -> tstr description "{program, gms, createKey} (hex, no 0x) -> {account, feeAccount}: the multisig's private PDA and the group's fee account. Proves nothing, reads nothing."
+
+  method exec(request_json: tstr) -> tstr description "{rpc, program, gms, createKey, pre (the multisig's current note, Account borsh hex, or null for Create), feeNote (the fee account's current note), op (msig_core::Instruction borsh hex), recipients? (private payees, lee_core::Recipient borsh hex: a payment to one is sealed to it), collectFrom? (a position: deposits paid to the vault from outside the group from there are collected in the same proof, up to 4)} -> {job} at once. A Create registers the vault's recovery binding, so anyone can pay its address from a public account. In the background it reads both notes' membership proofs from rpc, proves the program over the private note with the fee paid from the fee account, and sends it; job(id) then answers {hash, post (the new note), feePost (the fee account's new note), account, root, fee, proveMs, collected, inboundNext (the deposits' cursor to keep)}. One proof at a time: another while one runs answers {error: \"busy\"}."
+
+  method fund(request_json: tstr) -> tstr description "A deposit into the multisig's vault from a member's public account, proved but not sent: {rpc, program, gms, createKey, pre, feeNote, payerKey (the payer's x-only public key), payerNonce, amount} -> {job}; job(id) then answers {sign (the message hash the payer signs, BIP-340), message, proof, post, feePost, account, root, fee, proveMs}. The payer signs in their own keystore and send() carries the signature back; no key comes here."
+
+  method topup(request_json: tstr) -> tstr description "A top-up of the group's fee account from a member's public account, proved but not sent: {rpc, program, gms, createKey, feeNote (null the first time), payerKey, payerNonce, amount} -> {job}; job(id) then answers {sign, message, proof, feePost, feeAccount, root, fee, proveMs}. The fee account pays this transaction's own fee out of amount, so a group starts with no funds. Signed and sent like fund."
+
+  method send(request_json: tstr) -> tstr description "{rpc, message, proof, witnesses: [{signature, publicKey}]} -> {hash}: a proved message, signed elsewhere, sent. Each signature is checked against the message first, and a bad one answers {error: \"refused\", detail: \"bad-signature: ...\"}."
+
+  method scan(request_json: tstr) -> tstr description "{rpc, program, gms, createKey, from? (a block id, default 1)} -> {job} at once; job(id) then answers {found, post (the multisig's newest note), block, hash, feeFound, feePost (the fee account's newest note), scanned, inboundNext (the first deposit to the vault no block collected)}. Reads every block to the tip and decrypts each private action with the group's viewing keys; for a member whose room never received the newest notes. Shares the one-at-a-time slot with exec, fund and topup."
+
+  method job(job_id: tstr) -> tstr description "{job, state: proving | done | failed, startedMs, and when done the mode's answer, when failed {error, detail}}. Only the module that submitted the job may read it; an unknown id answers {error: \"unknown-job\"}."
+
+  method forget(job_id: tstr) -> tstr description "Drop a finished job, its decrypted notes included. {ok: true}."
+
+  event job_done(job_id: tstr, state: tstr)
+}

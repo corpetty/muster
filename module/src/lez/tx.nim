@@ -282,6 +282,14 @@ proc nativeTransfer*(amount: UInt128): seq[byte] =
   ## The native token program's instruction: borsh Transfer { amount: u128 } (variant 0).
   @[0'u8] & @(amount.toBytesLE())
 
+proc nativeTransfer04*(to: seq[byte], amount: UInt128): seq[byte] =
+  ## LEZ v0.4's native token message: borsh Transfer { to: AccountId, amount: u128 } (variant 0;
+  ## lee_core::native_token::Message at v0.4.0-rc3). Sent to the payer's native balance; a payee
+  ## the transaction leaves undeclared is credited by an async message (a bound private address's
+  ## published in the clear, exo-05f).
+  need32(to, "a payee")
+  @[0'u8] & to & @(amount.toBytesLE())
+
 proc defaultFee*(payer: seq[byte]): LezFee =
   ## The LEZ wallet's own default declaration: gas 2_000_000, tip 0,
   ## max_fee (gas + 100_000) × 64 = 134_400_000.
@@ -422,3 +430,127 @@ proc decodeLeeTxPublic*(b: seq[byte]): tuple[m: LezMessage3, witnesses: seq[LezW
   for _ in 0 ..< nw: ws.add LezWitness(signature: take(64), xonly: take(32))
   if p != b.len: raise newException(LeeTxDecodeError, "trailing bytes after the transaction")
   (m, ws)
+
+# ── LEZ v0.4.0-rc3: transactional actors (roadmap M3, exo-0d3.9) ─────────────────
+# Read from lee/state_machine/src/transaction_message.rs and public_transaction/{message,
+# transaction}.rs at v0.4.0-rc3, and held to tests/vectors/lez-msig/v04.json, which LEZ's own
+# crates generated (programs/lez-msig/lez04/host/src/bin/msig_vectors04.rs).
+#   message      TransactionMessage<PublicExecution> {
+#                  public_context { actors: BTreeSet<Actor>, authorized_accounts: BTreeSet<AccountId>
+#                                   (the nonces' accounts: the signers), promotions: BTreeSet<u64> },
+#                  execution { root { to: Actor, message: Vec<u8> }, fee: Option<FeeDeclaration> },
+#                  nonces: BTreeMap<AccountId, u128>, admission_evidence: Vec<Evidence> }
+#                Actor = (account, program); sets and maps encode sorted by their bytes.
+#                Evidence: Key(x-only key) = 0, Pda { program, seed } = 1.
+#   hash         SHA-256("/LEE/v0.3/Message/Public/" padded ‖ borsh(message)), unchanged
+#   transaction  borsh { message, witness_set }, as on v0.3; LeeTransaction::Public = 0x00 ‖ it
+
+import std/algorithm
+
+type
+  LezActor* = object
+    account*: seq[byte]
+    program*: seq[byte]
+
+  EvidenceKind* = enum ekKey, ekPda
+  LezEvidence* = object
+    case kind*: EvidenceKind
+    of ekKey: key*: seq[byte]
+    of ekPda:
+      pdaProgram*: seq[byte]
+      seed*: seq[byte]
+
+  LezMessage4* = object
+    root*: LezActor                ## the actor the transaction's root call goes to
+    message*: seq[byte]            ## that call's message, borsh
+    actors*: seq[LezActor]         ## every public actor the transaction touches (a set)
+    nonces*: seq[tuple[account: seq[byte], nonce: UInt128]]   ## the signers' nonces (a map)
+    fee*: Option[LezFee]
+    evidence*: seq[LezEvidence]    ## admits public accounts no one has used yet
+
+proc nativeActor*(account: seq[byte]): LezActor =
+  ## An account's native balance (Actor::native_balance).
+  need32(account, "an account id")
+  LezActor(account: account, program: NativeTokenProgram)
+
+proc cmpBytes(a, b: seq[byte]): int =
+  for i in 0 ..< min(a.len, b.len):
+    if a[i] != b[i]: return cmp(a[i], b[i])
+  cmp(a.len, b.len)
+
+proc bActor(b: var seq[byte], a: LezActor) =
+  need32(a.account, "an actor's account")
+  need32(a.program, "an actor's program")
+  b.add a.account
+  b.add a.program
+
+proc messageBorsh*(m: LezMessage4): seq[byte] =
+  var actors = m.actors
+  actors.sort(proc(x, y: LezActor): int =
+    let c = cmpBytes(x.account, y.account)
+    if c != 0: c else: cmpBytes(x.program, y.program))
+  var dedup: seq[LezActor]
+  for a in actors:
+    if dedup.len == 0 or dedup[^1] != a: dedup.add a
+  var nonces = m.nonces
+  nonces.sort(proc(x, y: tuple[account: seq[byte], nonce: UInt128]): int = cmpBytes(x.account, y.account))
+  # public_context
+  result.bU32(uint32(dedup.len))
+  for a in dedup: result.bActor(a)
+  result.bU32(uint32(nonces.len))
+  for n in nonces:
+    need32(n.account, "a signer's account")
+    result.add n.account
+  result.bU32(0)                                  # promotions: a public transaction selects none
+  # execution
+  result.bActor(m.root)
+  result.bU32(uint32(m.message.len))
+  result.add m.message
+  if m.fee.isNone: result.add 0'u8
+  else:
+    let f = m.fee.get
+    need32(f.payer, "a fee payer")
+    result.add 1'u8
+    result.add f.payer
+    result.bU64(f.gasLimit)
+    result.bU64(f.tip)
+    result.add @(f.maxFee.toBytesLE())
+  # nonces
+  result.bU32(uint32(nonces.len))
+  for n in nonces:
+    result.add n.account
+    result.add @(n.nonce.toBytesLE())
+  # admission evidence
+  result.bU32(uint32(m.evidence.len))
+  for e in m.evidence:
+    case e.kind
+    of ekKey:
+      need32(e.key, "an x-only key")
+      result.add 0'u8
+      result.add e.key
+    of ekPda:
+      need32(e.pdaProgram, "a program account id")
+      need32(e.seed, "a PDA seed")
+      result.add 1'u8
+      result.add e.pdaProgram
+      result.add e.seed
+
+proc messageHash*(m: LezMessage4): array[32, byte] =
+  ## What each signer signs, the fee payer included.
+  sha256(padded(MessagePrefix) & messageBorsh(m))
+
+proc publicTxBorsh*(m: LezMessage4, witnesses: seq[LezWitness]): seq[byte] =
+  result = messageBorsh(m)
+  result.bU32(uint32(witnesses.len))
+  for w in witnesses:
+    if w.signature.len != 64: raise newException(ValueError, "a signature must be 64 bytes")
+    need32(w.xonly, "an x-only key")
+    result.add w.signature
+    result.add w.xonly
+
+proc publicTxHash*(m: LezMessage4, witnesses: seq[LezWitness]): string =
+  hexOf(sha256(publicTxBorsh(m, witnesses)))
+
+proc leeTxPublic*(m: LezMessage4, witnesses: seq[LezWitness]): seq[byte] =
+  ## LeeTransaction::Public on v0.4: what sendTransaction carries (base64 of these bytes).
+  @[0'u8] & publicTxBorsh(m, witnesses)

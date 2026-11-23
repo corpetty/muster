@@ -70,11 +70,15 @@ Item {
     property var lezMsigOpen: ({})
     property var lezMsigPropose: ({})
     property var lezMsigFund: ({})
+    property var lezMsigTopup: ({})
     property var lezMsigRecover: ({})
     property var lezMsigState: ({})
     signal lezMsigOpenRequested(string specJson)
     signal lezMsigProposeRequested(string account, string actionJson)
     signal lezMsigFundRequested(string account, string amount)
+    // LEZ v0.4 (D17): the group's fee account, which pays every private transaction's fee;
+    // account is the multisig's id or, before Create, its ceremony's create key
+    signal lezMsigTopupRequested(string account, string amount)
     signal lezMsigRecoverRequested(string account)
 
     // a member's own accounts, disclosed to the room (exo-1f9): anyone may pick one where an
@@ -1160,21 +1164,47 @@ Item {
             // the room's ceremonies
             Repeater {
                 model: acc.lezMsigCeremonies
-                delegate: LogosText {
+                delegate: ColumnLayout {
+                    id: cer
                     required property var modelData
-                    objectName: "msigCeremony"
                     Layout.fillWidth: true
-                    wrapMode: Text.WordWrap
-                    readonly property int joined: (modelData.members || []).filter(function (m) { return m.joined; }).length
-                    text: (modelData.private ? qsTr("private") + " · " : "")
-                          + qsTr("%1 of %2 · joined %3 of %2").arg(modelData.threshold).arg((modelData.members || []).length).arg(joined)
-                          + (String(modelData.account || "").length > 0 ? "  ·  " + qsTr("created, disclosed")
-                             : modelData.createSent ? "  ·  " + qsTr("creating on chain…")
-                             : modelData.ready ? "  ·  " + qsTr("everyone joined; the opener creates it")
-                             : "  ·  " + qsTr("waiting for members to join"))
-                    color: Theme.palette.textSecondary
-                    font.family: MusterStyle.mono
-                    font.pixelSize: MusterStyle.caption
+                    spacing: Theme.spacing.small
+                    LogosText {
+                        objectName: "msigCeremony"
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        readonly property int joined: (cer.modelData.members || []).filter(function (m) { return m.joined; }).length
+                        text: (cer.modelData.private ? qsTr("private") + " · " : "")
+                              + qsTr("%1 of %2 · joined %3 of %2").arg(cer.modelData.threshold).arg((cer.modelData.members || []).length).arg(joined)
+                              + (String(cer.modelData.account || "").length > 0 ? "  ·  " + qsTr("created, disclosed")
+                                 : cer.modelData.createSent ? "  ·  " + qsTr("creating on chain…")
+                                 : cer.modelData.ready ? "  ·  " + qsTr("everyone joined; the opener creates it")
+                                 : "  ·  " + qsTr("waiting for members to join"))
+                        color: Theme.palette.textSecondary
+                        font.family: MusterStyle.mono
+                        font.pixelSize: MusterStyle.caption
+                    }
+                    // LEZ v0.4 (D17): Create itself pays its fee from the group's fee account, so a
+                    // private multisig needs a top-up before it exists
+                    RowLayout {
+                        Layout.fillWidth: true
+                        visible: cer.modelData.private === true && String(cer.modelData.account || "").length === 0
+                        spacing: Theme.spacing.small
+                        LogosTextField {
+                            id: cerTopupAmount
+                            objectName: "msigCeremonyTopupAmount"
+                            Layout.fillWidth: true
+                            placeholderText: qsTr("LEZ for its fees (needed first on LEZ v0.4)")
+                        }
+                        ActionButton {
+                            objectName: "msigCeremonyTopup"
+                            readonly property string base: acc.lezBase(cerTopupAmount.text)
+                            enabled: base !== "" && base !== "0"
+                            text: qsTr("Top up the fee account")
+                            variant: LogosButton.Variant.Secondary
+                            onClicked: acc.lezMsigTopupRequested(String(cer.modelData.createKey), base)
+                        }
+                    }
                 }
             }
             LogosText {
@@ -1218,11 +1248,29 @@ Item {
                     color: parent.st.error && parent.st.error !== "not-a-lez-msig-policy" ? Theme.palette.error : Theme.palette.textSecondary
                     font.pixelSize: MusterStyle.caption
                 }
+                // its deliberation runs in a chat group that follows its members (exo-7a5)
+                LogosText {
+                    objectName: "msigChat"
+                    Layout.fillWidth: true
+                    readonly property var c: parent.st.chat || null
+                    readonly property var held: c ? (c.members || []).filter(function (m) { return !m.pending; }) : []
+                    readonly property var adding: c ? (c.members || []).filter(function (m) { return m.pending; }) : []
+                    visible: c !== null
+                    text: !c ? ""
+                          : !c.convo ? qsTr("Chat group: not created yet")
+                          : qsTr("Chat group: %n member(s), in the Chat app", "", held.length)
+                            + (adding.length > 0 ? qsTr("  ·  %n being added", "", adding.length) : "")
+                            + ((c.missing || []).length > 0 ? qsTr("  ·  %n not reachable in chat yet", "", c.missing.length) : "")
+                            + ((c.failed || []).length > 0 ? "  ·  ⚠ " + String(c.failed[0]) : "")
+                    color: c && (c.failed || []).length > 0 ? Theme.palette.warning : Theme.palette.textSecondary
+                    font.pixelSize: MusterStyle.caption
+                    wrapMode: Text.WordWrap
+                }
                 LogosText {
                     objectName: "msigPrivateNote"
                     Layout.fillWidth: true
                     visible: parent.st.private === true
-                    text: qsTr("Private: only the members can read this. On chain each action is one proof, with no member, approval or settings in it; a payment to a public account shows that account and the amount.")
+                    text: qsTr("Private: only the members can read this. On chain each action is one proof, with no member, approval or settings in it; a payment to a public account shows that account and the amount. On LEZ v0.4 anyone can pay this vault's address from a public account; the payment shows up here once the group's next transaction collects it.")
                     color: Theme.palette.textSecondary
                     font.pixelSize: MusterStyle.caption
                     wrapMode: Text.WordWrap
@@ -1250,6 +1298,25 @@ Item {
                     Layout.fillWidth: true
                     visible: parent.st.private === true
                     spacing: Theme.spacing.small
+                    LogosTextField {
+                        id: msigTopupAmount
+                        objectName: "msigTopupAmount"
+                        Layout.fillWidth: true
+                        placeholderText: qsTr("LEZ for the group's fees (LEZ v0.4)")
+                    }
+                    ActionButton {
+                        objectName: "msigTopup"
+                        readonly property string base: acc.lezBase(msigTopupAmount.text)
+                        enabled: base !== "" && base !== "0"
+                        text: qsTr("Top up the fee account")
+                        variant: LogosButton.Variant.Secondary
+                        onClicked: acc.lezMsigTopupRequested(String(acc.msigAccount.id), base)
+                    }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    visible: parent.st.private === true
+                    spacing: Theme.spacing.small
                     LogosText {
                         objectName: "msigRecoverNote"
                         Layout.fillWidth: true
@@ -1268,6 +1335,17 @@ Item {
                         variant: LogosButton.Variant.Secondary
                         onClicked: acc.lezMsigRecoverRequested(String(acc.msigAccount.id))
                     }
+                }
+                LogosText {
+                    objectName: "msigTopupResult"
+                    Layout.fillWidth: true
+                    visible: !!(acc.lezMsigTopup && (acc.lezMsigTopup.error || acc.lezMsigTopup.job))
+                    text: acc.lezMsigTopup && acc.lezMsigTopup.error
+                          ? "⚠ " + String(acc.lezMsigTopup.error) + (acc.lezMsigTopup.detail ? " — " + String(acc.lezMsigTopup.detail) : "")
+                          : qsTr("Proving your top-up on this device; every private transaction pays its fee from this account.")
+                    color: acc.lezMsigTopup && acc.lezMsigTopup.error ? Theme.palette.error : Theme.palette.textSecondary
+                    font.pixelSize: MusterStyle.caption
+                    wrapMode: Text.WordWrap
                 }
                 LogosText {
                     objectName: "msigFundResult"
@@ -1291,8 +1369,21 @@ Item {
                     id: msigPayTo
                     objectName: "msigPayTo"
                     Layout.fillWidth: true
-                    placeholderText: qsTr("recipient's LEZ account (hex or base58)")
+                    // on LEZ v0.4 a private multisig can pay a PRIVATE payee: the payee hands over its
+                    // recipient (lee_core::Recipient, hex, about 2.4 KB), and the payment is sealed to it
+                    // (exo-ea3)
+                    readonly property bool privatePayee: /^[0-9a-fA-F]{200,}$/.test(text.trim())
+                    placeholderText: qsTr("recipient's LEZ account (hex or base58), or a private payee's recipient (hex)")
                     font.family: MusterStyle.mono
+                }
+                LogosText {
+                    objectName: "msigPrivatePayeeNote"
+                    Layout.fillWidth: true
+                    visible: msigPayTo.privatePayee
+                    text: qsTr("A private payee: the payment is sealed to it, and nothing on chain names it. It claims the payment in a transaction of its own, which pays the private fee (about 5.7M base units on LEZ v0.4), so a smaller payment cannot be claimed from itself.")
+                    color: Theme.palette.textSecondary
+                    font.pixelSize: MusterStyle.caption
+                    wrapMode: Text.WordWrap
                 }
                 RowLayout {
                     Layout.fillWidth: true
@@ -1308,8 +1399,82 @@ Item {
                         enabled: msigPayTo.text.trim().length > 0 && msigBox.payBase !== "" && msigBox.payBase !== "0"
                         text: qsTr("Propose this payment")
                         variant: LogosButton.Variant.Secondary
-                        onClicked: acc.lezMsigProposeRequested(String(acc.msigAccount.id),
-                            JSON.stringify({ kind: "transfer", to: msigPayTo.text.trim(), amount: msigBox.payBase }))
+                        onClicked: acc.lezMsigProposeRequested(String(acc.msigAccount.id), JSON.stringify(
+                            msigPayTo.privatePayee
+                                ? { kind: "transfer", recipient: msigPayTo.text.trim(), amount: msigBox.payBase }
+                                : { kind: "transfer", to: msigPayTo.text.trim(), amount: msigBox.payBase }))
+                    }
+                }
+                // spending limits (exo-0d3.12): k of a limit's signers move up to its amount each
+                // period with no vote and no time lock: the one bypass of the quorum
+                Repeater {
+                    model: (msigBox.st && msigBox.st.config && msigBox.st.config.limits) ? msigBox.st.config.limits : []
+                    delegate: RowLayout {
+                        required property var modelData
+                        readonly property bool mine: (modelData.signers || []).indexOf(String(msigBox.st.myKey || "")) >= 0
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing.small
+                        LogosText {
+                            objectName: "msigLimit"
+                            Layout.fillWidth: true
+                            text: qsTr("Spending limit %1: %2 of %3 signers may spend up to %4 LEZ every %5 h, without a vote")
+                                  .arg(modelData.id).arg(modelData.threshold).arg((modelData.signers || []).length)
+                                  .arg(acc.lezText(modelData.amount)).arg(Number(modelData.periodMs) / 3600000)
+                                  + (parent.mine ? "" : qsTr(" (you are not one of its signers)"))
+                            color: Theme.palette.textSecondary
+                            font.pixelSize: MusterStyle.caption
+                            wrapMode: Text.WordWrap
+                        }
+                        ActionButton {
+                            objectName: "msigSpend"
+                            visible: parent.mine
+                            enabled: msigPayTo.text.trim().length > 0 && msigBox.payBase !== "" && msigBox.payBase !== "0"
+                            text: qsTr("Spend under limit %1").arg(modelData.id)
+                            variant: LogosButton.Variant.Secondary
+                            onClicked: acc.lezMsigProposeRequested(String(acc.msigAccount.id), JSON.stringify({
+                                kind: "spend", limit: Number(modelData.id), to: msigPayTo.text.trim(), amount: msigBox.payBase }))
+                        }
+                    }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacing.small
+                    readonly property var members: (msigBox.st && msigBox.st.config) ? (msigBox.st.config.members || []) : []
+                    readonly property string limitBase: acc.lezBase(msigLimitAmount.text)
+                    LogosTextField {
+                        id: msigLimitAmount
+                        objectName: "msigLimitAmount"
+                        Layout.fillWidth: true
+                        placeholderText: qsTr("limit, LEZ per period")
+                    }
+                    LogosTextField {
+                        id: msigLimitHours
+                        objectName: "msigLimitHours"
+                        Layout.preferredWidth: 90
+                        placeholderText: qsTr("hours")
+                    }
+                    LogosTextField {
+                        id: msigLimitK
+                        objectName: "msigLimitK"
+                        Layout.preferredWidth: 90
+                        placeholderText: qsTr("signers k")
+                    }
+                    ActionButton {
+                        objectName: "msigProposeLimit"
+                        readonly property int k: /^[0-9]+$/.test(msigLimitK.text.trim()) ? Number(msigLimitK.text.trim()) : 0
+                        enabled: parent.limitBase !== "" && parent.limitBase !== "0" && /^[0-9]+$/.test(msigLimitHours.text.trim())
+                                 && Number(msigLimitHours.text.trim()) > 0 && k >= 1 && k <= parent.members.length
+                        text: qsTr("Propose a spending limit")
+                        variant: LogosButton.Variant.Secondary
+                        onClicked: {
+                            var ids = ((msigBox.st.config && msigBox.st.config.limits) || []).map(function (l) { return Number(l.id); });
+                            var id = ids.length > 0 ? Math.max.apply(null, ids) + 1 : 1;
+                            acc.lezMsigProposeRequested(String(acc.msigAccount.id), JSON.stringify({
+                                kind: "config", changes: [{ change: "add-limit", limit: {
+                                    id: id, signers: parent.members.map(function (m) { return String(m.key); }),
+                                    threshold: k, amount: parent.limitBase,
+                                    periodMs: Number(msigLimitHours.text.trim()) * 3600000 } }] }));
+                        }
                     }
                 }
                 RowLayout {
@@ -1341,7 +1506,10 @@ Item {
                             Layout.fillWidth: true
                             text: qsTr("Queued: proposal #%1, runs from %2").arg(modelData.nonce)
                                   .arg(new Date(Number(modelData.etaMs)).toLocaleString(Qt.locale(), Locale.ShortFormat))
-                            color: Theme.palette.textSecondary
+                                  + (modelData.proposerRemoved
+                                     ? qsTr(". Proposed by a member who has since been removed: it still runs unless you cancel it.")
+                                     : "")
+                            color: modelData.proposerRemoved ? Theme.palette.warning : Theme.palette.textSecondary
                             font.pixelSize: MusterStyle.caption
                             wrapMode: Text.WordWrap
                         }

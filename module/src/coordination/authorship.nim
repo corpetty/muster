@@ -17,10 +17,15 @@
 ##   intent/<id>/proposer/<who>           who proposed the intent (exo-770)
 ##   lmsig/<ck>/key/<who>                 a member's lez-msig approval key (exo-0d3)
 ##   member/<who>/account/<id>[/retract]  an account of <who>'s own, disclosed or taken back (exo-1f9)
+##   member/<who>/chat                    <who>'s chat address for this session (exo-7a5)
+##   lmsig/<ck>/chat                      a lez-msig's chat group, the value's "author" the member
+##                                        whose client created it (exo-7a5)
 ##   lmsig/<ck>/gms/<who>                 a private lez-msig's group secret, sealed to <who>,
 ##                                        and the value's "author" the opener (exo-efa)
 ##   lmsig/<ck>/note/<n>/<who>            its note after its n-th transaction, sealed to <who>;
 ##                                        the value's "author" the member who sent it
+##   lmsig/<ck>/feenote/<n>/<who>         on LEZ v0.4, its group fee account's n-th note (D17),
+##                                        sealed and authored the same way (exo-05f)
 ##   xmsig/<cid>/join/<who>               a Monero multisig setup join (exo-dcc.34.2)
 ##   xmsig/<cid>/kex/<r>/<who>            that member's wallet's round r of the key exchange
 ##   intent/<id>/xsync|xtx/<who>/<i>/<n> a Monero multisig spend's sync data or transaction
@@ -132,7 +137,7 @@ proc authorOf*(e: Event): tuple[authored: bool, author: string] =
       if j.kind == JObject: author = j{"author"}.getStr()
     except CatchableError: discard
     return (true, author)
-  if p.len >= 3 and p[0] == "lmsig" and p[2] in ["gms", "note"]:
+  if p.len >= 3 and p[0] == "lmsig" and p[2] in ["gms", "note", "feenote", "chat"]:
     # a private lez-msig's sealed copies (exo-efa): the key names the member it is sealed
     # to, the value's "author" the member who sealed it
     var author = ""
@@ -149,6 +154,7 @@ proc authorOf*(e: Event): tuple[authored: bool, author: string] =
     if p[0] == "intent" and p[2] == "proposer": return (true, (if p.len >= 4: p[3] else: ""))
     if p[0] == "lmsig" and p[2] == "key": return (true, (if p.len >= 4: p[3] else: ""))
     if p[0] == "member" and p[2] == "account": return (true, p[1])
+    if p[0] == "member" and p[2] == "chat": return (true, p[1])
     if p[0] == "circle" and p.len >= 5 and p[3] == "paid": return (true, p[4])
     if p[0] == "xmsig" and p[2] == "join": return (true, (if p.len >= 4: p[3] else: ""))
     if p[0] == "xmsig" and p[2] == "kex": return (true, (if p.len >= 5: p[4] else: ""))

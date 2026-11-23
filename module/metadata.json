@@ -1,7 +1,7 @@
 {
   "name": "muster_module",
   "display_name": "Muster Module",
-  "version": "0.3.5",
+  "version": "0.4.0",
   "description": "Muster's core: people agree on a transaction inside an end-to-end encrypted room, then each part settles on its own chain. It keeps the room's log and keys, re-derives what it signs, and asks the platform's wallets to sign and send.",
   "author": "Muster",
   "type": "core",
@@ -44,8 +44,16 @@
       "version": "~3.0.2"
     },
     {
+      "name": "chat_module",
+      "version": ">=0.3.0"
+    },
+    {
       "name": "lez_msig_module",
       "version": "~0.1.0"
+    },
+    {
+      "name": "lez_msig_v04_module",
+      "version": "~0.2.0"
     }
   ],
   "include": [],

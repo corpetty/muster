@@ -1,0 +1,121 @@
+name: LEZ e2e
+
+# RFP-005 S.5/S.6 (roadmap M3): lez-msig's end-to-end tests against a standalone LEZ sequencer.
+# A local LEZ v0.3.0 zone (infra/lez/localnet.sh, dev-mode receipts), the program deployed from
+# programs/lez-msig/artifacts/msig.bin, then: the program alone through its key-free operations
+# (live_public), the private posture (live_private), and the room's flow (lez_msig_live_e2e).
+# Real-proving runs are too slow for a hosted runner; they are BENCHMARKS.md's.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'programs/lez-msig/**'
+      - 'infra/lez/**'
+      - 'module/src/drivers/lez_msig.nim'
+      - 'module/src/lez/msig.nim'
+      - 'module/src/settlement/**'
+      - 'module/src/wallet/lez_msig_*.nim'
+      - 'module/src/coordination/msig_*.nim'
+      - 'module/tests/lez_msig_live_e2e.nim'
+      - '.github/workflows/lez-e2e.yml'
+  pull_request:
+    paths:
+      - 'programs/lez-msig/**'
+      - 'infra/lez/**'
+      - 'module/src/drivers/lez_msig.nim'
+      - 'module/src/lez/msig.nim'
+      - 'module/src/settlement/**'
+      - 'module/src/wallet/lez_msig_*.nim'
+      - 'module/src/coordination/msig_*.nim'
+      - 'module/tests/lez_msig_live_e2e.nim'
+      - '.github/workflows/lez-e2e.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lez-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lez-msig:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Free disk (LEZ, risc0 and the Nim closure need ~25 GB)
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+      - uses: logos-co/setup-nix-cache-action@781f072122f4df6af0e33a7d355ebd20283e019e # v1.2.0
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.cache/muster/lez-v0.3.0
+            ~/.cache/muster/risc0
+          key: lez-zone-v0.3.0-${{ hashFiles('infra/lez/localnet.sh') }}
+          restore-keys: lez-zone-v0.3.0-
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            programs/lez-msig/target
+          key: lez-msig-host-${{ hashFiles('programs/lez-msig/Cargo.lock') }}
+          restore-keys: lez-msig-host-
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/muster/nimpkgs
+          key: nimpkgs-${{ hashFiles('module/metadata.json') }}
+          restore-keys: nimpkgs-
+      - name: risc0's recursion circuit (its S3 bucket answers 403 since 2026-11-23, exo-ba5)
+        # risc0-circuit-recursion's build.rs downloads this unless RECURSION_SRC_PATH names it.
+        # The Logos nix cache holds it (the prover flakes' fixed-output fetch); else the copy on
+        # muster-v0.4.0. The hash is the file's name and its sha256, checked either way.
+        run: |
+          sum=744b999f0a35b3c86753311c7efb2a0054be21727095cf105af6ee7d3f4d8849
+          zkr=/nix/store/2dd045zdaad44awdpscjw5fdw97bvpcb-$sum.zip
+          if ! nix-store --realise "$zkr" >/dev/null; then
+            zkr=$RUNNER_TEMP/$sum.zip
+            curl -fsSL -o "$zkr" "https://github.com/corpetty/muster/releases/download/muster-v0.4.0/$sum.zip"
+          fi
+          echo "$sum  $zkr" | sha256sum -c
+          echo "RECURSION_SRC_PATH=$zkr" >> "$GITHUB_ENV"
+      - name: r0vm 3.0.5 (genesis runs in risc0's executor)
+        run: |
+          mkdir -p ~/.cache/muster/risc0
+          test -x ~/.cache/muster/risc0/bin/r0vm \
+            || cargo install risc0-r0vm --version 3.0.5 --locked --root ~/.cache/muster/risc0
+      - name: A local LEZ v0.3.0 zone, the program deployed
+        run: |
+          infra/lez/localnet.sh
+          infra/lez/localnet.sh deploy programs/lez-msig/artifacts/msig.bin | tee "$RUNNER_TEMP/deploy.txt"
+          prog=$(grep -o 'hex [0-9a-f]\{64\}' "$RUNNER_TEMP/deploy.txt" | cut -d' ' -f2)
+          test -n "$prog"
+          echo "PROGRAM=$prog" >> "$GITHUB_ENV"
+      - name: The program alone, through its key-free operations (live_public)
+        if: hashFiles('programs/lez-msig/host/tests/live_public.rs') != ''
+        working-directory: programs/lez-msig
+        env:
+          MSIG_LIVE_RPC: http://127.0.0.1:3040
+        run: MSIG_LIVE_PROGRAM=$PROGRAM cargo test -p msig_host --locked --test live_public -- --nocapture
+      - name: The private posture, dev-mode receipts (live_private)
+        working-directory: programs/lez-msig
+        env:
+          MSIG_LIVE_RPC: http://127.0.0.1:3040
+          RISC0_DEV_MODE: "1"
+        run: MSIG_LIVE_PROGRAM=$PROGRAM cargo test -p msig_host --locked --test live_private -- --nocapture
+      - name: From a muster room (lez_msig_live_e2e)
+        env:
+          OUT: ${{ runner.temp }}/e2e
+        run: MUSTER_LEZ_MSIG_PROGRAM=$PROGRAM module/tests/run-suite.sh e2e lez_msig_live
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: lez-e2e-logs
+          path: |
+            ${{ runner.temp }}/e2e
+            ~/.cache/muster/lez-v0.3.0/.muster-run/sequencer.log
+          if-no-files-found: ignore

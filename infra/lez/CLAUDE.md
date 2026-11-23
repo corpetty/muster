@@ -34,6 +34,13 @@ On v0.3 a transaction whose program refuses it is still included, pays its fee a
 its signers' nonces; the RPC reports no outcome. Judge a step by the state it changes,
 never by inclusion (`docs/labbook/lez-v03-migration.md` trap 8).
 
+`MUSTER_LEZ_VERSION=v0.4.0-rc3` runs the 0.4 line (transactional actors; lez-msig's port,
+roadmap M3, `programs/lez-msig/lez04`). Its sequencer is `setup` into a home from LEZ's
+`networks/local.json`, then `start`ed; the funder is LEZ's published local test key, which that
+genesis funds, imported into a CLI wallet whose password comes from `LEE_WALLET_PASSWORD`.
+Two v0.4 differences the scripts carry: a public account no one has used yet is admitted only
+by its key (`funder.sh fund <id> <amount> <public key hex>`), and deploys are `--immutable`.
+
 The v0.2.4 line is the chain for `module/tests/lez_multisig_live_e2e.nim` (exo-3c9) and the
 LEZ FROST e2e tests, until they move to v0.3 (exo-b87, exo-9ed). The multisig test deploys
 the program when `MUSTER_LEZ_MULTISIG_BIN` names the guest binary, built from

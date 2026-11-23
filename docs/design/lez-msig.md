@@ -268,9 +268,44 @@ The coordination room is muster's room. Each multisig is created *from* a room.
    check is the only one that counts.
 4. **Execute / queue / cancel.** Any member with the keys settles. The card shows the queue's ETA
    and the expiry.
-5. **Reconcile.** On every executed config change, the room's membership follows the program's.
-   A removed member is evicted and the room re-keys forward. An added member is admitted (after
-   they disclose a key).
+5. **Reconcile (built, exo-0d3.13; `coordination/msig_members.nim`).** On every executed config
+   change, the room follows the program:
+   - **The room's copy of the config.** The disclosed config, then each config proposal the room
+     saw reach final, applied as the program applies it (`applyChanges`, the core's
+     `apply_changes`), one epoch each. So an added member's approval counts in the room, and a
+     removed member's stops counting, with no re-disclosure.
+     - A change applies when its proposal names the epoch the fold has reached, or an earlier
+       one no older than the disclosure (a queued change executes after its epoch).
+     - A change made outside the room leaves the room's copy behind until the account is
+       disclosed again.
+     - Settlement re-reads the chain either way.
+   - **Who reads the room.** A removed member who is in no other lez-msig of the room is
+     evicted, and the room re-keys forward (F-16).
+     - One client does it, so the epoch never forks: the removal's proposer's, or, when someone
+       removed themselves, the lowest remaining member's.
+   - **Adding a member.** A member added later must already be in the room and have shared an
+     account (exo-1f9) for the add to name. Their approval key is that account.
+   - **Private multisigs.** The add's proposer seals the group secret and the newest note to the
+     added member. Notes go to the members now, and a removed member's notes stop counting.
+   - **Queued actions.** One proposed by a member since removed survives (the R.2 cutoff is the
+     queue). The queue flags it (`proposerRemoved`) beside its cancel.
+
+**Spending limits from the room (built, exo-0d3.12).** A limit is added like any config change:
+through the quorum and the time lock. A spend under it is a room intent of its own kind,
+`muster.effect.lez-msig-spend.v1`:
+- **What is signed.** The effect is the spend's exact bytes. Each contribution is a BIP-340
+  signature over `spend_msg` by one of the limit's signers, and only they count.
+- **The threshold** is the limit's, not the quorum's.
+- **Settlement** reads the state, then sends one `Spend` for the current period, with no Queue
+  even under a time lock. It refuses before sending:
+  - a spend over what the period has left;
+  - a stale epoch;
+  - a spend within two minutes of the period's end (it would land outside its window).
+- **Nonces.** Spends and proposals share the nonce window.
+- **The card** reads a spend in words from its bytes, naming the limit and saying no quorum is
+  asked.
+- **Tested** against the real program in `lez_msig_live_e2e` §8: a limit added, one signer
+  spending alone, and an over-limit spend refused.
 
 **Approval keys from accounts members shared (built, exo-1f9).** By default each member's
 client derives a fresh approval key for each multisig. A member may instead share an account
@@ -307,9 +342,18 @@ when a private settlement fails, and a member can start it ("Read it from the ch
 A payment's credit to a public payee is a deferred public effect, so it can land a block after
 the multisig's note. Muster judges the multisig by its note and never by the payee's balance.
 
-What is not built:
-- **Real proving from a room.** The room flow has run in dev mode only
-  (`module/tests/lez_msig_private_e2e.nim`). Real proving is measured in §10.
+**Real proving from a room (run 2026-11-19, exo-0d3.15).** `module/tests/lez_msig_private_e2e.nim`
+ran all nine sections against a local zone started without dev mode
+(`MUSTER_LEZ_REAL_PROOFS=1 infra/lez/localnet.sh`), which verifies real receipts. Every private
+transaction was really proved on a 64-core machine, and the run took 765 s:
+- create;
+- a deposit;
+- a 2-of-3 payment;
+- a refusal while proving;
+- a note recovered from the chain;
+- a payment from that note.
+
+The public testnet run waits on the testnet funder.
 
 Every view of the room is the fold over its signed log.
 
@@ -347,6 +391,13 @@ The `ConversationCrypto` seam is where a chat-module binding goes once chat ship
 | D10 | counterfeit state | trust the state row; re-derive `A` from the placement in the plan | re-derive, refusing any other row (§2) |
 | D11 | removal | revoke (impossible, there is no key revocation); migrate | migrate, with the GMS's limits documented (§7) |
 | D12 | spending limits | any asset; native only | native first; a token limit is a `Call` whose decoded amount the limit would have to trust, which waits on the registry (U.6) |
+| D13 | the LEZ 0.4 port (roadmap M3) | port in place; a second program beside the first | a second adapter in its own workspace (`programs/lez-msig/lez04`) over the SAME `msig_core`: v0.3 and v0.4 cannot share a dependency graph, and v0.3 is what runs today. The new image id gives a new program id and new private addresses, so v0.3 multisigs move by the migrate path (D11), never in place |
+| D14 | who may call the multisig on 0.4 | any sender; root calls only | root calls only (`from` is None): v0.4 lets another program, or a cross-zone message, send to `(A, P)`. The approvals would still bind, but nothing needs that path, and refusing it keeps the attack surface v0.3's |
+| D15 | a `Call` on 0.4, where a message goes to one actor | a core change (`to: Row`); an adapter convention | the convention: `rows[0]` is the target, an account of the called program; the transaction declares the other rows. The digest already commits to every row, so members approve the full list, and the core stays as audited |
+| D16 | inherited seed authority on 0.4 | forbid `Call`; allow it and say what it means | allow it and say so: on 0.4 a seed granted to a call's target reaches everything the target calls, so a `Call` hands the vault to that whole call tree. The `targets` allowlist is the guard, and the card must name it. Spending limits never bound a `Call` |
+| D17 | the fee on a private execution (0.4: no longer exempt, paid in the proof by a private account with an authorization key; a PDA cannot) | the executor's own private account; a group fee account from the GMS (`FeeOnly`); the vault through a program-sent credit (unverified, a core change) | **decided 2026-11-20:** a group fee account derived from the GMS (LEE's `derive_regular_shared_account_keys`, id `SHA-256("lez-msig/v1/fee-account" ‖ create_key)`, `msig_host04::fee_derivation_id`), witnessed `FeeOnly`, so no member's account appears and the module still receives no key. Shown on LEE 0.4.0-rc3 state with dev-mode proofs (`lez04/host/tests/v04_private_fee.rs`): it pays a private Create's fee, a nullifier-key witness cannot pay (`FeePayerWithoutAuthorization`), and the PDA cannot pay its own. Its cost: members top it up (`Msig::top_up_fee_tx`: a public account's transfer promoted into the fee account, which pays that transaction's own fee out of the credit, so a group starts with no funds), and anyone holding the GMS (a removed member included) can drain it. D19's rotation moves to a new GMS, hence a new fee account; the rotation should sweep the old one in the same transaction |
+| D18 | the program's identity on a private execution (0.4 discloses it by default) | disclosed; deployed immutable and proved undisclosed; a shadow program | **decided 2026-11-20:** deploy immutable and prove with an undisclosed image claim (`Msig::with_undisclosed`, LEE's `ProgramCatalog::with_undisclosed`), which keeps v0.3's property and lets the public posture exist at the same program. Shown on LEE 0.4.0-rc3 state (`lez04/host/tests/v04_undisclosed.rs`): a default proof names the program; an undisclosed one carries only a commitment-set root, the program's account appears nowhere in the transaction, and the zone accepts it; a claim against a header the zone never saw is refused. The devnet program is already immutable |
+| D19 | removing a member when the group secret cannot be revoked (0.4) | migrate in a separate flow (D11); rotate in the program | **proposed:** rotate in the program, after James Zaki's 0.4 multisig (`jzaki/jz-progs`, `example_progs/multisig`). The approved removal retires the vault and hands its config to a successor at a new PDA under a new group secret, moving the whole balance, in the same transaction. A retired vault refuses everything but a sweep that forwards late deposits. This is a core change, so the tags move to `v2`. It replaces D11's separate migration on 0.4; the zone team is reviewing it (roadmap Q7) |
 
 ## 10. Measured (RFP P.1, P.2)
 

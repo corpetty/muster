@@ -65,6 +65,10 @@ import ../src/drivers/lez_msig         # lez-msig: approvals verified in-program
 import ../src/lez/msig as msigbytes    # its bytes
 import ../src/wallet/lez_msig_chain    # its chain seam
 import ../src/coordination/msig_room   # its creation ceremony, proposing
+import ../src/coordination/msig_members # the room following its member set across config changes (exo-0d3.13)
+import ../src/coordination/msig_chat    # its deliberation in a chat_module group that follows its members (exo-7a5)
+import ../src/transport/chat_groups
+import ../src/transport/chat_groups_lp
 import ../src/coordination/member_accounts   # a member's own accounts, disclosed to the room (exo-1f9)
 import ../src/crypto/account_labels          # …and the keystore labels they live under
 import ../src/wallet/lez_msig_private  # its private posture (exo-efa)
@@ -230,6 +234,7 @@ proc myAddress(): Address                ## forward — this instance's secp acc
 
 proc roomAccounts(): seq[RoomAccount]   ## forward — the room's disclosed accounts, folded from the log
 proc msigTick()                         ## forward — lez-msig ceremonies on the intents tick (exo-0d3)
+proc msigChatTick()                     ## forward — each lez-msig's chat group follows its members (exo-7a5)
 proc msigMyNames(): seq[string]         ## forward — this member's lez-msig approval keys, as contributors
 proc msigLiveOf(a: LezMsigAccount): MsigLive   ## forward — the lez-msig chain seam for an account
 proc msigPrivFor(chain: string, program, createKey: seq[byte]): MsigPrivate   ## forward — a private one's, for this member (exo-efa)
@@ -858,7 +863,9 @@ proc roomAccounts(): seq[RoomAccount] =
   ## (coordination/accounts.nim, exo-a50.1.3). None without a room. (Forward-declared
   ## above driverForKind, which resolves account-bound policies against it.)
   if gSession == nil: return @[]
-  reduceAccounts(gSession.roomEvents())
+  let evs = gSession.roomEvents()
+  # a lez-msig's config follows the config changes the room saw execute (exo-0d3.13)
+  reconcileLezMsig(evs, reduceAccounts(evs))
 
 var gMsgSeq: uint64 = 0     ## per-instance monotonic nonce, disambiguates identical posts
 
@@ -2976,6 +2983,7 @@ proc musterCoordinateIntents(): string =
   lezPump()                            # complete any LEZ step the chain has since included
   frostPump()                          # advance joined FROST ceremonies and round 2
   msigTick()                           # lez-msig ceremonies: join, create, disclose (exo-0d3)
+  msigChatTick()                       # their chat groups follow their members (exo-7a5)
   xmrMsigPump()                        # advance joined Monero multisig setups (ADR-020)
   xmrSpendPump()                       # …and agreed spends from them: sync, build, sign, submit, confirm
   roundsPump()                         # a multi-round room decision's next round, approved once (exo-720)
@@ -3080,7 +3088,10 @@ proc musterCoordinateIntents(): string =
     o["summary"] = %*{"kind": sm.kind, "amount": sm.amount, "unit": sm.unit, "to": sm.to, "text": sm.text}
     if prof.family in [LezMsigFamily, LezMsigPrivateFamily]:
       # the card decodes the proposal from the exact bytes the approvals sign (RFP U.6)
-      try: o["msig"] = msigbytes.proposalJson(proposalOf(effectFromJson(v.effectJson)))
+      try:
+        let eff = effectFromJson(v.effectJson)
+        o["msig"] = (if eff.isSpend: %*{"spend": msigbytes.spendJson(msigSpendOf(eff))}
+                     else: msigbytes.proposalJson(proposalOf(eff)))
       except CatchableError as e: o["msig"] = %*{"error": "does not decode: " & e.msg}
     # A LEZ multisig proposal whose call is the quest program's reads as the quest step it is
     # (exo-267.8): issue, close or withdraw, with the task when the room holds its terms.
@@ -3974,14 +3985,47 @@ proc msigZoneTag(chain: string): seq[byte] =
 proc msigLiveFor(chain: string, program: seq[byte]): MsigLive =
   newMsigLive(newLezRpc(gLezRpc), moduleKeystore(), chain, program, lezMemberLabel(0))
 
-var gMsigProver: MsigProver = nil
-proc msigProver(): MsigProver =
-  ## The lez_msig_module over lp_*; nil while the host has not loaded it (readiness names the
+var gMsigProvers = initTable[string, MsigProver]()   ## prover module name → its lp_* client
+proc msigProver(line: string): MsigProver =
+  ## The prover module for a zone's LEZ line over lp_* (exo-cc7: lez_msig_module for v0.3,
+  ## lez_msig_v04_module for v0.4); nil while the host has not loaded it (readiness names the
   ## package to install, and never calls a module that is not ready).
-  if gMsigProver == nil:
-    try: gMsigProver = newLpMsigProver()
+  let name = proverModuleFor(line)
+  if name notin gMsigProvers:
+    try: gMsigProvers[name] = newLpMsigProver(name)
     except CatchableError: return nil
-  gMsigProver
+  gMsigProvers[name]
+
+var gZoneLines = initTable[string, string]()   ## LEZ RPC url → its line, read once
+proc lezZoneLine(program: seq[byte]): string =
+  ## The configured zone's LEZ line ("v0.3" | "v0.4"), read from how it answers for the program's
+  ## own account; raises when the zone cannot be read.
+  if gLezRpc notin gZoneLines:
+    gZoneLines[gLezRpc] = newMsigLive(newLezRpc(gLezRpc), moduleKeystore(), gLezChain, program, lezMemberLabel(0)).zoneLine()
+  gZoneLines[gLezRpc]
+
+var gZoneLineFailedAt = 0.0   ## when the zone last failed a line read: not retried for 30 s
+proc proverForChain(chain: string): string {.nimcall.} =
+  ## The driver's hook (drivers/lez_msig.nim `lezMsigProverFor`): the prover a private lez-msig on
+  ## `chain` needs, from the configured zone's line; the v0.3 module when that cannot be read.
+  ## Manifests are built often, so a zone that cannot be read is not asked again for 30 s.
+  if chain != gLezChain or gLezMsigProgram.len == 0: return ProverModuleV03
+  if gLezRpc notin gZoneLines and epochTime() - gZoneLineFailedAt < 30: return ProverModuleV03
+  try: proverModuleFor(lezZoneLine(hexToBytes(gLezMsigProgram)))
+  except CatchableError:
+    gZoneLineFailedAt = epochTime()
+    ProverModuleV03
+lezMsigProverFor = proverForChain
+
+proc msigMembersNow(ck: string): seq[string] =
+  ## The room identities of a disclosed lez-msig's members now (exo-0d3.13): who its private
+  ## notes and group secret go to. Empty before it is disclosed: the ceremony's members then.
+  if gSession == nil: return
+  let evs = gSession.roomEvents()
+  for ra in reduceAccounts(evs):
+    if ra.family != LezMsigFamily: continue
+    let (ok, a, _) = lezMsigAccountOf(ra.chain, ra.address, ra.config)
+    if ok and msigbytes.hexOf(a.createKey) == ck.toLowerAscii(): return memberIdsNow(evs, gSession.topic, a)
 
 var gMsigPriv = initTable[string, MsigPrivate]()   ## create key → this member's private seam (its jobs)
 proc msigPrivFor(chain: string, program, createKey: seq[byte]): MsigPrivate =
@@ -3992,10 +4036,16 @@ proc msigPrivFor(chain: string, program, createKey: seq[byte]): MsigPrivate =
   let ks = moduleKeystore()
   let ck = msigbytes.hexOf(createKey)
   if ck notin gMsigPriv:
-    let gms = groupSecretOf(gSession.roomEvents(), ks, gSession.topic, ck)
+    let gms = groupSecretOf(gSession.roomEvents(), ks, gSession.topic, ck, msigMembersNow(ck))
     if gms.isNone: raise newException(WalletError, "you hold no group secret for this private multisig")
-    let p = msigProver()
-    if p == nil: raise newException(WalletError, "lez_msig_module is not loaded: install it to prove a private multisig's transactions")
+    # the prover for this zone's LEZ line: v0.3 and v0.4 are separate modules (exo-cc7)
+    let line = newMsigLive(newLezRpc(gLezRpc), ks, chain, program, lezMemberLabel(0)).zoneLine()
+    let p = msigProver(line)
+    if p == nil: raise newException(WalletError, proverModuleFor(line) & " is not loaded: install it to prove a private multisig's transactions on this zone")
+    let fit = proverFits(p.health(), line)
+    if not fit.ok:
+      raise newException(WalletError, "the loaded " & proverModuleFor(line) & " proves for another LEZ line than this zone's (" & line &
+                         "): install " & fit.want)
     let cer = ceremonyOf(gSession.roomEvents(), gSession.topic, ck)
     if cer.isNone: raise newException(WalletError, "no ceremony in this room for that multisig")
     let c = newMsigPrivate(newLezRpc(gLezRpc), gLezRpc, ks, chain, program, lezMemberLabel(0), p, gms.get, createKey)
@@ -4003,12 +4053,18 @@ proc msigPrivFor(chain: string, program, createKey: seq[byte]): MsigPrivate =
     let cc = cer.get
     # once the chain includes a transaction this member sent, its new note goes to every member
     c.onNote = proc(n: int, note: seq[byte], hash: string) =
-      try: room.publishNote(moduleKeystore(), cc, n, note, hash)
+      try: room.publishNote(moduleKeystore(), cc, n, note, hash, msigMembersNow(cc.createKey), cursor = c.inboundCursor)
+      except CatchableError: discard
+    # on LEZ v0.4 the group fee account's new note goes to every member the same way (D17)
+    c.onFeeNote = proc(n: int, note: seq[byte], hash: string) =
+      try: room.publishNote(moduleKeystore(), cc, n, note, hash, msigMembersNow(cc.createKey), kind = "feenote")
       except CatchableError: discard
     gMsigPriv[ck] = c
   result = gMsigPriv[ck]
-  let ln = latestNote(gSession.roomEvents(), ks, gSession.topic, ck)
-  if ln.found: result.learn(ln.n, ln.note)
+  let ln = latestNote(gSession.roomEvents(), ks, gSession.topic, ck, msigMembersNow(ck))
+  if ln.found: result.learn(ln.n, ln.note, ln.cursor)
+  let fn = latestNote(gSession.roomEvents(), ks, gSession.topic, ck, msigMembersNow(ck), kind = "feenote")
+  if fn.found: result.learnFee(fn.n, fn.note)
 
 proc msigLiveOf(a: LezMsigAccount): MsigLive =
   if a.private: return msigPrivFor(a.chain, a.program, a.createKey)
@@ -4026,14 +4082,12 @@ proc msigMyNames(): seq[string] =
   except CatchableError: discard
 
 proc msigMemberOf(who: string): string =
-  ## The room identity whose ceremony join proved this approval key (lmsig/<ck>/key/<who>,
-  ## author-signed and signed by the key itself); "" when no ceremony in the room binds it.
+  ## The room identity this approval key belongs to: proved by a ceremony join (lmsig/<ck>/key/<who>,
+  ## author-signed and signed by the key itself), or shared by them as an account of their own
+  ## (exo-1f9); "" when nothing in the room binds it.
   if gSession == nil or not who.startsWith(ContributorPrefix): return ""
-  let key = who[ContributorPrefix.len .. ^1].toLowerAscii()
-  for c in ceremonies(gSession.roomEvents(), gSession.topic):
-    for id, k in c.keys:
-      if k == key: return id
-  ""
+  try: keyOwner(gSession.roomEvents(), gSession.topic, hexToBytes(who[ContributorPrefix.len .. ^1]))
+  except CatchableError: ""
 
 var gMsigCreated = initTable[string, tuple[hash: string, at: float]]()   ## create key → the Create this member sent
 var gMsigPumpAt = 0.0
@@ -4060,8 +4114,55 @@ proc msigPrivateTick(c: MsigCeremony, ks: Keystore, me: string) =
   elif c.createKey in gMsigCreated and pc.failure(gMsigCreated[c.createKey].hash).len == 0:
     discard pc.included(gMsigCreated[c.createKey].hash)   # proving or landing; the note follows
   elif c.createKey notin gMsigCreated or epochTime() - gMsigCreated[c.createKey].at > 60.0:
+    # on LEZ v0.4 Create pays its fee from the group's fee account (D17): wait for a member's
+    # top-up (lez_msig_topup) to land rather than send a Create the prover can only refuse
+    if pc.feeNote.len == 0 and pc.zoneLine() == "v0.4": return
     let sent = pc.sendOp(msigbytes.borsh(MsigInstruction(kind: ikCreate, zone: hexToBytes(c.zone), config: configOf(c))))
     if sent.ok: gMsigCreated[c.createKey] = (sent.hash, epochTime())
+
+const ChatPackage = "chat_module"
+var gChat: LpChatGroups = nil
+var gChatAt = 0.0
+var gChatStatus = initTable[string, JsonNode]()   ## create key → the chat group as this client last saw it
+
+proc chatGroupsReady(): ChatGroups =
+  ## The platform's chat_module, when the host reports it running (or cannot say: the standalone
+  ## runner); nil while it is not installed or not ready. Never calls a module that is not ready.
+  let rec = moduleFacts().moduleRecord(ChatPackage)
+  if rec.answered and (not rec.known or rec.state != "ready"): return nil
+  if gChat == nil:
+    let p = presetOf(gDeliveryConfig)
+    gChat = newLpChatGroups(if p.len > 0: p else: "logos.dev")
+  if not gChat.ready(): return nil
+  gChat
+
+proc msigChatTick() =
+  ## Every 10 s: share this session's chat address, then, for each lez-msig of the room this
+  ## member's client stewards, create its chat group or bring its roster to the members now.
+  if gSession == nil or epochTime() - gChatAt < 10.0: return
+  gChatAt = epochTime()
+  let c = chatGroupsReady()
+  if c == nil: return
+  let ks = moduleKeystore()
+  let me = memberId(ks)
+  try:
+    let mine = c.address()
+    discard gSession.shareChatAddress(ks, mine)
+    let evs = gSession.roomEvents()
+    for ra in reduceAccounts(evs):
+      if ra.family != LezMsigFamily: continue
+      let (ok, a, _) = lezMsigAccountOf(ra.chain, ra.address, ra.config)
+      if not ok: continue
+      let convo = chatGroupOf(evs, gSession.topic, a)
+      let roster = (if convo.len > 0: c.members(convo) else: @[])
+      let plan = chatPlan(evs, gSession.topic, a, me, mine, roster)
+      let done = applyChatPlan(gSession, ks, c, a, plan, ra.label)
+      let ck = msigbytes.hexOf(a.createKey)
+      gChatStatus[ck] = %*{"convo": (if done.convo.len > 0: done.convo else: convo), "steward": plan.steward,
+                           "members": roster.mapIt(%*{"address": it.address, "pending": it.pending}),
+                           "missing": plan.missing, "done": done.done, "failed": done.failed}
+      for f in done.failed: echo "[muster] chat group ", ck[0 ..< 8], ": ", f
+  except CatchableError as e: echo "[muster] chat groups: ", e.msg
 
 proc msigTick() =
   ## On the intents tick: join every ceremony that invites this member; for one this member
@@ -4079,8 +4180,31 @@ proc msigTick() =
   for f in gMsigFunds:
     try:
       if f.ck in gMsigPriv and not gMsigPriv[f.ck].included(f.job): still.add f
+      elif f.ck in gMsigPriv and gMsigPriv[f.ck].failure(f.job).len > 0:
+        # a deposit, top-up or recovery the prover or the sequencer refused: say so, it is rare
+        stderr.writeLine("MUSTER lez-msig job " & f.job & " failed: " & gMsigPriv[f.ck].failure(f.job))
     except CatchableError: still.add f
   gMsigFunds = still
+  # a private multisig's member added since creation: the group secret and the newest note,
+  # sealed by the add's proposer (exo-0d3.13)
+  let evs = gSession.roomEvents()
+  for ra in reduceAccounts(evs):
+    if ra.family != LezMsigFamily: continue
+    let (ok, a, _) = lezMsigAccountOf(ra.chain, ra.address, ra.config)
+    if not ok or not a.private: continue
+    let ck = msigbytes.hexOf(a.createKey)
+    try:
+      let due = gmsAddsDue(evs, gSession.topic, a, me)
+      if due.len == 0: continue
+      let now = memberIdsNow(evs, gSession.topic, a)
+      let gms = groupSecretOf(evs, ks, gSession.topic, ck, now)
+      if gms.isNone: continue
+      let ln = latestNote(evs, ks, gSession.topic, ck, now)
+      for who in due:
+        gSession.sealGroupSecretTo(ks, ck, gms.get, who)
+        if ln.found: gSession.sealNoteTo(ks, ck, ln.n, ln.note, ln.hash, who)
+        echo "[muster] sealed private lez-msig ", ck[0 ..< 8], "'s group secret to added member ", who[0 ..< 12], "…"
+    except CatchableError: discard
   for c in ceremonies(gSession.roomEvents(), gSession.topic):
     if c.opener != me or not c.ready: continue
     if disclosed.anyIt(it.contains(c.createKey)): continue
@@ -4145,9 +4269,15 @@ proc musterLezMsigOpen(specJson: string): string =
     members.add (id: id, roles: roles, weight: uint16(if w != nil: w.getInt(1) else: 1))
   let program = hexToBytes(gLezMsigProgram)
   let private = spec{"private"}.getBool(false)
-  if private and msigProver() == nil:
-    return $(%*{"error": "no-prover", "install": "lez_msig_module",
-                "detail": "a private multisig's transactions are proved by the lez_msig_module: install it first"})
+  if private:
+    var line: string
+    try: line = lezZoneLine(program)
+    except CatchableError as e:
+      return $(%*{"error": "refused", "detail": "cannot read the zone's LEZ line: " & e.msg})
+    if msigProver(line) == nil:
+      let name = proverModuleFor(line)
+      return $(%*{"error": "no-prover", "install": name,
+                  "detail": "a private multisig's transactions on this zone (LEZ " & line & ") are proved by " & name & ": install it first"})
   # an account a member disclosed in this room, picked as their approval key (exo-1f9)
   var accounts = initTable[string, string]()
   if spec{"accounts"} != nil and spec{"accounts"}.kind == JObject:
@@ -4281,18 +4411,65 @@ proc msigActionOf(j: JsonNode): MsigAction =
     a
   else: raise newException(ValueError, "unknown action kind " & j{"kind"}.getStr())
 
+proc musterLezMsigSpend(d: LezMsigDriver, j: JsonNode): string =
+  ## {kind: spend, limit, to, amount, expiresInS?}: a spend under a spending limit (exo-0d3.12),
+  ## put to the room signed by this member, who must be one of the limit's signers. No quorum:
+  ## once the limit's threshold of its signers signed, anyone may settle it.
+  var limit: uint32
+  var to: seq[byte]
+  var amount: UInt128
+  var ttlMs = 24'u64 * 3600 * 1000
+  try:
+    limit = uint32(j["limit"].getInt())
+    to = lezIdOf(j["to"].getStr())
+    amount = parse(j["amount"].getStr(), UInt128)
+    if j.hasKey("expiresInS"): ttlMs = uint64(j["expiresInS"].getBiggestInt()) * 1000
+  except CatchableError as e: return $(%*{"error": "bad-action", "detail": e.msg})
+  let l = d.account.config.limitOf(limit)
+  if l.isNone: return $(%*{"error": "bad-action", "detail": "the multisig has no spending limit " & $limit})
+  let ks = moduleKeystore()
+  let own = msigLabel(d.account.createKey)
+  if labelAmong(ks, l.get.signers, @[own]).isNone:
+    return $(%*{"error": "not-a-limit-signer", "detail": "none of your keys signs for limit " & $limit})
+  var st: msigbytes.MsigState
+  try:
+    let r = msigLiveOf(d.account).readMsig(d.account.address)
+    if not r.found: return $(%*{"error": "not-on-chain", "detail": "the multisig is not on chain"})
+    st = r.state
+  except CatchableError as e: return $(%*{"error": "sequencer-unreachable", "detail": e.msg})
+  try:
+    let sp = newMsigSpend(gSession.roomEvents(), d, st, limit, to, amount, uint64(epochTime() * 1000) + ttlMs)
+    let why = d.signRefusal(effectFromJson(lezMsigSpendEffect(sp)))
+    if why.len > 0: return $(%*{"error": "refused", "detail": why})
+    inc gMsgSeq
+    let (id, approval) = liveMsigSpend(gSession, ks, driverFor, gCoordKind, d, sp, int64(epochTime()), gMsgSeq,
+                                       intentLinkContext(""))
+    $(%*{"intentId": id, "nonce": $sp.nonce, "epoch": $sp.epoch, "approval": approval, "spend": msigbytes.spendJson(sp)})
+  except CatchableError as e: $(%*{"error": "refused", "detail": e.msg})
+
 proc musterCoordinateProposeLezMsig(actionJson: string): string =
   ## Propose an action from the room's lez-msig account; proposing is the proposer's approval.
   if gSession == nil: return $(%*{"error": "not-joined"})
   let (ok, d, err) = msigAccountOfPolicy()
   if not ok: return err
+  try:
+    if parseJson(actionJson){"kind"}.getStr() == "spend": return musterLezMsigSpend(d, parseJson(actionJson))
+  except CatchableError as e: return $(%*{"error": "bad-action", "detail": e.msg})
   var action: MsigAction
+  var payee: seq[byte]
   var ttlMs = 7'u64 * 24 * 3600 * 1000
   try:
-    let j = parseJson(actionJson)
+    var j = parseJson(actionJson)
+    # a private payee (LEZ v0.4, exo-ea3): the transfer pays the address its recipient derives,
+    # and the recipient travels in the effect so any member's prover can seal the payment to it
+    if j{"kind"}.getStr() == "transfer" and j{"recipient"}.getStr().len > 0:
+      payee = hexToBytes(j["recipient"].getStr())
+      j["to"] = %msigbytes.hexOf(msigbytes.recipientAddress(msigbytes.decodeRecipient(payee)))
     action = msigActionOf(j)
     if j.hasKey("expiresInS"): ttlMs = uint64(j["expiresInS"].getBiggestInt()) * 1000
   except CatchableError as e: return $(%*{"error": "bad-action", "detail": e.msg})
+  if payee.len > 0 and not d.account.private:
+    return $(%*{"error": "bad-action", "detail": "a private payee needs a private multisig: a public one cannot seal a payment"})
   let ks = moduleKeystore()
   let mine = ks.lezMemberKey(myMsigLabel(ks, d.account))
   let m = d.account.config.memberOf(mine)
@@ -4308,7 +4485,7 @@ proc musterCoordinateProposeLezMsig(actionJson: string): string =
     let p = newMsigProposal(gSession.roomEvents(), ks, d, st, action, uint64(epochTime() * 1000) + ttlMs)
     inc gMsgSeq
     let (id, approval) = liveMsigPropose(gSession, ks, driverFor, gCoordKind, d, p, int64(epochTime()), gMsgSeq,
-                                         intentLinkContext(""))
+                                         intentLinkContext(""), payee)
     $(%*{"intentId": id, "nonce": $p.nonce, "epoch": $p.epoch, "approval": approval,
          "proposal": msigbytes.proposalJson(p)})
   except CatchableError as e: $(%*{"error": "refused", "detail": e.msg})
@@ -4339,11 +4516,20 @@ proc musterLezMsigStateRead(acct: string): string =
     let r = msigLiveOf(la).readMsig(la.address)
     if not r.found: return $(%*{"error": "not-on-chain"})
     let me = moduleKeystore().lezMemberKey(myMsigLabel(moduleKeystore(), la))
+    # a queued action whose proposer was since removed: the current quorum may cancel it (exo-0d3.13)
+    let proposers = queuedProposers(gSession.roomEvents(), la.address)
+    var queue: seq[JsonNode]
+    for q in r.state.queue:
+      let pid = msigbytes.hexOf(q.proposalId)
+      let removed = pid in proposers and r.state.config.memberOf(proposers[pid]).isNone
+      queue.add %*{"nonce": $q.nonce, "proposalId": pid, "etaMs": $q.etaMs, "expiresMs": $q.expiresMs,
+                   "proposerRemoved": removed}
+    let ck = msigbytes.hexOf(la.createKey)
     $(%*{"account": a.id, "private": la.private, "epoch": $r.state.epoch, "nonceBase": $r.state.nonceBase, "balance": $r.balance,
          "config": msigbytes.configJson(r.state.config), "myKey": msigbytes.hexOf(me),
-         "queue": r.state.queue.mapIt(%*{"nonce": $it.nonce, "proposalId": msigbytes.hexOf(it.proposalId),
-                                         "etaMs": $it.etaMs, "expiresMs": $it.expiresMs}),
-         "height": $r.height})
+         "queue": queue, "height": $r.height,
+         # its deliberation's chat group (exo-7a5): null until this client has seen chat_module
+         "chat": gChatStatus.getOrDefault(ck, newJNull())})
   except CatchableError as e: $(%*{"error": "sequencer-unreachable", "detail": e.msg})
 
 proc musterLezMsigFund(account, amount: string): string =
@@ -4373,6 +4559,43 @@ proc musterLezMsigFund(account, amount: string): string =
     if not sent.ok: return $(%*{"error": "refused", "detail": sent.error})
     gMsigFunds.add (ck: msigbytes.hexOf(la.createKey), job: sent.hash, at: epochTime())
     gMsigStateCache.del(acct)
+    $(%*{"job": sent.hash, "amount": $n, "payer": msigbytes.hexOf(pc.payer())})
+  except CatchableError as e: $(%*{"error": "refused", "detail": e.msg})
+
+proc musterLezMsigTopup(account, amount: string): string =
+  ## A top-up of a PRIVATE lez-msig's group fee account (LEZ v0.4, D17, exo-05f) from this
+  ## member's own LEZ account: proved by the lez_msig_module, signed in the keystore, sent; the fee
+  ## account's new note reaches every member once the chain includes it. Before Create nothing is
+  ## disclosed, and on v0.4 Create itself pays a fee, so a ceremony's create key is taken too.
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  var acct = account.strip()
+  if acct.len == 0:
+    let (k, a) = splitPolicy(gCoordKind)
+    if k != "lez-msig": return $(%*{"error": "not-a-lez-msig-policy"})
+    acct = a
+  var chain: string
+  var program, createKey: seq[byte]
+  let (found, a) = findAccount(roomAccounts(), acct)
+  if found and a.family == LezMsigFamily:
+    let (ok, la, detail) = lezMsigAccountOf(a.chain, a.address, a.config)
+    if not ok: return $(%*{"error": "does-not-derive", "detail": detail})
+    if not la.private: return $(%*{"error": "public", "detail": "a public multisig's fees are paid by the member who sends"})
+    (chain, program, createKey) = (la.chain, la.program, la.createKey)
+  else:
+    let c = ceremonyOf(gSession.roomEvents(), gSession.topic, acct.toLowerAscii())
+    if c.isNone: return $(%*{"error": "unknown-account"})
+    if not c.get.private: return $(%*{"error": "public", "detail": "a public multisig's fees are paid by the member who sends"})
+    try: (chain, program, createKey) = (c.get.chain, hexToBytes(c.get.program), hexToBytes(c.get.createKey))
+    except CatchableError as e: return $(%*{"error": "does-not-derive", "detail": e.msg})
+  var n: UInt128
+  try: n = parse(amount.strip(), UInt128)
+  except CatchableError: return $(%*{"error": "bad-amount", "detail": "base units, a whole number"})
+  if n == 0.u128: return $(%*{"error": "bad-amount", "detail": "more than zero"})
+  try:
+    let pc = msigPrivFor(chain, program, createKey)
+    let sent = pc.topUp(n)
+    if not sent.ok: return $(%*{"error": "refused", "detail": sent.error})
+    gMsigFunds.add (ck: msigbytes.hexOf(createKey), job: sent.hash, at: epochTime())
     $(%*{"job": sent.hash, "amount": $n, "payer": msigbytes.hexOf(pc.payer())})
   except CatchableError as e: $(%*{"error": "refused", "detail": e.msg})
 
@@ -4703,7 +4926,9 @@ proc memberChangePump() =
   if gSession == nil: return
   let me = toHex(moduleKeystore().encIdentity().toBytes()).toLowerAscii()
   let holders = gSession.members().mapIt(toHex(it.toBytes()).toLowerAscii())
-  for (who, id) in removalsDue(gSession.roomEvents(), driverFor, gTopic, holders, me):
+  let evs = gSession.roomEvents()
+  # a LEZ multisig's removals (exo-267.6), and a lez-msig's (exo-0d3.13)
+  for (who, id) in removalsDue(evs, driverFor, gTopic, holders, me) & msigRemovalsDue(evs, gTopic, holders, me):
     for m in gSession.members():
       if toHex(m.toBytes()).toLowerAscii() == who:
         gSession.expel(m)
@@ -5361,8 +5586,10 @@ proc musterLezMemberAccount(index: string): string =
   ## One of this instance's LEZ member accounts; empty index = the first still fresh.
   let ks = moduleKeystore()
   proc entry(i: int, fresh: JsonNode): JsonNode =
-    let id = publicAccountId(ks.lezMemberKey(lezMemberLabel(i)))
-    %*{"index": i, "account": lezHx(id), "base58": accountIdToBase58(id), "fresh": fresh}
+    let key = ks.lezMemberKey(lezMemberLabel(i))
+    let id = publicAccountId(key)
+    # the public key too: LEZ v0.4 admits a fresh account only by it, so its first funder needs it
+    %*{"index": i, "account": lezHx(id), "base58": accountIdToBase58(id), "key": lezHx(key), "fresh": fresh}
   proc isFresh(rpc: LezRpc, i: int): bool =
     let a = rpc.getAccount(publicAccountId(ks.lezMemberKey(lezMemberLabel(i))))
     a.owner.len == 0 and a.data.len == 0 and a.nonce.isZero

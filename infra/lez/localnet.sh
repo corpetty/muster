@@ -11,7 +11,10 @@
 #   infra/lez/localnet.sh status            the chain's height, the funder and its balance
 #   infra/lez/localnet.sh stop              stop it
 #
-# A FRESH chain each start (the database is wiped). 15s blocks, RISC0_DEV_MODE=1.
+# A FRESH chain each start (the database is wiped). 15s blocks, RISC0_DEV_MODE=1, so the zone
+# accepts dev-mode receipts only. MUSTER_LEZ_REAL_PROOFS=1 starts it without dev mode: it then
+# verifies real receipts, and every private transaction sent to it must be really proved
+# (minutes each; RFP-005 P.1, exo-0d3.15).
 #
 # Funding on v0.3. LEZ v0.3.0 has no faucet: native LEZ reaches an account at genesis,
 # over the bridge, or by a transfer from an account that holds some. So this script keeps
@@ -19,6 +22,11 @@
 # account the genesis it writes funds. `fund` sends from it, exactly as a person holding
 # native LEZ would; muster's wallet never sees the funder's keys. <id> is a public account
 # id, hex (as lez_core prints it) or base58.
+#
+# MUSTER_LEZ_VERSION=v0.4.0-rc3 runs the 0.4 line (transactional actors, roadmap M3): its
+# sequencer is set up once into a home (`setup`, LEZ's networks/local.json) and then started
+# (`start`), and the funder is LEZ's own published local test key, which that genesis funds; the
+# funder's wallet takes its password from LEE_WALLET_PASSWORD. Deploys are --immutable.
 #
 # MUSTER_LEZ_VERSION=v0.2.4 runs the old line, for the LEZ multisig and FROST e2e tests
 # until they move to v0.3 (exo-b87, exo-9ed): it starts from LEZ's debug config, and
@@ -65,7 +73,12 @@ try: print(json.dumps(json.load(sys.stdin).get("result")))
 except Exception: print("null")'
 }
 running() { [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; }
-funder_wallet() { LEE_WALLET_HOME_DIR="$FUNDER" "$WALLET" "$@"; }
+funder_wallet() { LEE_WALLET_HOME_DIR="$FUNDER" LEE_WALLET_PASSWORD="${MUSTER_LEZ_FUNDER_PASSWORD:-muster-funder}" "$WALLET" "$@"; }
+is04() { case "$VERSION" in v0.4*) return 0 ;; *) return 1 ;; esac; }
+# v0.4: the local Bedrock's funding key (LEZ's Justfile), and LEZ's published local test key,
+# which networks/local.json's genesis funds: the funder
+BEDROCK_FUNDING_KEY=2e03b2eff5a45478e7e79668d2a146cf2c5c7925bce927f2b1c67f2ab4fc0d26
+FUNDER04_KEY=7f273098f25b71e6c005a9519f2678da8d1c7f01f6a27778e2d9948abdf901fb
 b58() {  # a public account id, hex or base58 → base58 (32 bytes, leading zeros as '1')
   python3 - "$1" <<'EOF'
 import sys
@@ -138,7 +151,12 @@ build() {
 launch() {
   # the subshell BECOMES the sequencer (exec), its output in the log: nothing is left
   # holding a caller's pipe open (a `$(…)` around this would otherwise never return)
-  ( cd "$2" && RISC0_DEV_MODE=1 RUST_LOG=info exec nohup "$SEQ" "$1" ) > "$3" 2>&1 < /dev/null &
+  local args=("$1"); is04 && args=(start "$1")      # v0.4: <config> is the set-up home
+  if [ "${MUSTER_LEZ_REAL_PROOFS:-0}" = 1 ]; then
+    ( cd "$2" && unset RISC0_DEV_MODE && RUST_LOG=info exec nohup "$SEQ" "${args[@]}" ) > "$3" 2>&1 < /dev/null &
+  else
+    ( cd "$2" && RISC0_DEV_MODE=1 RUST_LOG=info exec nohup "$SEQ" "${args[@]}" ) > "$3" 2>&1 < /dev/null &
+  fi
   echo $! > "$4"
   for _ in $(seq 1 90); do
     [ "$(rpc getLastBlockId)" != null ] && return 0     # the RPC answers: up (any version's log)
@@ -187,10 +205,35 @@ EOF
   echo "$id"
 }
 
+funder04() {  # v0.4's funder: LEZ's local test key in a wallet of its CLI, once the zone answers
+  if [ ! -s "$FUNDER/funder.id" ]; then
+    rm -rf "$FUNDER"; mkdir -p "$FUNDER"; chmod 700 "$FUNDER"
+    cp "$DIR/lez/wallet/configs/debug/wallet_config.json" "$FUNDER/"
+    local id
+    id=$(funder_wallet account import public --private-key "$FUNDER04_KEY" < /dev/null 2>&1 |
+         grep -oE 'Public/[1-9A-HJ-NP-Za-km-z]{32,44}' | head -1 | sed 's|Public/||')
+    [ -n "$id" ] || { echo "could not import the funder's key" >&2; exit 1; }
+    echo "$id" > "$FUNDER/funder.id"
+  fi
+}
+
+start04() {
+  rm -rf "$RUN"; mkdir -p "$RUN"
+  "$SEQ" setup "$RUN/home" --config "$DIR/lez/sequencer/service/networks/local.json" \
+    --funding-public-key "$BEDROCK_FUNDING_KEY" --create-channel > "$RUN/setup.log" 2>&1 \
+    || { echo "setup failed; see $RUN/setup.log" >&2; exit 1; }
+  launch "$RUN/home" "$RUN" "$LOG" "$PIDFILE" || { echo "the sequencer did not start; see $LOG" >&2; exit 1; }
+  funder04
+  echo "LEZ $VERSION sequencer on $URL (log: $LOG)"
+  echo "funder: Public/$(cat "$FUNDER/funder.id"), LEZ's local test key — '$0 fund <id> <amount>'"
+  exit 0
+}
+
 start() {
   r0vm_on_path
   build
   if running; then echo "already running (pid $(cat "$PIDFILE")); '$0 stop' first for a fresh chain"; exit 0; fi
+  is04 && start04
   local cfg home
   if [ "$VERSION" = v0.2.4 ]; then
     home="$RUN"; rm -rf "$RUN/rocksdb"; cfg=configs/debug/sequencer_config.json
@@ -216,7 +259,7 @@ case "${1:-up}" in
   status)
     running || { echo "not running"; exit 1; }
     echo "LEZ $VERSION on $URL, block $(rpc getLastBlockId)"
-    [ -s "$FUNDER/funder.id" ] && echo "funder Public/$(cat "$FUNDER/funder.id"): $(funder_wallet account get --account-id "Public/$(cat "$FUNDER/funder.id")" 2>/dev/null | grep -m1 Balance)" ;;
+    [ -s "$FUNDER/funder.id" ] && echo "funder Public/$(cat "$FUNDER/funder.id"): $(funder_wallet account get --account-id "Public/$(cat "$FUNDER/funder.id")" 2>/dev/null < /dev/null | grep -m1 Balance)" ;;
   fund|deploy)
     [ "$VERSION" = v0.2.4 ] && { echo "v0.2.4 has no funder here (it has the pinata faucet, and deploys by transaction)" >&2; exit 2; }
     running || { echo "not running: '$0' first" >&2; exit 1; }

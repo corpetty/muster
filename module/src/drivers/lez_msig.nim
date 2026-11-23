@@ -17,12 +17,16 @@
 ##   * a CONTRIBUTION is {signer, sig}: a BIP-340 signature by a member's approval key over
 ##     the approve message. It counts only for a member holding APPROVE, or for the proposer;
 ##   * the contributor is named "msig:<x-only key>", and attests with that same key.
+##   * a SPEND under a spending limit (`muster.effect.lez-msig-spend.v1`, exo-0d3.12) is the
+##     one bypass of the quorum: its effect is the spend's exact bytes, only its limit's signers
+##     count, and its threshold is the limit's.
 ## Settlement (settlement.nim, LezMsigSettlement) re-reads the state, chooses Execute, Queue
 ## or ExecuteQueued, and sends one public transaction from the settling member's own funded
 ## account. The private posture (a group-owned private PDA) is proved, not built here: it is
 ## its own family, and arrives with the prover seam.
 
 import std/[json, options, strutils, sequtils, algorithm]
+import stint
 import ../dcbor/dcbor
 import ../intents/materialization
 import ../crypto/keystore
@@ -37,7 +41,9 @@ const
   LezMsigFamily* = "lez.msig"
   LezMsigPrivateFamily* = "lez.msig-private"   ## the private posture: a group-owned private PDA (exo-efa)
   LezMsigSchema* = "muster.effect.lez-msig.v1"
+  LezMsigSpendSchema* = "muster.effect.lez-msig-spend.v1"   ## a spend under a limit (exo-0d3.12)
   ApproveDomain = "lez.msig.approve.v1"
+  SpendDomain = "lez.msig.spend.v1"
   ContributorPrefix* = "msig:"
 
 type
@@ -55,6 +61,7 @@ type
   LezMsigDriver* = ref object of Driver
     account*: LezMsigAccount
     pending: seq[byte]        ## the approve message contributions currently verify against
+    pendingSigners: seq[Key32] ## for a spend: the limit's signers, the only keys that count
 
 proc msigLabel*(createKey: openArray[byte]): string =
   ## The keystore label of THIS member's approval key for one multisig: one key per
@@ -115,10 +122,18 @@ proc lezMsigAccountOf*(chain, address, config: string): tuple[ok: bool, account:
 
 proc newLezMsigDriver*(a: LezMsigAccount): LezMsigDriver = LezMsigDriver(account: a)
 
+var lezMsigProverFor*: proc(chain: string): string {.nimcall.} = proc(chain: string): string = "lez_msig_module"
+  ## The prover module a private lez-msig on `chain` needs (exo-cc7): `lez_msig_module` on a LEZ
+  ## v0.3 zone, `lez_msig_v04_module` on a v0.4 one. The driver is built from the room and
+  ## cannot read a zone's line, so the host sets this once it can (muster_module); unset, it
+  ## names the v0.3 module.
+
 # ── the effect ────────────────────────────────────────────────────────────────
-proc lezMsigEffect*(p: MsigProposal): string =
-  ## The room's effect for a proposal: its exact bytes.
-  $(%*{"effect": "lez-msig", "proposal": hexOf(borsh(p))})
+proc lezMsigEffect*(p: MsigProposal, payee: seq[byte] = @[]): string =
+  ## The room's effect for a proposal: its exact bytes, and for a payment to a private payee on
+  ## LEZ v0.4 its recipient (lee_core::Recipient borsh, exo-ea3).
+  if payee.len > 0: $(%*{"effect": "lez-msig", "proposal": hexOf(borsh(p)), "payee": hexOf(payee)})
+  else: $(%*{"effect": "lez-msig", "proposal": hexOf(borsh(p))})
 
 proc fieldOf(e: Effect, name: string): CborValue =
   for (k, v) in e.fields:
@@ -131,6 +146,53 @@ proc proposalOf*(e: Effect): MsigProposal =
   let b = e.fieldOf("proposal")
   if b.kind != ckBytes: raise newException(ValueError, "the effect carries no proposal")
   decodeProposal(b.b)
+
+proc payeeOf*(e: Effect): seq[byte] =
+  ## A private payee's recipient the effect carries; empty when it pays a public account.
+  let b = e.fieldOf("payee")
+  if b.kind == ckBytes: b.b else: @[]
+
+proc payeeRefusal(d: LezMsigDriver, e: Effect, p: MsigProposal): string =
+  ## A private payee must be a recipient that derives the very address the proposal pays (the
+  ## approvals sign only the address), and only a private multisig can seal a payment to it.
+  let b = payeeOf(e)
+  if b.len == 0: return ""
+  if not d.account.private: return "a private payee needs a private multisig: a public one cannot seal a payment"
+  if p.action.kind != akTransfer: return "a private payee is for a transfer"
+  try:
+    if recipientAddress(decodeRecipient(b)) != p.action.to:
+      return "the private payee's recipient does not derive the address the proposal pays"
+  except CatchableError as err: return "the private payee is not a recipient: " & err.msg
+
+# ── a spend under a limit (exo-0d3.12, design §5): no quorum, no time lock ──────
+## A limit lets k of its own signers move up to its amount per period. In the room a spend is
+## an intent like a proposal, but its effect is the spend's exact bytes, its contributions are
+## BIP-340 signatures over the spend message by the limit's signers, and its threshold is the
+## limit's. It is the one bypass of the quorum, and the profile declares it (`bypasses`).
+proc lezMsigSpendEffect*(s: MsigSpend): string =
+  $(%*{"effect": "lez-msig-spend", "spend": hexOf(borsh(s))})
+
+proc isSpend*(e: Effect): bool = e.schemaId == LezMsigSpendSchema
+
+proc msigSpendOf*(e: Effect): MsigSpend =
+  ## The spend an effect carries; raises on anything but exact, canonical bytes.
+  if e.schemaId != LezMsigSpendSchema: raise newException(ValueError, "not a lez-msig spend")
+  let b = e.fieldOf("spend")
+  if b.kind != ckBytes: raise newException(ValueError, "the effect carries no spend")
+  decodeSpend(b.b)
+
+proc limitOf*(c: MsigConfig, id: uint32): Option[MsigLimit] =
+  for l in c.limits:
+    if l.id == id: return some(l)
+
+proc spendRefusalOf(d: LezMsigDriver, s: MsigSpend): string =
+  if s.multisig != d.account.address: return "the spend names another multisig (" & hexOf(s.multisig) & ")"
+  if s.zone != d.account.zone: return "the spend names another zone"
+  let l = d.account.config.limitOf(s.limit)
+  if l.isNone: return "the multisig has no spending limit " & $s.limit
+  if s.amount > l.get.amount: return "the spend is over the limit's " & $l.get.amount & " per period"
+  if s.amount == 0.u128: return "the spend moves nothing"
+  ""
 
 proc refusalOf(d: LezMsigDriver, p: MsigProposal): string =
   if p.multisig != d.account.address: return "the proposal names another multisig (" & hexOf(p.multisig) & ")"
@@ -152,7 +214,15 @@ method describe*(d: LezMsigDriver): DriverDescriptor =
   DriverDescriptor(rounds: 1, serializationDomain: ApproveDomain, finality: finExternal, threshold: max(need, 1))
 
 method describeFor*(d: LezMsigDriver, e: Effect): DriverDescriptor =
-  ## A proposer without APPROVE must still sign, and does not count: one more signature.
+  ## A proposer without APPROVE must still sign, and does not count: one more signature. A
+  ## spend needs its limit's threshold of the limit's signers.
+  if e.isSpend:
+    try:
+      let l = d.account.config.limitOf(msigSpendOf(e).limit)
+      if l.isSome:
+        return DriverDescriptor(rounds: 1, serializationDomain: SpendDomain, finality: finExternal,
+                                threshold: max(int(l.get.threshold), 1))
+    except CatchableError: discard
   result = d.describe()
   try:
     let m = d.account.config.memberOf(proposalOf(e).proposer)
@@ -164,31 +234,60 @@ method environment*(d: LezMsigDriver): string = d.account.chain
 method canonicalize*(d: LezMsigDriver, e: Effect): Materialization =
   ## The bytes an approver commits to: the proposal id, under the domain and the chain. A
   ## proposal that does not decode, or names another multisig, canonicalizes to a sentinel
-  ## no signature matches (signRefusal says why).
+  ## no signature matches (signRefusal says why). A spend commits to its spend message and its
+  ## limit: [spend domain, chain, the message, the limit id].
+  if e.isSpend:
+    var sp: MsigSpend
+    try: sp = msigSpendOf(e)
+    except CatchableError as err:
+      return Materialization(bytes: encode(cbArray(@[cbText(SpendDomain), cbText("invalid: " & err.msg)])))
+    let why = d.spendRefusalOf(sp)
+    if why.len > 0:
+      return Materialization(bytes: encode(cbArray(@[cbText(SpendDomain), cbText("invalid: " & why)])))
+    d.pending = spendMsg(sp)
+    d.pendingSigners = d.account.config.limitOf(sp.limit).get.signers
+    return Materialization(bytes: encode(cbArray(@[cbText(SpendDomain), cbText(d.account.chain), cbBytes(d.pending),
+                                                   cbUint(uint64(sp.limit))])))
+  d.pendingSigners = @[]
   var p: MsigProposal
   try: p = proposalOf(e)
   except CatchableError as err:
     return Materialization(bytes: encode(cbArray(@[cbText(ApproveDomain), cbText("invalid: " & err.msg)])))
-  let why = d.refusalOf(p)
+  var why = d.refusalOf(p)
+  if why.len == 0: why = d.payeeRefusal(e, p)
   if why.len > 0:
     return Materialization(bytes: encode(cbArray(@[cbText(ApproveDomain), cbText("invalid: " & why)])))
   let id = proposalId(p)
   d.pending = approveMsg(id)
   Materialization(bytes: encode(cbArray(@[cbText(ApproveDomain), cbText(d.account.chain), cbBytes(id)])))
 
-proc idIn(m: Materialization): seq[byte] =
+proc signedFor(d: LezMsigDriver, m: Materialization): tuple[msg: seq[byte], signers: seq[Key32]] =
+  ## What a contribution to this materialization must sign, and, for a spend, the only keys
+  ## that may sign it (its limit's signers).
   try:
     let v = decode(m.bytes)
-    if v.kind == ckArray and v.arr.len == 3 and v.arr[2].kind == ckBytes: return v.arr[2].b
+    if v.kind != ckArray or v.arr.len < 3 or v.arr[0].kind != ckText or v.arr[2].kind != ckBytes or
+       v.arr[2].b.len != 32: return
+    if v.arr[0].t == ApproveDomain and v.arr.len == 3: return (approveMsg(v.arr[2].b), @[])
+    if v.arr[0].t == SpendDomain and v.arr.len == 4 and v.arr[3].kind == ckUint:
+      let l = d.account.config.limitOf(uint32(v.arr[3].u))
+      if l.isSome: return (v.arr[2].b, l.get.signers)
   except CatchableError: discard
 
 method expectMaterialization*(d: LezMsigDriver, m: Materialization) =
-  let id = idIn(m)
-  d.pending = (if id.len == 32: approveMsg(id) else: @[])
+  let (msg, signers) = d.signedFor(m)
+  d.pending = msg
+  d.pendingSigners = signers
 
 method signRefusal*(d: LezMsigDriver, e: Effect): string =
-  try: d.refusalOf(proposalOf(e))
-  except CatchableError as err: "not a lez-msig proposal: " & err.msg
+  if e.isSpend:
+    try: return d.spendRefusalOf(msigSpendOf(e))
+    except CatchableError as err: return "not a lez-msig spend: " & err.msg
+  try:
+    let p = proposalOf(e)
+    result = d.refusalOf(p)
+    if result.len == 0: result = d.payeeRefusal(e, p)
+  except CatchableError as err: result = "not a lez-msig proposal: " & err.msg
 
 proc contributionOf*(signer, sig: seq[byte]): seq[byte] =
   encode(cbMap(@[(cbText("signer"), cbBytes(signer)), (cbText("sig"), cbBytes(sig))]))
@@ -204,28 +303,38 @@ proc signedOf*(c: Contribution): Option[MsigSigned] =
     if signer.len == 32 and sig.len == 64: return some(MsigSigned(key: signer, sig: sig))
   except CatchableError: discard
 
-proc verifyAgainst(d: LezMsigDriver, msg: seq[byte], c: Contribution): string =
+proc verifyAgainst(d: LezMsigDriver, msg: seq[byte], c: Contribution, signers: seq[Key32] = @[]): string =
   ## "msig:<key>" if the contribution is a valid approval by a member who holds APPROVE
-  ## (a proposer's own signature is checked in settlement), else "".
+  ## (a proposer's own signature is checked in settlement), or, for a spend, by one of its
+  ## limit's `signers`; else "".
   if msg.len != 32: return ""
   let s = signedOf(c)
   if s.isNone: return ""
-  let m = d.account.config.memberOf(s.get.key)
-  if m.isNone: return ""
+  if signers.len > 0:
+    if s.get.key notin signers: return ""
+  elif d.account.config.memberOf(s.get.key).isNone: return ""
   if not verifySig(s.get.key, msg, s.get.sig): return ""
   ContributorPrefix & hexOf(s.get.key)
 
 method verifyContribution*(d: LezMsigDriver, c: Contribution, round: int): bool =
-  d.verifyAgainst(d.pending, c).len > 0
+  d.verifyAgainst(d.pending, c, d.pendingSigners).len > 0
 
 method identifyContributor*(d: LezMsigDriver, m: Materialization, c: Contribution): string =
-  let id = idIn(m)
-  if id.len != 32: return ""
-  d.verifyAgainst(approveMsg(id), c)
+  let (msg, signers) = d.signedFor(m)
+  if msg.len != 32: return ""
+  d.verifyAgainst(msg, c, signers)
 
 method mayContribute*(d: LezMsigDriver, e: Effect, names: seq[string]): Eligibility =
-  ## A member of this multisig, named by its approval key.
+  ## A member of this multisig, named by its approval key; for a spend, a signer of its limit.
   let mine = names.mapIt(it.toLowerAscii())
+  if e.isSpend:
+    try:
+      let l = d.account.config.limitOf(msigSpendOf(e).limit)
+      if l.isSome:
+        for k in l.get.signers:
+          if ContributorPrefix & hexOf(k) in mine: return elYes
+    except CatchableError: discard
+    return elNo
   for m in d.account.config.members:
     if ContributorPrefix & hexOf(m.key) in mine: return elYes
   elNo
@@ -240,6 +349,19 @@ proc myMsigLabel*(ks: Keystore, a: LezMsigAccount): string =
 method signInApp*(d: LezMsigDriver, e: Effect, ks: Keystore, attestDigest: array[32, byte]): InAppSig =
   ## The member's approval key for THIS multisig signs the approve message, and attests the
   ## room's record (P) with the same key: an approval and its attestation come from one key.
+  ## A spend is signed by the member's key among its limit's signers.
+  if e.isSpend:
+    let sp = msigSpendOf(e)
+    let l = d.account.config.limitOf(sp.limit)
+    if l.isNone: raise newException(ValueError, "the multisig has no spending limit " & $sp.limit)
+    let own = msigLabel(d.account.createKey)
+    let label = labelAmong(ks, l.get.signers, @[own]).get(own)
+    let key = ks.lezMemberKey(label)
+    var msg: array[32, byte]
+    let sm = spendMsg(sp)
+    for i in 0 ..< 32: msg[i] = sm[i]
+    return InAppSig(handled: true, contribution: contributionOf(key, ks.lezMemberSign(label, msg)),
+                    attestation: ks.lezMemberSign(label, attestDigest), keyRef: "")
   let label = myMsigLabel(ks, d.account)
   let key = ks.lezMemberKey(label)
   var msg: array[32, byte]
@@ -285,22 +407,27 @@ method manifest*(d: LezMsigDriver, effect: Effect): ActionManifest =
   ## proposal, every approval and its key, and whoever sends it; the sequencer first.
   var touches = @[touch(d.account.chain, tmWrite), touch(d.account.accountId, tmWrite)]
   try:
-    let p = proposalOf(effect)
-    case p.action.kind
-    of akTransfer: touches.add touch(d.account.chain & ":" & hexOf(p.action.to), tmWrite)
-    of akCall:
-      for r in p.action.rows: touches.add touch(d.account.chain & ":" & hexOf(r.account), tmWrite)
-    else: discard
+    if effect.isSpend:
+      touches.add touch(d.account.chain & ":" & hexOf(msigSpendOf(effect).to), tmWrite)
+    else:
+      let p = proposalOf(effect)
+      case p.action.kind
+      of akTransfer: touches.add touch(d.account.chain & ":" & hexOf(p.action.to), tmWrite)
+      of akCall:
+        for r in p.action.rows: touches.add touch(d.account.chain & ":" & hexOf(r.account), tmWrite)
+      else: discard
   except CatchableError: discard
   if d.account.private:
-    # proved by the lez_msig_module; the chain sees a nullifier, a commitment and a proof, and
+    var prover: string
+    {.cast(gcsafe).}: prover = lezMsigProverFor(d.account.chain)   # set once by the host, read only
+    # proved by the zone line's prover module; the chain sees a nullifier, a commitment and a proof, and
     # only a public payee's credit (its amount and payee) in the clear
-    return ActionManifest(declared: true, agreement: d.describe(),
+    return ActionManifest(declared: true, agreement: d.describeFor(effect),
       requirements: @[req(rqEnvironment, d.account.chain), req(rqInfra, "lez-sequencer-rpc"),
-                      req(rqModule, "lez_msig_module"), req(rqAuthority, "lez-msig-key", rpContributor)],
+                      req(rqModule, prover), req(rqAuthority, "lez-msig-key", rpContributor)],
       discloses: @[row("payee-and-amount", obChainObserver), row("signed-tx", obRpcProvider)],
       touches: touches)
-  ActionManifest(declared: true, agreement: d.describe(),
+  ActionManifest(declared: true, agreement: d.describeFor(effect),
     requirements: @[req(rqEnvironment, d.account.chain), req(rqInfra, "lez-sequencer-rpc"),
                     req(rqAuthority, "lez-msig-key", rpContributor)],
     discloses: @[row("action", obChainObserver), row("approvals", obChainObserver),

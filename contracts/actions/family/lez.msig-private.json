@@ -151,7 +151,7 @@
           "name": "lez_msig_module",
           "party": "instance",
           "class": "infra",
-          "target": "lez_msig_module (LEZ's prover as a Logos module), loaded by the host",
+          "target": "lez_msig_module on a LEZ v0.3 zone, lez_msig_v04_module on a v0.4 one (LEZ's prover as a Logos module, one per line), loaded by the host",
           "field": "",
           "evidence": [
             "module/tests/lez_msig_private_e2e.nim"
@@ -325,7 +325,7 @@
           "name": "lez_msig_module",
           "party": "instance",
           "class": "infra",
-          "target": "lez_msig_module (LEZ's prover as a Logos module), loaded by the host",
+          "target": "lez_msig_module on a LEZ v0.3 zone, lez_msig_v04_module on a v0.4 one (LEZ's prover as a Logos module, one per line), loaded by the host",
           "field": "",
           "evidence": [
             "module/tests/lez_msig_private_e2e.nim"
@@ -346,6 +346,142 @@
       "disclosure": [
         {
           "field": "the depositor's public account and the amount",
+          "when": "act",
+          "evidence": [
+            "module/tests/lez_msig_private_e2e.nim"
+          ],
+          "observer": "chain-observer"
+        }
+      ],
+      "claims": [
+        {
+          "claim": "No key leaves the keystore: the prover gets the payer's public key and the signature, never its secret",
+          "credibility": "imperative"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/lez_msig_private_e2e.nim"
+        },
+        {
+          "kind": "test",
+          "path": "programs/lez-msig/module/tests/module.rs"
+        }
+      ],
+      "unverified": [
+        "Run in dev mode only."
+      ],
+      "try": []
+    },
+    {
+      "id": "lez.msig-private/topup",
+      "name": "Top up the group's fee account (LEZ v0.4)",
+      "area": "family",
+      "family": "lez.msig-private",
+      "kind": "lez-msig",
+      "status": "built",
+      "summary": "On LEZ v0.4 every private transaction pays its fee inside its proof from the group's fee account, which the members' group secret derives (D17). A member moves LEZ from their own public account into it: the prover proves the transfer, the fee account paying this transaction's own fee out of the credit, the member's keystore signs its hash, the prover sends it, and the fee account's new note reaches every member. A group needs one before Create.",
+      "steps": [
+        {
+          "step": "settle",
+          "who": "the member topping up",
+          "does": "lez_msig_topup(account, amount): the lez_msig_v04_module proves the transfer (mode topup, the payer's public key only); the client signs the message hash with the member's own LEZ key (lez-member/0) and the module sends it (send). Once included, the client seals the fee account's new note to every member (lmsig/<ck>/feenote/<n>/<who>). account may be the ceremony's create key, before anything is disclosed.",
+          "signs": "the member's LEZ key signs the privacy-preserving message's hash (BIP-340)",
+          "reveals": [
+            {
+              "field": "the payer's public account and the amount leaving it",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "the fee account's new balance",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "module/tests/lez_msig_private_e2e.nim",
+            "programs/lez-msig/lez04/host/tests/live_exec04.rs"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a deposit signature that does not sign the proved message",
+          "why": "send checks every signature against the message before anything is sent: bad-signature",
+          "evidence": [
+            "programs/lez-msig/lez04/host/src/exec.rs"
+          ]
+        }
+      ],
+      "hosted": [
+        "lez_msig_topup",
+        "lez_msig_state"
+      ],
+      "ui": "Not yet in the UI: called through lez_msig_topup (its hosted path not yet run through a host).",
+      "invariants": [
+        3,
+        8
+      ],
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "lez:<zone>",
+          "party": "instance",
+          "class": "infra",
+          "target": "lez:<zone>",
+          "field": "",
+          "evidence": [
+            "module/tests/lez_msig_private_e2e.nim"
+          ]
+        },
+        {
+          "kind": "infra",
+          "name": "lez-rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "lez-rpc",
+          "field": "",
+          "evidence": [
+            "module/tests/lez_msig_private_e2e.nim"
+          ]
+        },
+        {
+          "kind": "infra",
+          "name": "lez-msig-program",
+          "party": "instance",
+          "class": "infra",
+          "target": "the program's account id on the zone (Settings → lez-msig-program)",
+          "field": "",
+          "evidence": [
+            "module/tests/lez_msig_private_e2e.nim"
+          ]
+        },
+        {
+          "kind": "module",
+          "name": "lez_msig_module",
+          "party": "instance",
+          "class": "infra",
+          "target": "lez_msig_module on a LEZ v0.3 zone, lez_msig_v04_module on a v0.4 one (LEZ's prover as a Logos module, one per line), loaded by the host",
+          "field": "",
+          "evidence": [
+            "module/tests/lez_msig_private_e2e.nim"
+          ]
+        },
+        {
+          "kind": "asset",
+          "name": "native LEZ in the member's own account",
+          "party": "proposer",
+          "class": "asset",
+          "target": "lez:<zone>",
+          "field": "",
+          "evidence": [
+            "module/tests/lez_msig_private_e2e.nim"
+          ]
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "the payer's public account and the amount",
           "when": "act",
           "evidence": [
             "module/tests/lez_msig_private_e2e.nim"
@@ -519,7 +655,7 @@
           "name": "lez_msig_module",
           "party": "instance",
           "class": "infra",
-          "target": "lez_msig_module (LEZ's prover as a Logos module), loaded by the host",
+          "target": "lez_msig_module on a LEZ v0.3 zone, lez_msig_v04_module on a v0.4 one (LEZ's prover as a Logos module, one per line), loaded by the host",
           "field": "",
           "evidence": [
             "module/tests/lez_msig_private_e2e.nim"

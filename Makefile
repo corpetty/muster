@@ -13,6 +13,9 @@
 # path at build time). Tests: module/tests/run-suite.sh (module/tests/README.md).
 
 UI       := ui
+# The private lez-msig's provers in the runner (exo-cc7): lez_msig_module (programs/lez-msig) for
+# a LEZ v0.3 zone and lez_msig_v04_module (programs/lez-msig/lez04) for a v0.4 one, side by side;
+# muster_module calls the one its zone needs.
 RUN_DIR  ?= $(CURDIR)/.run/muster
 
 # cache.nix.logos.co as a substituter (the invoking user is not a trusted nix
@@ -97,11 +100,12 @@ build:
 	@# The relock still runs first to keep ui/flake.lock current for a direct `nix build`, and
 	@# to surface the dirty-tree WARN (a git+file input cannot lock from uncommitted state —
 	@# commit first, or the build uses the last COMMITTED tree).
-	@cd $(UI) && $(CAPPED) nix flake update muster_module lez_msig_module $(CACHE) 2>&1 | grep -q "not writing lock file" \
+	@cd $(UI) && $(CAPPED) nix flake update muster_module lez_msig_module lez_msig_v04_module $(CACHE) 2>&1 | grep -q "not writing lock file" \
 	  && echo "WARN: muster_module NOT relocked (uncommitted changes in the git tree) — the runner builds the last COMMITTED module rev; commit first to pick up module edits" || true
 	cd $(UI) && $(CAPPED) nix build 'path:.#runner' $(CACHE) --no-eval-cache \
 	  --override-input muster_module "git+file://$(CURDIR)?dir=module" \
 	  --override-input lez_msig_module "git+file://$(CURDIR)?dir=programs/lez-msig" \
+	  --override-input lez_msig_v04_module "git+file://$(CURDIR)?dir=programs/lez-msig/lez04" \
 	  --out-link $(CURDIR)/.run/runner \
 	  || $(CAP_KILLED)
 

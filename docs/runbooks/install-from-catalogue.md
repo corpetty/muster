@@ -12,7 +12,7 @@
 
 ## What adding the catalogue trusts
 
-- **It publishes `muster_module` and `muster_ui`, and `lez_msig_module`, and nothing else.** `lez_msig_module` ("LEZ Multisig Prover") proves a private LEZ multisig's transactions; Muster runs without it and names it when a private multisig needs it. It is built for Linux x86-64 only. Basecamp takes the newest version of a package across every catalogue you enable, so a catalogue that listed an official package's name could replace it. Muster's never does; its release script refuses to.
+- **It publishes `muster_module` and `muster_ui`, and `lez_msig_module` and `lez_msig_v04_module`, and nothing else.** The last two ("LEZ Multisig Prover" and "LEZ Multisig Prover (v0.4)") prove a private LEZ multisig's transactions, the first on a LEZ v0.3 zone, the second on a v0.4 one; Muster runs without them and names the one a private multisig on your zone needs. They are built for Linux x86-64 only. Basecamp takes the newest version of a package across every catalogue you enable, so a catalogue that listed an official package's name could replace it. Muster's never does; its release script refuses to.
 - **Nothing is signed.** That is true of the official catalogue too. Basecamp checks each download against the hash the catalogue lists, so you get the file the catalogue names. Nothing proves who built it.
 - **Muster runs inside your Basecamp with no sandbox**, like every Basecamp module. Adding a catalogue means trusting its publisher with that.
 - **Everything else comes from the official Logos catalogue.** Package Manager's install dialog names each package's catalogue: `delivery_module (Logos Official)`, `muster_module (Muster)`.

@@ -5,7 +5,7 @@ A release is one GitHub release, `muster-v<version>`, carrying two ways to run M
 | Asset | For whom | What it is |
 |---|---|---|
 | `Muster-<version>-Basecamp-<tag>-linux-x86_64.AppImage` | someone who wants to download one file and run it | Basecamp's own released AppImage with Muster and the Logos Official modules it needs already installed inside. `chmod +x`, run, click **Muster**. |
-| `muster_module-<version>-linux-amd64.lgx`, `muster_ui-<version>-linux-amd64.lgx`, and `lez_msig_module-<its version>-linux-amd64.lgx`, the private LEZ multisig's prover (optional; since 0.3.3) (or `muster_module-<version>.lgx`, `muster_ui-<version>.lgx`, one per package holding every platform, from `--from-run`) | someone who already runs Basecamp, or `logoscore` | the two portable packages. Basecamp installs them from Muster's catalogue (`catalog/`, [`docs/runbooks/install-from-catalogue.md`](docs/runbooks/install-from-catalogue.md)) and fetches the dependencies from Logos Official; `lgpm install --file` installs them by hand. |
+| `muster_module-<version>-linux-amd64.lgx`, `muster_ui-<version>-linux-amd64.lgx`, `lez_msig_module-<its version>-linux-amd64.lgx` and `lez_msig_v04_module-<its version>-linux-amd64.lgx`, the private LEZ multisig's provers for LEZ v0.3 and v0.4 (optional; since 0.3.3 and 0.4.0) (or `muster_module-<version>.lgx`, `muster_ui-<version>.lgx`, one per package holding every platform, from `--from-run`) | someone who already runs Basecamp, or `logoscore` | the two portable packages. Basecamp installs them from Muster's catalogue (`catalog/`, [`docs/runbooks/install-from-catalogue.md`](docs/runbooks/install-from-catalogue.md)) and fetches the dependencies from Logos Official; `lgpm install --file` installs them by hand. |
 
 Both are built from the same commit, and the AppImage contains exactly the two `.lgx` files the release publishes.
 
@@ -15,7 +15,7 @@ Both are built from the same commit, and the AppImage contains exactly the two `
 2. **Green.** `module/tests/run-suite.sh` and `scripts/ui-parity.sh` (`MUSTER_FLEET=local` needs no fleet; the split test needs foundry on `PATH`, e.g. `nix shell nixpkgs#foundry`).
 3. **The packages and the catalogue.** `scripts/catalog-release.sh`. The release targets this commit, so it must be on GitHub.
    - **Every platform by default** (exo-04f). `muster_module` and `muster_ui` come from the `lgx variants` workflow's build of this commit: `linux-amd64`, `linux-arm64` and `darwin-arm64`, merged into one `.lgx` per package ([`docs/design/platforms.md`](docs/design/platforms.md)). When no run built this commit, the script dispatches one on its branch and waits for it (about 20 minutes). `--from-run <id>` names a run.
-   - **`lez_msig_module`** is built here, for `linux-amd64` only.
+   - **`lez_msig_module` and `lez_msig_v04_module`** are built here, for `linux-amd64` only. Their build needs risc0's recursion circuit (`744b999f…8849.zip`); since 2026-11-23 risc0's bucket answers 403, and the flakes fall back to the copy attached to `muster-v0.4.0` (exo-ba5). Keep that asset on that release.
    - **Output.** Everything goes into `.run/catalog-release/muster-v<version>/`, and the script writes `catalog/index.json` and `catalog/icons/`.
    - **`--here`** builds the two packages on this machine, for its platform only.
 4. **The AppImage, from those same files.**

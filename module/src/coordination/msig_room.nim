@@ -28,6 +28,7 @@ import ../crypto/binding
 import ./intent_events
 import ./live
 import ./member_accounts
+import stint
 
 const BindTag = "muster-msig/v1/bind"
 
@@ -178,8 +179,8 @@ proc joinInvited*(s: CoordinationSession, ks: Keystore): int =
 
 # ── proposing ────────────────────────────────────────────────────────────────
 proc takenNonces*(events: seq[Event], multisig: seq[byte]): seq[uint64] =
-  ## The nonces proposals in this room already use for this multisig: a new proposal takes
-  ## the lowest one neither the chain nor the room has used.
+  ## The nonces proposals and spends in this room already use for this multisig (they share
+  ## one window): a new one takes the lowest that neither the chain nor the room has used.
   for e in events:
     let p = e.key.split('/')
     if p.len == 3 and p[0] == "intent" and p[2] == "propose":
@@ -188,6 +189,9 @@ proc takenNonces*(events: seq[Event], multisig: seq[byte]): seq[uint64] =
         if eff.schemaId == LezMsigSchema:
           let pr = proposalOf(eff)
           if pr.multisig == multisig: result.add pr.nonce
+        elif eff.schemaId == LezMsigSpendSchema:
+          let sp = msigSpendOf(eff)
+          if sp.multisig == multisig: result.add sp.nonce
       except CatchableError: discard
 
 proc newMsigProposal*(events: seq[Event], ks: Keystore, d: LezMsigDriver, st: MsigState,
@@ -200,11 +204,30 @@ proc newMsigProposal*(events: seq[Event], ks: Keystore, d: LezMsigDriver, st: Ms
 
 proc liveMsigPropose*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor, policy: string,
                       d: LezMsigDriver, p: MsigProposal, nowSec: int64, msgSeq: uint64,
-                      bindingCtx: LinkContext): tuple[intentId, approval: string] =
+                      bindingCtx: LinkContext, payee: seq[byte] = @[]): tuple[intentId, approval: string] =
   ## Propose into the room, then approve it in-app: the program refuses an action its
-  ## proposer did not sign, so proposing IS the proposer's approval.
+  ## proposer did not sign, so proposing IS the proposer's approval. `payee` is a private payee's
+  ## recipient (LEZ v0.4, exo-ea3), carried in the effect beside the proposal.
   let ttl = max(60'i64, int64(p.expiresMs div 1000) - nowSec)
-  let id = liveProposeIntent(s, ks, driverFor, policy, lezMsigEffect(p), nowSec, msgSeq,
+  let id = liveProposeIntent(s, ks, driverFor, policy, lezMsigEffect(p, payee), nowSec, msgSeq,
+                             d.account.accountId, ttlSec = ttl)
+  (id, liveContribute(s, ks, driverFor, id, "", "", bindingCtx, uint64(nowSec)))
+
+proc newMsigSpend*(events: seq[Event], d: LezMsigDriver, st: MsigState, limit: uint32, to: seq[byte],
+                   amount: UInt128, expiresMs: uint64): MsigSpend =
+  ## A spend under a limit (exo-0d3.12), at the chain's epoch and the next nonce free on chain
+  ## and in the room.
+  MsigSpend(multisig: d.account.address, zone: st.zone, epoch: st.epoch, limit: limit,
+            nonce: st.nextNonce(takenNonces(events, d.account.address)), to: to, amount: amount,
+            expiresMs: expiresMs)
+
+proc liveMsigSpend*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor, policy: string,
+                    d: LezMsigDriver, sp: MsigSpend, nowSec: int64, msgSeq: uint64,
+                    bindingCtx: LinkContext): tuple[intentId, approval: string] =
+  ## Put a spend to the room, signed at once by this member (a signer of its limit): the
+  ## limit's other signers add theirs on its card, and no quorum is asked.
+  let ttl = max(60'i64, int64(sp.expiresMs div 1000) - nowSec)
+  let id = liveProposeIntent(s, ks, driverFor, policy, lezMsigSpendEffect(sp), nowSec, msgSeq,
                              d.account.accountId, ttlSec = ttl)
   (id, liveContribute(s, ks, driverFor, id, "", "", bindingCtx, uint64(nowSec)))
 
@@ -217,13 +240,18 @@ proc liveMsigPropose*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor
 ##   lmsig/<ck>/gms/<who>        the group secret, sealed to <who>; only the opener's counts
 ##   lmsig/<ck>/note/<n>/<who>   the note after the n-th transaction (0 is Create), sealed to
 ##                               <who>, with the transaction's hash; only a member's counts
+##   lmsig/<ck>/feenote/<n>/<who> on LEZ v0.4, the group fee account's n-th note (D17), sealed
+##                               the same way: every transaction pays its fee from it, and a
+##                               top-up changes it alone, so it is numbered on its own (exo-05f)
 
 proc ceremonyOf*(events: seq[Event], room, createKey: string): Option[MsigCeremony] =
   for c in ceremonies(events, room):
     if c.createKey == createKey.toLowerAscii(): return some(c)
 
-proc groupSecretOf*(events: seq[Event], ks: Keystore, room, createKey: string): Option[seq[byte]] =
-  ## This member's copy of a private multisig's group secret, sealed to them by its opener.
+proc groupSecretOf*(events: seq[Event], ks: Keystore, room, createKey: string,
+                    sealers: seq[string] = @[]): Option[seq[byte]] =
+  ## This member's copy of a private multisig's group secret, sealed to them by its opener, or,
+  ## for a member added later, by one of `sealers` (the members now, exo-0d3.13).
   let c = ceremonyOf(events, room, createKey)
   if c.isNone or not c.get.private: return
   let key = "lmsig/" & createKey.toLowerAscii() & "/gms/" & memberId(ks)
@@ -231,20 +259,38 @@ proc groupSecretOf*(events: seq[Event], ks: Keystore, room, createKey: string): 
     if e.key != key: continue
     try:
       let j = parseJson(e.value)
-      if j{"author"}.getStr().toLowerAscii() != c.get.opener: continue
+      let author = j{"author"}.getStr().toLowerAscii()
+      if author != c.get.opener and author notin sealers: continue
       let g = ks.sealOpen(unhx(j{"sealed"}.getStr()))
       if g.len == 32: return some(g)
     except CatchableError: discard
 
-proc publishNote*(s: CoordinationSession, ks: Keystore, c: MsigCeremony, n: int, note: seq[byte], hash: string) =
-  ## Seal the multisig's new note to every member, after the chain included `hash`.
-  let me = memberId(ks)
-  for m in c.members:
-    s.publishAuthored(ks, Event(key: "lmsig/" & c.createKey & "/note/" & $n & "/" & m, value: $(%*{
-      "author": me, "hash": hash, "sealed": hx(sealTo(encIdentityFromBytes(unhx(m)).x, note))})))
+proc sealGroupSecretTo*(s: CoordinationSession, ks: Keystore, createKey: string, gms: seq[byte], who: string) =
+  ## Seal this member's copy of the group secret to a member added after creation (exo-0d3.13).
+  s.publishAuthored(ks, Event(key: "lmsig/" & createKey.toLowerAscii() & "/gms/" & who.toLowerAscii(), value: $(%*{
+    "author": memberId(ks), "sealed": hx(sealTo(encIdentityFromBytes(unhx(who)).x, gms))})))
 
-proc latestNote*(events: seq[Event], ks: Keystore, room, createKey: string): tuple[found: bool, n: int, note: seq[byte], hash: string] =
-  ## The newest note sealed to this member by a member of the multisig. Only one transaction
+proc sealNoteTo*(s: CoordinationSession, ks: Keystore, createKey: string, n: int, note: seq[byte], hash, who: string,
+                 kind = "note", cursor = "") =
+  var v = %*{"author": memberId(ks), "hash": hash, "sealed": hx(sealTo(encIdentityFromBytes(unhx(who)).x, note))}
+  if cursor.len > 0: v["cursor"] = %cursor
+  s.publishAuthored(ks, Event(key: "lmsig/" & createKey.toLowerAscii() & "/" & kind & "/" & $n & "/" & who.toLowerAscii(),
+                              value: $v))
+
+proc publishNote*(s: CoordinationSession, ks: Keystore, c: MsigCeremony, n: int, note: seq[byte], hash: string,
+                  members: seq[string] = @[], kind = "note", cursor = "") =
+  ## Seal the multisig's new note (`kind` "note"), or its fee account's ("feenote", LEZ v0.4), to
+  ## every member after the chain included `hash`: to `members` (the members now, exo-0d3.13), or
+  ## the ceremony's when none are given. `cursor` (v0.4) is where the next transaction collects
+  ## deposits from outside the group: a position in the zone's public stream, so it rides in clear.
+  for m in (if members.len > 0: members else: c.members):
+    s.sealNoteTo(ks, c.createKey, n, note, hash, m, kind, cursor)
+
+proc latestNote*(events: seq[Event], ks: Keystore, room, createKey: string,
+                 authors: seq[string] = @[], kind = "note"): tuple[found: bool, n: int, note: seq[byte], hash, cursor: string] =
+  ## The newest note (`kind` "note", or the fee account's, "feenote") sealed to this member by a
+  ## member of the multisig: one of `authors` (the members now, exo-0d3.13; a removed member's note
+  ## no longer counts), or, when none are given, one the ceremony invited. Only one transaction
   ## spending a note can land (its nullifier), so each number has one note; the first counts.
   let c = ceremonyOf(events, room, createKey)
   if c.isNone: return
@@ -252,12 +298,13 @@ proc latestNote*(events: seq[Event], ks: Keystore, room, createKey: string): tup
   result.n = -1
   for e in events:
     let p = e.key.split('/')
-    if p.len != 5 or p[0] != "lmsig" or p[1] != c.get.createKey or p[2] != "note" or p[4] != me: continue
+    if p.len != 5 or p[0] != "lmsig" or p[1] != c.get.createKey or p[2] != kind or p[4] != me: continue
     try:
       let n = parseInt(p[3])
       if n <= result.n: continue
       let j = parseJson(e.value)
-      if j{"author"}.getStr().toLowerAscii() notin c.get.members: continue
+      let author = j{"author"}.getStr().toLowerAscii()
+      if author notin (if authors.len > 0: authors else: c.get.members): continue
       let note = ks.sealOpen(unhx(j{"sealed"}.getStr()))
-      result = (true, n, note, j{"hash"}.getStr())
+      result = (true, n, note, j{"hash"}.getStr(), j{"cursor"}.getStr())
     except CatchableError: discard

@@ -24,6 +24,12 @@
 ##      stale note, recovers the newest from the chain with the group's viewing key, and seals it
 ##      into the room; Bob reads it there;
 ##   9. the recovered note is spendable: a further payment settles from it.
+##
+## On LEZ v0.4 (exo-05f; MUSTER_LEZ_VERSION=v0.4.0-rc3, the prover lez04's msig_exec04) every
+## transaction pays its fee inside its proof from the group's fee account (D17): before Create,
+## Alice tops it up from her own public account, and each transaction's new fee note is sealed
+## into the room beside the multisig's. The payee is an account with a key, since v0.4 admits a
+## fresh public account only by its key.
 
 import std/[os, json, strutils, sequtils, times, options, httpclient]
 import stint
@@ -33,6 +39,7 @@ import ../src/drivers/profile
 import ../src/drivers/kinds
 import ../src/drivers/lez_msig
 import ../src/lez/msig
+import ../src/lez/tx as leztx       # publicAccountId
 import ../src/bitcoin/tx                 # toHex / hexToBytes
 import ../src/crypto/keystore
 import ../src/wallet/types
@@ -48,9 +55,11 @@ import ./probes/lez_funding
 let url = (if paramCount() >= 1: paramStr(1) else: "http://127.0.0.1:3040")
 const Chain = "lez:local"
 const PayerLabel = "lez-member/0"
+let v04 = getEnv("MUSTER_LEZ_VERSION").startsWith("v0.4")
 let exe = getEnv("MUSTER_MSIG_EXEC", currentSourcePath.parentDir.parentDir.parentDir /
-                 "programs/lez-msig/target/release/msig_exec")
-doAssert fileExists(exe), "build the prover CLI first: cargo build --release -p msig_host --bin msig_exec (" & exe & ")"
+                 (if v04: "programs/lez-msig/lez04/target/release/msig_exec04" else: "programs/lez-msig/target/release/msig_exec"))
+doAssert fileExists(exe), "build the prover CLI first: cargo build --release -p " &
+  (if v04: "msig_host04 --bin msig_exec04 (in lez04)" else: "msig_host --bin msig_exec") & " (" & exe & ")"
 let programText = getEnv("MUSTER_LEZ_MSIG_PROGRAM")
 doAssert programText.len == 64, "name the deployed program: MUSTER_LEZ_MSIG_PROGRAM"
 let program = hexToBytes(programText)
@@ -96,18 +105,34 @@ proc chainFor(i: int): MsigPrivate =
   result = newMsigPrivate(rpc, url, kss[i], Chain, program, PayerLabel, prover, gms.get, createKey)
   let s = sessions[i]
   let ks = kss[i]
+  let c = result
   result.onNote = proc(n: int, note: seq[byte], hash: string) =
-    s.publishNote(ks, cer, n, note, hash)
+    s.publishNote(ks, cer, n, note, hash, cursor = c.inboundCursor)
+  result.onFeeNote = proc(n: int, note: seq[byte], hash: string) =
+    s.publishNote(ks, cer, n, note, hash, kind = "feenote")
 proc refresh(c: MsigPrivate, i: int) =
   pollAll()
   let ln = latestNote(sessions[i].roomEvents(), kss[i], r.topic, ck)
-  if ln.found: c.learn(ln.n, ln.note)
+  if ln.found: c.learn(ln.n, ln.note, ln.cursor)
+  let fn = latestNote(sessions[i].roomEvents(), kss[i], r.topic, ck, kind = "feenote")
+  if fn.found: c.learnFee(fn.n, fn.note)
 let chains = @[chainFor(0), chainFor(1), chainFor(2)]
 
 # ── 2. create through the prover; the note into the room; disclose ──────────
 let a = chains[0].derive()
 doAssert chains[1].derive() == a, "every member derives the same private PDA"
 doAssert a != multisigPublic(program, createKey), "not the public posture's address"
+fundFrom(url, chains[0].payer(), e2eFund(), kss[0].lezMemberKey(PayerLabel))
+waitFor("Alice's account funded", proc(): bool = rpc.getAccount04(chains[0].payer()).balance > 0.u128)
+if v04:
+  # the group's fee account, topped up from Alice's own account; it pays its own first fee
+  let sent = chains[0].topUp(50_000_000.u128)
+  doAssert sent.ok, sent.error
+  waitFor("the top-up included", proc(): bool = chains[0].included(sent.hash))
+  doAssert chains[0].failure(sent.hash) == "", chains[0].failure(sent.hash)
+  for i in 0 .. 2: chains[i].refresh(i)
+  doAssert chains[2].feeNote.len > 0, "Carol reads the fee account's note from the room"
+  echo "   v0.4: Alice topped up the group's fee account; its note sealed to every member"
 block:
   let sent = chains[0].sendOp(borsh(MsigInstruction(kind: ikCreate, zone: zone, config: config)))
   doAssert sent.ok, sent.error
@@ -117,7 +142,7 @@ for i in 0 .. 2: chains[i].refresh(i)
 for i in 0 .. 2:
   let rd = chains[i].readMsig(a)
   doAssert rd.found and rd.state.config == config and rd.state.epoch == 0, "member " & $i & " reads the note"
-doAssert rpc.getAccount(a).shards.len == 0, "the chain holds nothing in the clear at the PDA"
+doAssert (if v04: rpc.getAccount04(a) else: rpc.getAccount(a)).shards.len == 0, "the chain holds nothing in the clear at the PDA"
 let acct = LezMsigAccount(chain: Chain, program: program, createKey: createKey, zone: zone, address: a,
                           accountId: Chain & ":" & hexOf(a), epoch: 0, config: config, private: true)
 let ra = RoomAccount(family: LezMsigFamily, chain: Chain, address: hexOf(a), label: "private treasury",
@@ -135,8 +160,6 @@ doAssert lezMsigDisclosureCheck(reduceAccounts(r.alice.roomEvents())[0]).status 
 echo "2. created through the prover, the note sealed into the room and read by all three; disclosed, private OK"
 
 # ── 3. a deposit, signed in the keystore ──────────────────────────────────────
-fundFrom(url, chains[0].payer(), e2eFund())
-waitFor("Alice's account funded", proc(): bool = rpc.getAccount(chains[0].payer()).balance > 0.u128)
 block:
   let sent = chains[0].fund(5000.u128)
   doAssert sent.ok, sent.error
@@ -147,15 +170,19 @@ doAssert chains[2].readMsig(a).balance == 5000.u128, "Carol reads the deposit fr
 echo "3. Alice deposited 5000 from her own account, signed in her keystore; every member reads it OK"
 
 # ── 4. propose, approve, settle ───────────────────────────────────────────────
-let recipient = hexToBytes("0d".repeat(32))
+let recipient = (if v04: leztx.publicAccountId(kss[0].lezMemberKey("lez-msig-e2e/recipient")) else: hexToBytes("0d".repeat(32)))
+if v04:
+  fundFrom(url, recipient, "1", kss[0].lezMemberKey("lez-msig-e2e/recipient"))
+  waitFor("the payee exists", proc(): bool = rpc.getAccount04(recipient).balance > 0.u128)
 let before = rpc.getAccount(recipient).balance
 var seqNo = 100'u64
-proc propose(i: int, action: MsigAction): string =
+proc propose(i: int, action: MsigAction, payee: seq[byte] = @[]): string =
   inc seqNo
   chains[i].refresh(i)
   let p = newMsigProposal(sessions[i].roomEvents(), kss[i], drv, chains[i].readMsig(a).state, action,
                           uint64(epochTime() * 1000) + 3_600_000)
-  let (id, approval) = liveMsigPropose(sessions[i], kss[i], roomDriverFor, policy, drv, p, int64(epochTime()), seqNo, bindCtx())
+  let (id, approval) = liveMsigPropose(sessions[i], kss[i], roomDriverFor, policy, drv, p, int64(epochTime()), seqNo, bindCtx(),
+                                       payee)
   doAssert approval.len > 0 and not approval.startsWith("refused"), "the proposer's own approval: " & approval
   pollAll()
   id
@@ -229,11 +256,13 @@ echo "7. one approval of two: nothing reaches the prover (", loneAsm.detail, ") 
 # ── 8. a lost note, recovered from the chain ───────────────────────────────────
 let lost = propose(1, MsigAction(kind: akTransfer, to: recipient, amount: 300.u128))
 approve(0, lost)
-let carolOnNote = chains[2].onNote
-chains[2].onNote = nil                                    # Carol goes away before sealing her note
+let (carolOnNote, carolOnFeeNote) = (chains[2].onNote, chains[2].onFeeNote)
+chains[2].onNote = nil                                    # Carol goes away before sealing her notes
+chains[2].onFeeNote = nil
 let (f8, _) = settleAndWatch(2, lost)
 doAssert f8.status == fsFinal, $f8
 chains[2].onNote = carolOnNote
+chains[2].onFeeNote = carolOnFeeNote
 waitFor("the payee credited " & "1500", proc(): bool = rpc.getAccount(recipient).balance == before + 1500.u128, 60)   # a deferred public effect
 chains[0].refresh(0)
 doAssert chains[0].readMsig(a).balance == 3800.u128, "Alice's room still carries the old note: " & $chains[0].readMsig(a).balance
@@ -254,5 +283,55 @@ let (f9, _) = settleAndWatch(1, after)
 doAssert f9.status == fsFinal, $f9
 waitFor("the payee credited " & "1600", proc(): bool = rpc.getAccount(recipient).balance == before + 1600.u128, 60)   # a deferred public effect
 echo "9. a payment settles from the recovered note OK"
+
+# ── 10. a private payee (LEZ v0.4, exo-ea3) ──────────────────────────────────
+if v04:
+  # the recipient a payee shares (fixed keys, from LEZ's own crates: tests/vectors/lez-msig/v04-recipients.json)
+  let vec = parseJson(readFile(currentSourcePath.parentDir / "vectors" / "lez-msig" / "v04-recipients.json"))
+  let rec = hexToBytes(vec["recipients"][1]["recipient"].getStr())
+  let paidTo = recipientAddress(decodeRecipient(rec))
+  let priv = propose(1, MsigAction(kind: akTransfer, to: paidTo, amount: 1000.u128), rec)
+  doAssert payeeOf(effectFromJson(effectJsonOf(r.alice.roomEvents(), priv))) == rec, "the room carries the recipient"
+  approve(2, priv)
+  let (f10, ref10) = settleAndWatch(2, priv)
+  doAssert f10.status == fsFinal, $f10
+  for i in 0 .. 2: chains[i].refresh(i)
+  doAssert chains[0].readMsig(a).balance == 2400.u128, "the vault paid: " & $chains[0].readMsig(a).balance
+  block:
+    let c = newHttpClient()
+    defer: c.close()
+    c.headers = newHttpHeaders({"Content-Type": "application/json"})
+    let body = c.postContent(url, $(%*{"jsonrpc": "2.0", "id": 1, "method": "getTransaction",
+                                       "params": [chains[2].txHashOf(ref10.id)]})).toLowerAscii()
+    doAssert body.len > 200 and hexOf(paidTo) notin body, "the chain's copy does not name the private payee"
+  echo "10. a private payee: proposed with its recipient, settled sealed to it; the chain's copy names no payee OK"
+
+# ── 11. a deposit from outside the group (LEZ v0.4, exo-05f) ───────────────────
+if v04:
+  # anyone pays the vault's address from a public account (here Alice's own, as any outsider's):
+  # Create bound the vault, so the zone publishes the credit for the group; the next settled
+  # transaction collects it, from the cursor the room carries beside the note
+  let payer = chains[0].payer()
+  let before11 = chains[0].readMsig(a).balance
+  var m = LezMessage4(root: LezActor(account: payer, program: NativeTokenProgram),
+                      message: nativeTransfer04(a, 2500.u128),
+                      actors: @[LezActor(account: payer, program: NativeTokenProgram)],
+                      nonces: @[(account: payer, nonce: rpc.getAccount04(payer).nonce)],
+                      fee: some LezFee(payer: payer, gasLimit: 200_000, tip: 0,
+                                       maxFee: (202_000'u64 * rpc.feeCeiling() * 2).stuint(128)))
+  let h = messageHash(m)
+  let ws = @[LezWitness(signature: kss[0].lezMemberSign(PayerLabel, h), xonly: kss[0].lezMemberKey(PayerLabel))]
+  let sent = rpc.sendTransaction(leeTxPublic(m, ws))
+  waitFor("the outsider's deposit", proc(): bool = rpc.getTransaction(sent).known)
+  let take = propose(0, MsigAction(kind: akTransfer, to: recipient, amount: 100.u128))
+  approve(1, take)
+  let (f11, _) = settleAndWatch(1, take)
+  doAssert f11.status == fsFinal, $f11
+  for i in 0 .. 2: chains[i].refresh(i)
+  doAssert chains[2].readMsig(a).balance == before11 + 2500.u128 - 100.u128,
+    "the deposit collected with the payment: " & $chains[2].readMsig(a).balance
+  doAssert chains[1].inboundCursor.len > 0 and chains[2].inboundCursor == chains[1].inboundCursor,
+    "the room carries the deposits' cursor beside the note"
+  echo "11. an outsider's public payment to the vault, collected by the next settled transaction OK"
 
 echo "lez_msig_private_e2e: all passed"

@@ -1363,6 +1363,11 @@ proc lezMsigFundImpl(o: MusterUi, account, amount: string) =
     info "lez_msig_fund " & qs(account) & " " & qs(amount) & " -> " & qs(r)
     o.setLezMsigFundJson(asObjectJson(r, "job"))
     o.loadLezMsigDo())
+proc lezMsigTopupImpl(o: MusterUi, account, amount: string) =
+  ask mm.lez_msig_topupAsync(account.strip(), amount.strip(), proc (r: string) =
+    info "lez_msig_topup " & qs(account) & " " & qs(amount) & " -> " & qs(r)
+    o.setLezMsigTopupJson(asObjectJson(r, "job"))
+    o.loadLezMsigDo())
 proc lezMsigRecoverImpl(o: MusterUi, account: string) =
   ask mm.lez_msig_recoverAsync(account.strip(), proc (r: string) =
     info "lez_msig_recover " & qs(account) & " -> " & qs(r)

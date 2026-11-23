@@ -25,6 +25,13 @@ The LEZ *wallet* rails (public / shield / deshield / private transfers) live in
   - It is held byte for byte to vectors the program's own host generates
     (`tests/vectors/lez-msig`). The rules are the program's (`programs/lez-msig/core`), not
     re-implemented here.
+- `msig.nim` also reads a private payee on LEZ v0.4 (exo-ea3): `decodeRecipient` (lee_core::Recipient
+  borsh, regular accounts only) and `recipientAddress` (its account id, blinded by its opening), held
+  to `tests/vectors/lez-msig/v04-recipients.json` from LEZ's crates.
+- `msig_gas.nim`: the gas limit and fee cap a lez-msig step declares on LEZ v0.4, where a refusal
+  burns its whole limit (exo-50c). A model per step (signatures, members, config changes, a call's
+  allowance), held above every step measured on LEE's own state (`tests/vectors/lez-msig/v04-gas.json`
+  from `programs/lez-msig/lez04/host/tests/v04_gas.rs`) by `msig_gas_test`.
 - `quest.nim`: the quest record program's on-chain objects (exo-267.7, its source in
   `programs/lez-quest`, design `docs/design/lez-quest-program.md`): `QuestRecord` in its borsh
   layout, every instruction, and the record's PDA (psLee02). Held to vectors from the
@@ -39,6 +46,10 @@ The LEZ *wallet* rails (public / shield / deshield / private transfers) live in
   - The BIP-340 witness set, the transaction hash, the `sendTransaction` payload, and a
     program deployment.
   - It is held to vectors that LEZ's own crates generated (`tests/vectors/lez-tx-v024`).
+  - The v0.3.0 message (`LezMessage3`) and the v0.4.0-rc3 one (`LezMessage4`: public actors, a
+    nonce map, admission evidence), the latter held to `tests/vectors/lez-msig/v04.json` from
+    LEZ v0.4's crates (`programs/lez-msig/lez04/host/src/bin/msig_vectors04.rs`). Traps:
+    `docs/labbook/lez-v04-port.md`.
 
 Rules:
 - Every layout cites the upstream file and revision it was read from. A live chain is the

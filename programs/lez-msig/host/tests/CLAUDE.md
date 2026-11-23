@@ -8,3 +8,7 @@ with dev-mode receipts. Refusals are matched by their `MsigError` code.
 It creates, shields into, and pays 2-of-3 out of a group-owned private PDA. It is skipped unless
 `MSIG_LIVE_RPC` and `MSIG_LIVE_PROGRAM` name a zone; it funds a throwaway key through
 `infra/lez/funder.sh`.
+
+`live_public.rs`: the public posture through `msig_host::public` only, an integrator's journey with no
+Muster (RFP-005 U.1): prepare + send_public a Create, propose, check, execute, add a limit and spend
+under it, every key and signature outside. Skipped unless the same two variables are set.

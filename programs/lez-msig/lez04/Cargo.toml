@@ -1,0 +1,29 @@
+# lez-msig on LEZ v0.4 (the transactional-actor model, roadmap M3, exo-0d3.9). Its own
+# workspace, because LEZ v0.3 and v0.4 cannot share one dependency graph. The rules are the
+# SAME msig_core as the v0.3 program (../core); only the adapter, the guest and the host move.
+#   v04      msig_v04 — the v0.4 wire types and the multisig's account (guest + host)
+#   methods  builds the v0.4 guest (methods/guest) with risc0-build
+#   host     msig_host04 — transactions, the executor, and the tests on LEE's own state
+#   module   lez_msig_v04_module 0.2.0 — the executor as a Logos module (exo-cc7); this directory is
+#            its module package (metadata.json, lez_msig_v04_module.lidl, flake.nix)
+[workspace]
+resolver = "2"
+members = ["v04", "methods", "host", "module"]
+exclude = ["methods/guest"]
+
+[workspace.package]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+msig_core = { path = "../core" }
+msig_v04 = { path = "v04" }
+borsh = { version = "1.5.7", features = ["derive"] }
+lee_core = { git = "https://github.com/logos-blockchain/logos-execution-zone", tag = "v0.4.0-rc3" }
+lee = { git = "https://github.com/logos-blockchain/logos-execution-zone", tag = "v0.4.0-rc3", features = ["prove"] }
+risc0-build = "=3.0.5"
+sequencer_service_rpc = { git = "https://github.com/logos-blockchain/logos-execution-zone", tag = "v0.4.0-rc3", features = ["client"] }
+logos-rust-sdk = { git = "https://github.com/logos-co/logos-rust-sdk", rev = "040e94e83873249dc5f27da8c2a01c3dcaaa630d" }
+common = { git = "https://github.com/logos-blockchain/logos-execution-zone", tag = "v0.4.0-rc3" }
+fee_core = { git = "https://github.com/logos-blockchain/logos-execution-zone", tag = "v0.4.0-rc3" }
+key_protocol = { git = "https://github.com/logos-blockchain/logos-execution-zone", tag = "v0.4.0-rc3" }

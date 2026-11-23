@@ -1,0 +1,48 @@
+{
+  "name": "lez_msig_v04_module",
+  "display_name": "LEZ Multisig Prover (v0.4)",
+  "version": "0.2.0",
+  "description": "Proves and sends lez-msig's private transactions on a LEZ v0.4 zone, for Muster.",
+  "author": "Muster",
+  "type": "core",
+  "interface": "cdylib",
+  "category": "blockchain",
+  "main": "lez_msig_v04_module_plugin",
+  "concurrency": "single",
+  "dependencies": [],
+  "include": [],
+  "capabilities": [],
+  "codegen": {
+    "lidl": "lez_msig_v04_module.lidl",
+    "rust": {
+      "crate": ".",
+      "staticlib": "lez_msig_v04_module"
+    }
+  },
+  "nix": {
+    "external_libraries": [],
+    "packages": {
+      "build": [],
+      "runtime": []
+    },
+    "cmake": {
+      "find_packages": [],
+      "extra_include_dirs": []
+    },
+    "rust": {
+      "toolchain": "1.98.0",
+      "packages": {
+        "build": [
+          "pkg-config",
+          "python3",
+          "perl",
+          "clang"
+        ],
+        "runtime": []
+      },
+      "env": {
+        "cargoBuildFlags": "-p lez_msig_v04_module"
+      }
+    }
+  }
+}

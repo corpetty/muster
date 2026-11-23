@@ -1,0 +1,22 @@
+[package]
+name = "lez_msig_v04_module"
+version = "0.2.0"
+edition.workspace = true
+license.workspace = true
+description = "lez-msig's private posture on LEZ v0.4 as a Logos module: proves and sends its privacy-preserving transactions."
+
+[lib]
+crate-type = ["staticlib", "rlib"]
+
+[dependencies]
+msig_host04 = { path = "../host" }
+logos-rust-sdk.workspace = true
+tokio = { version = "1.50", features = ["rt", "macros"] }
+serde_json = "1"
+hex = "0.4"
+rand = "0.8"
+
+[dev-dependencies]
+lee.workspace = true
+lee_core.workspace = true
+sequencer_service_rpc.workspace = true

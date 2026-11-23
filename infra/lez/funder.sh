@@ -8,6 +8,9 @@
 #                                                      made on first use
 #   infra/lez/funder.sh [--zone Z] balance             what it holds, in base units
 #   infra/lez/funder.sh [--zone Z] fund <id> <amount>  send native LEZ (id: hex or base58)
+#   infra/lez/funder.sh [--zone Z] new-account         a fresh public account in the funder's
+#                                                      wallet: prints "<id hex> <public key hex>"
+#                                                      (a test payee; v0.4 admits it by that key)
 #   infra/lez/funder.sh [--zone Z] deploy <prog.bin>   deploy a v0.3 program through
 #                                                      program_loader, the funder paying;
 #                                                      prints "program account: <b58> (hex <hex>)"
@@ -35,7 +38,7 @@ case "${ZONE%/}" in                     # the two zones by their URLs too
   http://127.0.0.1:3040|http://localhost:3040) ZONE=local ;;
   https://testnet.lez.logos.co) ZONE=testnet ;;
 esac
-DIR="${MUSTER_LEZ_DIR:-$HOME/.cache/muster/lez-v0.3.0}"
+DIR="${MUSTER_LEZ_DIR:-$HOME/.cache/muster/lez-${MUSTER_LEZ_VERSION:-v0.3.0}}"   # the line localnet.sh runs
 WALLET="$DIR/target/release/wallet"
 PASSWORD="${MUSTER_LEZ_FUNDER_PASSWORD:-muster-funder}"
 case "$ZONE" in
@@ -47,7 +50,8 @@ case "$ZONE" in
   *) echo "a zone is local, testnet or a sequencer URL, not '$ZONE'" >&2; exit 2 ;;
 esac
 [ -x "$WALLET" ] || { echo "no LEZ wallet CLI at $WALLET: run 'infra/lez/localnet.sh build' first" >&2; exit 1; }
-w() { LEE_WALLET_HOME_DIR="$HOMEDIR" "$WALLET" "$@"; }
+# the v0.4 CLI encrypts its storage and reads the password from LEE_WALLET_PASSWORD
+w() { LEE_WALLET_HOME_DIR="$HOMEDIR" LEE_WALLET_PASSWORD="$PASSWORD" "$WALLET" "$@"; }
 
 answers() {  # the sequencer answers JSON-RPC
   curl -s -m 15 -X POST "$URL" -H 'content-type: application/json' \
@@ -82,7 +86,9 @@ funder_id() {  # the funder's public account (base58), made on first use
   mkdir -p "$HOMEDIR"; chmod 700 "$HOMEDIR"
   python3 - "$DIR/lez/wallet/configs/debug/wallet_config.json" "$HOMEDIR/wallet_config.json" "$URL" <<'EOF'
 import json, sys
-c = json.load(open(sys.argv[1])); c["sequencers"] = [{"sequencer_addr": sys.argv[3]}]
+c = json.load(open(sys.argv[1]))
+if "sequencer" in c: c["sequencer"] = {"sequencer_addr": sys.argv[3]}       # v0.4
+else: c["sequencers"] = [{"sequencer_addr": sys.argv[3]}]
 json.dump(c, open(sys.argv[2], "w"), indent=2)
 EOF
   local out id
@@ -106,9 +112,13 @@ case "${1:-account}" in
     echo "funder on $URL: Public/$id (hex $(hex "$id")), holding $(balance)" ;;
   balance) balance ;;
   fund)
-    [ $# -eq 3 ] || { echo "usage: $0 [--zone Z] fund <public account id, hex or base58> <amount>" >&2; exit 2; }
+    [ $# -eq 3 ] || [ $# -eq 4 ] || { echo "usage: $0 [--zone Z] fund <public account id, hex or base58> <amount> [<its public key, hex>]" >&2; exit 2; }
     answers || { echo "$URL does not answer" >&2; exit 1; }
-    w auth-transfer send --amount "$3" --from "Public/$(funder_id)" --to "Public/$(b58 "$2")" ;;
+    # v0.4 admits a public account no one has used yet only by its key: pass it as the 4th argument
+    # (v0.3's CLI has no --to-pk, and needs none: there any account can be paid)
+    to=(--to "Public/$(b58 "$2")")
+    [ $# -eq 4 ] && w auth-transfer send --help 2>/dev/null | grep -q -- --to-pk && to=(--to-pk "$4")
+    w auth-transfer send --amount "$3" --from "Public/$(funder_id)" "${to[@]}" ;;
   deploy)
     [ $# -eq 2 ] && [ -f "$2" ] || { echo "usage: $0 [--zone Z] deploy <program.bin (risc0's R0BF)>" >&2; exit 2; }
     answers || { echo "$URL does not answer" >&2; exit 1; }
@@ -128,8 +138,23 @@ EOF
     header=$(newacct); segs=()
     for _ in $(seq 1 "$n"); do segs+=("$(newacct)"); done
     [ -n "$header" ] && [ ${#segs[@]} -eq "$n" ] || { echo "could not make the deploy accounts" >&2; exit 1; }
-    w program-loader deploy --elf "$2" --header "$header" --segments "${segs[@]}" --payer "Public/$payer" >&2 || exit 1
+    # v0.4: an immutable header, so a private execution can prove the program undisclosed (D18)
+    imm=(); w program-loader deploy --help 2>/dev/null | grep -q -- --immutable && imm=(--immutable)
+    w program-loader deploy --elf "$2" --header "$header" --segments "${segs[@]}" --payer "Public/$payer" "${imm[@]}" >&2 || exit 1
     id="${header#Public/}"
     echo "program account: $id (hex $(hex "$id"))" ;;
-  *) echo "usage: $0 [--zone local|testnet|<url>] account | balance | fund <id> <amount> | deploy <program.bin>" >&2; exit 2 ;;
+  new-account)
+    out=$(w account new public 2>&1) || { echo "$out" >&2; exit 1; }
+    id=$(echo "$out" | grep -oE 'Public/[1-9A-HJ-NP-Za-km-z]{32,44}' | head -1)
+    pk=$(echo "$out" | grep -oE 'With pk [0-9a-f]{64}' | head -1 | cut -d' ' -f3)
+    [ -n "$id" ] && [ -n "$pk" ] || { echo "could not make an account: $out" >&2; exit 1; }
+    python3 - "${id#Public/}" "$pk" <<'EOF2'
+import sys
+a = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+n = 0
+for c in sys.argv[1]: n = n * 58 + a.index(c)
+print(n.to_bytes(32, "big").hex(), sys.argv[2])
+EOF2
+    ;;
+  *) echo "usage: $0 [--zone local|testnet|<url>] account | balance | fund <id> <amount> | new-account | deploy <program.bin>" >&2; exit 2 ;;
 esac

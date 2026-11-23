@@ -143,6 +143,15 @@ proc effectSummary*(effectJson: string, label: proc (who: string): string = nil,
     let n = argCount(j{"args"})
     return EffectSummary(kind: "action", to: call,
                          text: "an action: " & call & " (" & $n & (if n == 1: " arg)" else: " args)"))
+  of "lez-msig-spend":
+    # a spend under a lez-msig's spending limit (exo-0d3.12): read from its exact bytes
+    var sp: msigbytes.MsigSpend
+    try: sp = msigbytes.decodeSpend(hexToBytes(j{"spend"}.getStr()))
+    except CatchableError: return EffectSummary(kind: "unknown", text: "a LEZ multisig spend that does not decode")
+    let to = msigbytes.hexOf(sp.to)
+    return EffectSummary(kind: "payment", amount: inDecimals($sp.amount, 9), unit: "LEZ", to: to,
+      text: "a LEZ multisig spend under limit " & $sp.limit & ", no quorum: " & inDecimals($sp.amount, 9) &
+            " LEZ → " & short(to) & "  ·  #" & $sp.nonce)
   of "lez-msig":
     # a lez-msig proposal (exo-0d3): read from its exact bytes, the ones every approval signs
     # (RFP U.6), never from a description someone attached
@@ -153,8 +162,13 @@ proc effectSummary*(effectJson: string, label: proc (who: string): string = nil,
     case p.action.kind
     of msigbytes.akTransfer:
       let to = msigbytes.hexOf(p.action.to)
+      # a private payee (LEZ v0.4, exo-ea3): the effect carries its recipient; the driver checks it
+      # derives `to` before anyone may approve
+      let priv = j{"payee"}.getStr().len > 0
       return EffectSummary(kind: "payment", amount: inDecimals($p.action.amount, 9), unit: "LEZ", to: to,
-        text: "a LEZ multisig payment: " & inDecimals($p.action.amount, 9) & " LEZ → " & short(to) & tail)
+        text: "a LEZ multisig payment: " & inDecimals($p.action.amount, 9) & " LEZ → " &
+              (if priv: "a private payee " & short(to) & " (sealed to it; it claims it, paying the private fee)"
+               else: short(to)) & tail)
     of msigbytes.akCall:
       let prog = msigbytes.hexOf(p.action.program)
       return EffectSummary(kind: "contract-call", to: prog,
