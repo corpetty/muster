@@ -70,6 +70,19 @@ jobs:
           path: ~/.cache/muster/nimpkgs
           key: nimpkgs-${{ hashFiles('module/metadata.json') }}
           restore-keys: nimpkgs-
+      - name: risc0's recursion circuit (its S3 bucket answers 403 since 2026-11-23, exo-ba5)
+        # risc0-circuit-recursion's build.rs downloads this unless RECURSION_SRC_PATH names it.
+        # The Logos nix cache holds it (the prover flakes' fixed-output fetch); else the copy on
+        # muster-v0.4.0. The hash is the file's name and its sha256, checked either way.
+        run: |
+          sum=744b999f0a35b3c86753311c7efb2a0054be21727095cf105af6ee7d3f4d8849
+          zkr=/nix/store/2dd045zdaad44awdpscjw5fdw97bvpcb-$sum.zip
+          if ! nix-store --realise "$zkr" >/dev/null; then
+            zkr=$RUNNER_TEMP/$sum.zip
+            curl -fsSL -o "$zkr" "https://github.com/corpetty/muster/releases/download/muster-v0.4.0/$sum.zip"
+          fi
+          echo "$sum  $zkr" | sha256sum -c
+          echo "RECURSION_SRC_PATH=$zkr" >> "$GITHUB_ENV"
       - name: r0vm 3.0.5 (genesis runs in risc0's executor)
         run: |
           mkdir -p ~/.cache/muster/risc0
