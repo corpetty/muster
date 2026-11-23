@@ -15,6 +15,15 @@ side.
   *provider*, but only the shell can *dispatch*; without it `provides: coordinate.request`
   is inert. Blocks `exo-44b` L4 and the `coordinate.request` handler.
 
+Field reports (performance and findings from real use, kept current; each ends with asks):
+
+- [`logos-module-builder-field-report.md`](logos-module-builder-field-report.md) — for the
+  **module builder** team: a Rust module whose crate has a path dependency outside its package
+  needs a staged source (import-from-derivation) and trips Cargo's implicit workspace membership.
+- [`lez-v04-field-report.md`](lez-v04-field-report.md) — for the **LEZ** team: lez-msig on
+  0.4.0-rc3 (devnet and local): what each step meters and costs, refusals burning the whole gas
+  limit with no estimate RPC, a PDA unable to pay its own fee, version detection, deploy resume.
+
 Notes offered (not asks):
 
 - [`atomic-swaps-htlc-on-lez-v03.md`](atomic-swaps-htlc-on-lez-v03.md) — for whoever

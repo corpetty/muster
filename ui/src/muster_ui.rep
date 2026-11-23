@@ -314,6 +314,10 @@ class MusterUi
     // A deposit into a PRIVATE lez-msig's vault from this member's own LEZ account (exo-efa):
     // amount in base units. Lands on lezMsigFundJson ({job, amount, payer} or {error, detail}).
     SLOT(void lezMsigFund(const QString &account, const QString &amount))
+    // A top-up of a PRIVATE lez-msig's group fee account (LEZ v0.4, D17, exo-05f) from this
+    // member's own LEZ account: account is the multisig's CAIP-10 id or, before Create, its
+    // ceremony's createKey. Lands on lezMsigTopupJson ({job, amount, payer} or {error, detail}).
+    SLOT(void lezMsigTopup(const QString &account, const QString &amount))
     // Read a private lez-msig's newest note from the chain (exo-abc). Lands on
     // lezMsigRecoverJson ({job} or {error, detail}).
     SLOT(void lezMsigRecover(const QString &account))
@@ -445,6 +449,7 @@ class MusterUi
     PROP(QString lezMsigOpenJson="{}" READONLY)
     PROP(QString lezMsigProposeJson="{}" READONLY)
     PROP(QString lezMsigFundJson="{}" READONLY)
+    PROP(QString lezMsigTopupJson="{}" READONLY)
     PROP(QString lezMsigRecoverJson="{}" READONLY)
     PROP(QString memberAccountsJson="[]" READONLY)
     PROP(QString discloseAccountJson="{}" READONLY)

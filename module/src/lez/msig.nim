@@ -353,14 +353,56 @@ proc raction(r: var Reader): MsigAction =
     for _ in 0 ..< r.rlen(8): a.nonces.add r.ru64()
     a
 
+proc rproposal(r: var Reader): MsigProposal =
+  result.multisig = r.rfixed(32); result.zone = r.rfixed(32); result.epoch = r.ru64()
+  result.nonce = r.ru64(); result.action = r.raction(); result.expiresMs = r.ru64()
+  result.proposer = r.rfixed(32)
+
 proc decodeProposal*(b: openArray[byte]): MsigProposal =
   ## A proposal as its members sign it. Only exact bytes decode: a short, padded or
   ## non-canonical encoding (a bool other than 0/1, a trailing byte) is refused.
   var r = Reader(b: @b)
-  result.multisig = r.rfixed(32); result.zone = r.rfixed(32); result.epoch = r.ru64()
-  result.nonce = r.ru64(); result.action = r.raction(); result.expiresMs = r.ru64()
-  result.proposer = r.rfixed(32)
+  result = r.rproposal()
   if r.i != r.b.len: bad("trailing bytes after the proposal")
+
+proc rsigned(r: var Reader): MsigSigned = MsigSigned(key: r.rfixed(32), sig: r.rfixed(64))
+proc rsignedVec(r: var Reader): seq[MsigSigned] =
+  for _ in 0 ..< r.rlen(96): result.add r.rsigned()
+proc ropt(r: var Reader): Option[MsigSigned] =
+  if r.rbool(): some r.rsigned() else: none MsigSigned
+
+proc rinstruction(r: var Reader): MsigInstruction =
+  let tag = r.ru8()
+  if tag > uint8(ord(high(InstrKind))): bad("unknown instruction " & $tag)
+  case InstrKind(tag)
+  of ikCreate: MsigInstruction(kind: ikCreate, zone: r.rfixed(32), config: r.rconfig())
+  of ikExecute:
+    MsigInstruction(kind: ikExecute, proposal: r.rproposal(), approvals: r.rsignedVec(), executor: r.ropt())
+  of ikQueue:
+    MsigInstruction(kind: ikQueue, proposal: r.rproposal(), approvals: r.rsignedVec(), executor: r.ropt(),
+                    atMs: r.ru64())
+  of ikExecuteQueued:
+    MsigInstruction(kind: ikExecuteQueued, proposal: r.rproposal(), executor: r.ropt(), atMs: r.ru64())
+  of ikSpend:
+    var sp = MsigSpend(multisig: r.rfixed(32), zone: r.rfixed(32), epoch: r.ru64(), limit: r.ru32(),
+                       nonce: r.ru64(), to: r.rfixed(32), amount: r.ru128(), expiresMs: r.ru64())
+    MsigInstruction(kind: ikSpend, spend: sp, spendApprovals: r.rsignedVec(), period: r.ru64(),
+                    periodMs: r.ru64())
+
+proc decodeInstruction*(b: openArray[byte]): MsigInstruction =
+  ## The core instruction, exact bytes only (the inverse of `borsh`).
+  var r = Reader(b: @b)
+  result = r.rinstruction()
+  if r.i != r.b.len: bad("trailing bytes after the instruction")
+
+proc decodePublicEnvelope*(b: openArray[byte]): tuple[createKey: Key32, op: MsigInstruction] =
+  ## The inverse of `envelopePublic`: a public placement only (a private envelope carries its
+  ## group's keys and never reaches a public send).
+  var r = Reader(b: @b)
+  result.createKey = r.rfixed(32)
+  if r.ru8() != 0: bad("not a public placement")
+  result.op = r.rinstruction()
+  if r.i != r.b.len: bad("trailing bytes after the envelope")
 
 proc decodeMsigConfig*(b: openArray[byte]): MsigConfig =
   var r = Reader(b: @b)
@@ -519,3 +561,44 @@ proc configJson*(c: MsigConfig): JsonNode =
      "timelockMs": $c.timelockMs, "openExecution": c.openExecution,
      "transfer": (c.actions and ActTransfer) != 0, "call": (c.actions and ActCall) != 0,
      "targets": c.targets.mapIt(hexOf(it)), "limits": c.limits.mapIt(limitJson(it))}
+
+# ── a private payee on LEZ v0.4 (exo-ea3) ────────────────────────────────────
+## A private multisig pays a private account by an async message sealed to that account's
+## `lee_core::Recipient`, which its owner shares: its nullifier public key, its ML-KEM viewing
+## public key, its kind, and an optional opening that blinds its address. The proposal signs only
+## the address; the room carries the recipient beside it, and every member checks that the
+## recipient derives that address. Only regular accounts are payees here.
+const
+  ViewingKeyLen* = 1184                         ## ML-KEM-768 encapsulation key
+  PrivateAccountIdPrefix = "/LEE/v0.3/AccountId/Private/\x00\x00\x00\x00"
+  BlindedPrefix = "/LEE/v0.3/AccountId/Blinded/\x00\x00\x00\x00"
+
+type LezRecipient* = object
+  npk*: Key32
+  vpk*: seq[byte]                               ## ViewingKeyLen bytes
+  opening*: Option[seq[byte]]                   ## 32 bytes when the address is blinded
+
+proc decodeRecipient*(b: openArray[byte]): LezRecipient =
+  ## lee_core::Recipient's borsh, exact bytes only: npk ‖ u32 len ‖ vpk ‖ kind ‖ Option<opening>. A
+  ## PDA kind is refused: a payee here is a regular private account.
+  var r = Reader(b: @b)
+  result.npk = r.rfixed(32)
+  if r.ru32() != uint32(ViewingKeyLen): bad("a viewing key is " & $ViewingKeyLen & " bytes")
+  result.vpk = r.rfixed(ViewingKeyLen)
+  case r.ru8()
+  of 0: discard
+  of 1: bad("a private PDA is not a payee here")
+  else: bad("unknown account kind")
+  if r.rbool(): result.opening = some r.rfixed(32)
+  if r.i != r.b.len: bad("trailing bytes after the recipient")
+
+proc recipientAccountId*(r: LezRecipient): Key32 =
+  ## AccountId::for_regular_private_account: SHA-256(prefix ‖ npk ‖ vpk).
+  @(sha256(bytesOf(PrivateAccountIdPrefix) & r.npk & r.vpk))
+
+proc recipientAddress*(r: LezRecipient): Key32 =
+  ## The address a payment to it names: its account id, blinded by its opening when it has one
+  ## (AccountId::blinded: SHA-256(prefix ‖ account id ‖ opening)).
+  let id = recipientAccountId(r)
+  if r.opening.isNone: id
+  else: @(sha256(bytesOf(BlindedPrefix) & id & r.opening.get))

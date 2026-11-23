@@ -107,6 +107,16 @@ proc effectFromJson*(effectJson: string): Effect =
         for i in 0 ..< h.len div 2:
           try: raw.add byte(parseHexInt(h[2*i .. 2*i+1]))
           except ValueError: discard
+        # a private payee on LEZ v0.4 (exo-ea3): its lee_core::Recipient, which the driver checks
+        # derives the address the proposal pays; absent for every other payment
+        let ph = j{"payee"}.getStr()
+        if ph.len > 0:
+          var payee: seq[byte]
+          for i in 0 ..< ph.len div 2:
+            try: payee.add byte(parseHexInt(ph[2*i .. 2*i+1]))
+            except ValueError: discard
+          return Effect(schemaId: "muster.effect.lez-msig.v1",
+                        fields: @[("payee", cbBytes(payee)), ("proposal", cbBytes(raw))])
         return Effect(schemaId: "muster.effect.lez-msig.v1", fields: @[("proposal", cbBytes(raw))])
       of "lez-multisig-config":
         # A pointer to on-chain config proposal #index of a LEZ multisig (exo-267.6): add or

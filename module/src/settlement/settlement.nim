@@ -519,7 +519,9 @@ method assemble*(s: LezMsigSettlement, drv: Driver, effect: Effect,
     tx: PreparedTx(chain: d.account.chain, frm: s.relayer, to: hexOf(d.account.address),
                    payload: $(%*{"lez": "v0.3", "msig": $ins.kind, "envelope": hexOf(env), "op": hexOf(borsh(ins)),
                                  "rows": rows.mapIt(%*{"account": hexOf(it.account), "program": hexOf(it.program)}),
-                                 "proposal": proposalJson(p)})))
+                                 "proposal": proposalJson(p),
+                                 # a private payee (exo-ea3): the driver checked it derives the address paid
+                                 "recipients": (if payeeOf(effect).len > 0: %[hexOf(payeeOf(effect))] else: newJArray())})))
 
 proc rowsOf(p: JsonNode): seq[LezShard] =
   proc unz(h: string): seq[byte] =
@@ -534,7 +536,7 @@ method submit*(s: LezMsigSettlement, tx: PreparedTx, ks: Keystore): TxRef =
   let c = s.msigChainOf()
   # a private multisig's instruction goes to its prover, which builds the envelope with the
   # group's keys and proves it over the latest note (exo-efa)
-  let r = (if c of MsigPrivate: MsigPrivate(c).sendOp(unz(p["op"].getStr()))
+  let r = (if c of MsigPrivate: MsigPrivate(c).sendOp(unz(p["op"].getStr()), p{"recipients"}.getElems().mapIt(unz(it.getStr())))
            else: c.sendMsig(rowsOf(p), unz(p["envelope"].getStr())))
   if not r.ok: raise newException(WalletError, "the sequencer refused it: " & r.error)
   TxRef(chain: tx.chain, id: r.hash)

@@ -21,6 +21,8 @@
 ##                                        and the value's "author" the opener (exo-efa)
 ##   lmsig/<ck>/note/<n>/<who>            its note after its n-th transaction, sealed to <who>;
 ##                                        the value's "author" the member who sent it
+##   lmsig/<ck>/feenote/<n>/<who>         on LEZ v0.4, its group fee account's n-th note (D17),
+##                                        sealed and authored the same way (exo-05f)
 ##   xmsig/<cid>/join/<who>               a Monero multisig setup join (exo-dcc.34.2)
 ##   xmsig/<cid>/kex/<r>/<who>            that member's wallet's round r of the key exchange
 ##   intent/<id>/xsync|xtx/<who>/<i>/<n> a Monero multisig spend's sync data or transaction
@@ -132,7 +134,7 @@ proc authorOf*(e: Event): tuple[authored: bool, author: string] =
       if j.kind == JObject: author = j{"author"}.getStr()
     except CatchableError: discard
     return (true, author)
-  if p.len >= 3 and p[0] == "lmsig" and p[2] in ["gms", "note"]:
+  if p.len >= 3 and p[0] == "lmsig" and p[2] in ["gms", "note", "feenote"]:
     # a private lez-msig's sealed copies (exo-efa): the key names the member it is sealed
     # to, the value's "author" the member who sealed it
     var author = ""

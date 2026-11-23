@@ -35,10 +35,22 @@ proc call(p: LpMsigProver, meth: string, arg: string): JsonNode =
   except CatchableError as e:
     result = %*{"error": "unreadable", "detail": e.msg}
 
+method health*(p: LpMsigProver): JsonNode =
+  var res, err: cstring
+  let rc = lp_invoke(p.client, "health".cstring, "[]".cstring, CallMs, addr res, addr err)
+  defer:
+    if res != nil: lp_string_free(res)
+    if err != nil: lp_string_free(err)
+  if rc != LP_OK or res == nil: return %*{"error": "unreachable"}
+  try:
+    result = parseJson($res)
+    if result.kind == JString: result = parseJson(result.getStr())
+  except CatchableError: result = %*{"error": "unreadable"}
 method derive*(p: LpMsigProver, req: JsonNode): JsonNode = p.call("derive", $req)
 method submit*(p: LpMsigProver, req: JsonNode): JsonNode =
   let mode = req{"mode"}.getStr("exec")
-  p.call((if mode in ["fund", "scan"]: mode else: "exec"), $req)
+  # topup is lez_msig_module 0.2.0's (the LEZ v0.4 line, exo-cc7); 0.1.0 answers it unknown
+  p.call((if mode in ["fund", "scan", "topup"]: mode else: "exec"), $req)
 method job*(p: LpMsigProver, id: string): JsonNode = p.call("job", id)
 method forget*(p: LpMsigProver, id: string) = discard p.call("forget", id)
 method send*(p: LpMsigProver, req: JsonNode): JsonNode = p.call("send", $req)

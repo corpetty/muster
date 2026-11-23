@@ -166,6 +166,7 @@ Rectangle {
                     lezMsigPropose: details.room.lezMsigPropose
                     lezMsigState: details.room.lezMsigState
                     lezMsigFund: details.room.lezMsigFund
+                    lezMsigTopup: details.room.lezMsigTopup
                     lezMsigRecover: details.room.lezMsigRecover
                     memberAccounts: details.room.memberAccounts
                     discloseAccount: details.room.discloseAccount
@@ -180,6 +181,9 @@ Rectangle {
                     }
                     onLezMsigFundRequested: function (account, amount) {
                         if (details.room.backend) details.room.backend.lezMsigFund(account, amount);
+                    }
+                    onLezMsigTopupRequested: function (account, amount) {
+                        if (details.room.backend) details.room.backend.lezMsigTopup(account, amount);
                     }
                     onLezMsigOpenRequested: function (specJson) { if (details.room.backend) details.room.backend.lezMsigOpen(specJson); }
                     onLezMsigProposeRequested: function (account, actionJson) {

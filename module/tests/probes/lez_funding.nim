@@ -13,10 +13,11 @@ proc e2eFund*(): string =
   ## What a test sends each account it makes, in base units.
   getEnv("MUSTER_LEZ_E2E_FUND", "1000000000")
 
-proc fundFrom*(zone: string, id: seq[byte], amount: string) =
+proc fundFrom*(zone: string, id: seq[byte], amount: string, key: seq[byte] = @[]) =
   ## The zone's funder sends `amount` to `id`. `zone` is the sequencer's URL (or local|testnet).
+  ## `key` is the account's x-only key: LEZ v0.4 admits an account no one has used yet only by it.
   let (o, code) = execCmdEx(quoteShell(funderScript) & " --zone " & quoteShell(zone) & " fund " &
-                            toHex(id) & " " & amount)
+                            toHex(id) & " " & amount & (if key.len == 32: " " & toHex(key) else: ""))
   doAssert code == 0, "the zone's funder could not send (infra/lez/funder.sh --zone " & zone & " account): " & o
 
 proc deployFrom*(zone, bin: string): string =
