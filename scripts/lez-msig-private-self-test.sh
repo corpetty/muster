@@ -16,7 +16,7 @@
 # public account only by its key.
 #
 #   MUSTER_LEZ_VERSION=v0.4.0-rc3 infra/lez/localnet.sh
-#   make build LEZ_MSIG_DIR=programs/lez-msig/lez04       # the runner with the v0.4 prover
+#   make build                                            # the runner holds both provers (exo-cc7)
 #   scripts/lez-msig-private-self-test.sh
 #   MSIG_PROGRAM (skip the deploy of lez04's artifacts/msig.bin), LEZ_RPC (default
 #   http://127.0.0.1:3040), KEEP_LOGS=1, MUSTER_FLEET=local (no fleet). Dev-mode proofs: the local

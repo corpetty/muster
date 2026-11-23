@@ -1,6 +1,7 @@
-//! lez_msig_module on LEZ v0.4 (0.2.0; exo-cc7): lez-msig's private posture as a Logos module
+//! lez_msig_v04_module, lez_msig_module for LEZ v0.4 (0.2.0; exo-cc7), named apart from the v0.3
+//! module so a host can hold both: lez-msig's private posture as a Logos module
 //! (docs/design/lez-msig.md §6, RFP-005 U.1). The module-impl C ABI, the `LezMsigModule` trait and
-//! `emit_job_done` are generated from `lez_msig_module.lidl` by logos-lidl-gen (`tools/regen.sh`; in
+//! `emit_job_done` are generated from `lez_msig_v04_module.lidl` by logos-lidl-gen (`tools/regen.sh`; in
 //! nix the builder writes its own copy). The work itself is `msig_host04::exec::exec_request`, the
 //! same function the `msig_exec04` CLI runs. The v0.3 module (0.1.0) is `../../module`; the two
 //! lines cannot share a dependency graph, so each is its own build of the same contract, and this
@@ -35,7 +36,7 @@ fn caller() -> String {
 #[derive(Default)]
 pub struct LezMsigModuleImpl;
 
-impl LezMsigModule for LezMsigModuleImpl {
+impl LezMsigV04Module for LezMsigModuleImpl {
     fn health(&mut self) -> String {
         json!({"ok": true, "busy": jobs::busy(), "prover": "local", "line": "v0.4",
                "devMode": std::env::var("RISC0_DEV_MODE").map(|v| !v.is_empty() && v != "0").unwrap_or(false),

@@ -37,9 +37,10 @@
 # built that way still must carry linux-amd64; --local is open to every platform, e.g. for a
 # Mac to test its own build.
 #
-# The catalogue publishes muster_module and muster_ui, and lez_msig_module (programs/lez-msig,
-# exo-e77): the private lez-msig's prover, an OPTIONAL dependency of muster_module, built for
-# linux-amd64 only and versioned on its own (programs/lez-msig/metadata.json). Every other
+# The catalogue publishes muster_module and muster_ui, and the private lez-msig's two provers
+# (exo-e77, exo-cc7): lez_msig_module (programs/lez-msig) for a LEZ v0.3 zone and
+# lez_msig_v04_module (programs/lez-msig/lez04) for a v0.4 one, OPTIONAL dependencies of
+# muster_module, built for linux-amd64 only and versioned on their own. Every other
 # dependency resolves from the
 # official Logos catalogue, which Basecamp enables by default and searches alongside ours
 # (logos-package-downloader docs/spec.md, "Dependency Resolution"). Nothing here is signed.
@@ -133,13 +134,15 @@ fi
 # one platform: <package>-<version>-<platform>.lgx (every release before 0.3.1); several: the
 # official catalogue's <package>-<version>.lgx. The prover is linux-amd64 only, at its own version.
 MSIG_VERSION=$(ver programs/lez-msig/metadata.json)
+MSIG04_VERSION=$(ver programs/lez-msig/lez04/metadata.json)
 asset() {
   if [ "$1" = lez_msig_module ]; then echo "$1-$MSIG_VERSION-linux-amd64.lgx"
+  elif [ "$1" = lez_msig_v04_module ]; then echo "$1-$MSIG04_VERSION-linux-amd64.lgx"
   elif [ "$PLATFORMS" = "${PLATFORMS%% *}" ]; then echo "$1-$VERSION-$PLATFORMS.lgx"; else echo "$1-$VERSION.lgx"; fi; }
-PACKAGES="muster_module muster_ui lez_msig_module"
+PACKAGES="muster_module muster_ui lez_msig_module lez_msig_v04_module"
 
 # The committed tree, never a working copy.
-if [ $ALLOW_DIRTY = 0 ] && [ -n "$(git status --porcelain -- module ui programs/lez-msig)" ]; then
+if [ $ALLOW_DIRTY = 0 ] && [ -n "$(git status --porcelain -- module ui programs/lez-msig)" ]; then  # lez04 included
   echo "module/, ui/ or programs/lez-msig/ has uncommitted changes; commit them (the build reads the committed tree)" >&2
   git status --short -- module ui programs/lez-msig >&2; exit 1
 fi
@@ -190,33 +193,39 @@ MOD=$(nix build "git+file://$ROOT?dir=module#lgx-portable" "${SUB[@]}" --no-eval
 UI=$(nix build "git+file://$ROOT?dir=ui#lgx-portable" "${SUB[@]}" --no-eval-cache \
         --override-input muster_module "git+file://$ROOT?dir=module" \
         --override-input lez_msig_module "git+file://$ROOT?dir=programs/lez-msig" \
+        --override-input lez_msig_v04_module "git+file://$ROOT?dir=programs/lez-msig/lez04" \
         --no-link --print-out-paths 2>"$WORK/build-ui.log" | tail -1) \
   || { echo "ui build failed; see $WORK/build-ui.log" >&2; exit 1; }
 fi
-# The prover, here in every mode: the workflow does not build it, and it builds only on
-# linux-amd64 (a --local test elsewhere goes without it).
-MSIG=""
+# The provers, here in every mode: the workflow does not build them, and they build only on
+# linux-amd64 (a --local test elsewhere goes without them).
+MSIG=""; MSIG04=""
 if [ "$(lgx_variant)" = linux-amd64 ]; then
   echo "building lez_msig_module $MSIG_VERSION from $COMMIT"
   MSIG=$(nix build "git+file://$ROOT?dir=programs/lez-msig#lgx-portable" "${SUB[@]}" --no-eval-cache \
           --no-link --print-out-paths 2>"$WORK/build-msig.log" | tail -1) \
     || { echo "lez_msig_module build failed; see $WORK/build-msig.log" >&2; exit 1; }
+  echo "building lez_msig_v04_module $MSIG04_VERSION from $COMMIT"
+  MSIG04=$(nix build "git+file://$ROOT?dir=programs/lez-msig/lez04#lgx-portable" "${SUB[@]}" --no-eval-cache \
+          --no-link --print-out-paths 2>"$WORK/build-msig04.log" | tail -1) \
+    || { echo "lez_msig_v04_module build failed; see $WORK/build-msig04.log" >&2; exit 1; }
 elif [ -z "$LOCAL" ]; then
-  echo "a release carries lez_msig_module, which builds on linux-amd64 only; release from a linux-amd64 host" >&2; exit 1
+  echo "a release carries the lez-msig provers, which build on linux-amd64 only; release from a linux-amd64 host" >&2; exit 1
 else
   PACKAGES="muster_module muster_ui"
 fi
 
 # Each package's embedded manifest must carry the name and version the catalogue claims.
-for pair in "muster_module:$MOD" "muster_ui:$UI" ${MSIG:+"lez_msig_module:$MSIG"}; do
+for pair in "muster_module:$MOD" "muster_ui:$UI" ${MSIG:+"lez_msig_module:$MSIG"} ${MSIG04:+"lez_msig_v04_module:$MSIG04"}; do
   pkg=${pair%%:*}; f=$(ls "${pair#*:}"/*.lgx | head -1)
   lgx verify "$f" >/dev/null
   got=$(lgx manifest "$f" --json | python3 -c 'import json,sys; m=json.load(sys.stdin); print(m["name"], m["version"], " ".join(sorted(m.get("main", {}))))')
   if [ "$pkg" = lez_msig_module ]; then want="$pkg $MSIG_VERSION linux-amd64"
+  elif [ "$pkg" = lez_msig_v04_module ]; then want="$pkg $MSIG04_VERSION linux-amd64"
   else want="$pkg $VERSION $(tr ' ' '\n' <<<"$PLATFORMS" | sort | paste -sd' ' -)"; fi
   [ "$got" = "$want" ] || { echo "$f: manifest says '$got', expected '$want'" >&2; exit 1; }
   # No `declare -A` (bash 3.2 on macOS): a variable per package.
-  case $pkg in muster_module) SRC_MOD=$f ;; muster_ui) SRC_UI=$f ;; lez_msig_module) SRC_MSIG=$f ;; esac
+  case $pkg in muster_module) SRC_MOD=$f ;; muster_ui) SRC_UI=$f ;; lez_msig_module) SRC_MSIG=$f ;; lez_msig_v04_module) SRC_MSIG04=$f ;; esac
 done
 
 # 2. Where the files go.
@@ -235,7 +244,7 @@ else
 fi
 mkdir -p "$ASSETS"
 for pkg in $PACKAGES; do
-  case $pkg in muster_module) src=$SRC_MOD ;; muster_ui) src=$SRC_UI ;; lez_msig_module) src=$SRC_MSIG ;; esac
+  case $pkg in muster_module) src=$SRC_MOD ;; muster_ui) src=$SRC_UI ;; lez_msig_module) src=$SRC_MSIG ;; lez_msig_v04_module) src=$SRC_MSIG04 ;; esac
   install -m 0644 "$src" "$ASSETS/$(asset "$pkg")"
 done
 
@@ -248,8 +257,9 @@ card = {
     "name": "muster",
     "displayName": "Muster",
     "description": "Muster: rooms where people agree on a payment, a bill split or a decision, "
-                   "then settle it. Publishes muster_module and muster_ui, and lez_msig_module (the "
-                   "private multisig's prover, optional, linux-amd64); every other dependency comes "
+                   "then settle it. Publishes muster_module and muster_ui, and the private multisig's "
+                   "provers, lez_msig_module (LEZ v0.3) and lez_msig_v04_module (LEZ v0.4), optional, "
+                   "linux-amd64; every other dependency comes "
                    "from the official Logos catalogue. Unsigned.",
     "homepage": "https://github.com/corpetty/muster/tree/main/catalog",
     "indexUrl": index_url,
@@ -283,7 +293,7 @@ python3 "$TOOL" list "$OUT/index.json"
 python3 - "$OUT/index.json" <<'EOF'
 import json, sys
 names = {p["name"] for p in json.load(open(sys.argv[1]))["packages"]}
-extra = names - {"muster_module", "muster_ui", "lez_msig_module"}
+extra = names - {"muster_module", "muster_ui", "lez_msig_module", "lez_msig_v04_module"}
 if extra:
     sys.exit(f"index lists packages that are not ours: {sorted(extra)}")
 EOF

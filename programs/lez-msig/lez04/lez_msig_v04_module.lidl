@@ -1,6 +1,6 @@
-module lez_msig_module {
+module lez_msig_v04_module {
   version "0.2.0"
-  description "Proves and sends lez-msig's privacy-preserving transactions on a LEZ v0.4 zone, for Muster (docs/design/lez-msig.md). Holds no key: the group secret arrives with each request and is dropped with its job. On v0.4 every transaction pays its fee inside its proof from the group's fee account, whose note (feeNote) travels with each request and comes back new (feePost); the fee is priced from the zone's getFeeState, and an immutable program is proved without naming it. JSON in, JSON out; a failure is {error, detail}."
+  description "lez_msig_module for LEZ v0.4, as its own module so a host can hold it beside the v0.3 one (lez_msig_module). Proves and sends lez-msig's privacy-preserving transactions on a LEZ v0.4 zone, for Muster (docs/design/lez-msig.md). Holds no key: the group secret arrives with each request and is dropped with its job. On v0.4 every transaction pays its fee inside its proof from the group's fee account, whose note (feeNote) travels with each request and comes back new (feePost); the fee is priced from the zone's getFeeState, and an immutable program is proved without naming it. JSON in, JSON out; a failure is {error, detail}."
   category "blockchain"
   depends []
 

@@ -1,22 +1,22 @@
 {
-  "name": "lez_msig_module",
-  "display_name": "LEZ Multisig Prover",
+  "name": "lez_msig_v04_module",
+  "display_name": "LEZ Multisig Prover (v0.4)",
   "version": "0.2.0",
   "description": "Proves and sends lez-msig's private transactions on a LEZ v0.4 zone, for Muster.",
   "author": "Muster",
   "type": "core",
   "interface": "cdylib",
   "category": "blockchain",
-  "main": "lez_msig_module_plugin",
+  "main": "lez_msig_v04_module_plugin",
   "concurrency": "single",
   "dependencies": [],
   "include": [],
   "capabilities": [],
   "codegen": {
-    "lidl": "lez_msig_module.lidl",
+    "lidl": "lez_msig_v04_module.lidl",
     "rust": {
       "crate": ".",
-      "staticlib": "lez_msig_module"
+      "staticlib": "lez_msig_v04_module"
     }
   },
   "nix": {
@@ -41,7 +41,7 @@
         "runtime": []
       },
       "env": {
-        "cargoBuildFlags": "-p lez_msig_module"
+        "cargoBuildFlags": "-p lez_msig_v04_module"
       }
     }
   }

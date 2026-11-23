@@ -1,13 +1,13 @@
-//! lez_msig_module 0.2.0 (LEZ v0.4) through its own trait, with no host: health and derive at
+//! lez_msig_v04_module 0.2.0 (LEZ v0.4) through its own trait, with no host: health and derive at
 //! once, and (when MSIG_LIVE_RPC and MSIG_LIVE_PROGRAM name a v0.4 zone) a fee-account top-up as a
 //! job: topup answers with a job id at once, a second one meanwhile is "busy", and the job ends
 //! with what the payer signs and the fee account's new note. The payer is funded by the zone's
 //! funder (infra/lez/funder.sh), and nothing is signed or sent here.
 //!
 //!   MSIG_LIVE_RPC=http://127.0.0.1:3040 MSIG_LIVE_PROGRAM=<hex> RISC0_DEV_MODE=1 \
-//!     cargo test -p lez_msig_module -- --nocapture
+//!     cargo test -p lez_msig_v04_module -- --nocapture
 
-use lez_msig_module::{LezMsigModule, LezMsigModuleImpl};
+use lez_msig_v04_module::{LezMsigModuleImpl, LezMsigV04Module};
 use serde_json::{json, Value};
 
 fn j(s: String) -> Value {

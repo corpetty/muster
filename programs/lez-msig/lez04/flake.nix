@@ -1,11 +1,12 @@
 {
-  # lez_msig_module 0.2.0: lez-msig's private posture on LEZ v0.4 as a Logos module (exo-cc7;
+  # lez_msig_v04_module 0.2.0: lez-msig's private posture on LEZ v0.4 as a Logos module, named apart
+  # from the v0.3 lez_msig_module so a host can hold both (exo-cc7;
   # docs/design/lez-msig.md §6, RFP-005 U.1). The v0.3 module (0.1.0) is ../flake.nix; the two
   # LEZ lines cannot share a dependency graph, so each is its own build of the same contract. The
   # cargo workspace here is the module package: the builder copies this directory and builds
-  # `-p lez_msig_module` (metadata.json's nix.rust.env), whose staticlib links into the plugin.
+  # `-p lez_msig_v04_module` (metadata.json's nix.rust.env), whose staticlib links into the plugin.
   # linux-amd64 first: risc0 on darwin needs LEZ's Metal workaround.
-  description = "lez_msig_module: proves and sends lez-msig's private transactions (LEZ v0.4)";
+  description = "lez_msig_v04_module: proves and sends lez-msig's private transactions (LEZ v0.4)";
 
   nixConfig = {
     extra-substituters = [ "https://cache.nix.logos.co/public" ];
@@ -39,8 +40,13 @@
           pkgs = import nixpkgs { inherit system; };
           # risc0-circuit-recursion 4.0.4 (as on v0.3) downloads this in build.rs unless RECURSION_SRC_PATH
           # names it; the hash is both its file name and its sha256 (LEZ's flake does the same).
+          # Since 2026-11-23 risc0's bucket answers 403 (exo-ba5), so muster-v0.4.0 carries a copy;
+          # the hash pins the bytes whichever answers, and S3 stays first so the store path holds.
           recursionZkr = pkgs.fetchurl {
-            url = "https://risc0-artifacts.s3.us-west-2.amazonaws.com/zkr/744b999f0a35b3c86753311c7efb2a0054be21727095cf105af6ee7d3f4d8849.zip";
+            urls = [
+              "https://risc0-artifacts.s3.us-west-2.amazonaws.com/zkr/744b999f0a35b3c86753311c7efb2a0054be21727095cf105af6ee7d3f4d8849.zip"
+              "https://github.com/corpetty/muster/releases/download/muster-v0.4.0/744b999f0a35b3c86753311c7efb2a0054be21727095cf105af6ee7d3f4d8849.zip"
+            ];
             sha256 = "744b999f0a35b3c86753311c7efb2a0054be21727095cf105af6ee7d3f4d8849";
           };
           # Put LEZ's artifacts/ where build_utils' upward walk looks from a vendored crate. The

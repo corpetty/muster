@@ -8,8 +8,8 @@ LEZ v0.3 and v0.4 cannot share one dependency graph. The rules are the same `../
 - `methods/`: embeds the deployed guest (`artifacts/msig.bin`) and its image id.
 - `host/`: `msig_host04`, transactions for both postures, the executor (`exec.rs`) and the tests on
   LEE's own state (`V03State`, the type kept its name at v0.4.0-rc3).
-- `module/`: `lez_msig_module` 0.2.0, the executor as a Logos module (exo-cc7). This directory is its
-  module package: `metadata.json`, `lez_msig_module.lidl` (v0.3's contract plus `topup` and the fee
+- `module/`: `lez_msig_v04_module` 0.2.0 (lez_msig_module for LEZ v0.4, named apart so a host holds both), the executor as a Logos module (exo-cc7). This directory is its
+  module package: `metadata.json`, `lez_msig_v04_module.lidl` (v0.3's contract plus `topup` and the fee
   account's notes), `generated/` (`tools/regen.sh`), `flake.nix` (`nix build .#lgx-portable`), which
   stages `../core` inside its source since the builder compiles only this directory.
 - `artifacts/msig.bin`: the deployed v0.4 guest (the devnet's program, image id checked), embedded by

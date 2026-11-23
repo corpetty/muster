@@ -3985,14 +3985,37 @@ proc msigZoneTag(chain: string): seq[byte] =
 proc msigLiveFor(chain: string, program: seq[byte]): MsigLive =
   newMsigLive(newLezRpc(gLezRpc), moduleKeystore(), chain, program, lezMemberLabel(0))
 
-var gMsigProver: MsigProver = nil
-proc msigProver(): MsigProver =
-  ## The lez_msig_module over lp_*; nil while the host has not loaded it (readiness names the
+var gMsigProvers = initTable[string, MsigProver]()   ## prover module name → its lp_* client
+proc msigProver(line: string): MsigProver =
+  ## The prover module for a zone's LEZ line over lp_* (exo-cc7: lez_msig_module for v0.3,
+  ## lez_msig_v04_module for v0.4); nil while the host has not loaded it (readiness names the
   ## package to install, and never calls a module that is not ready).
-  if gMsigProver == nil:
-    try: gMsigProver = newLpMsigProver()
+  let name = proverModuleFor(line)
+  if name notin gMsigProvers:
+    try: gMsigProvers[name] = newLpMsigProver(name)
     except CatchableError: return nil
-  gMsigProver
+  gMsigProvers[name]
+
+var gZoneLines = initTable[string, string]()   ## LEZ RPC url → its line, read once
+proc lezZoneLine(program: seq[byte]): string =
+  ## The configured zone's LEZ line ("v0.3" | "v0.4"), read from how it answers for the program's
+  ## own account; raises when the zone cannot be read.
+  if gLezRpc notin gZoneLines:
+    gZoneLines[gLezRpc] = newMsigLive(newLezRpc(gLezRpc), moduleKeystore(), gLezChain, program, lezMemberLabel(0)).zoneLine()
+  gZoneLines[gLezRpc]
+
+var gZoneLineFailedAt = 0.0   ## when the zone last failed a line read: not retried for 30 s
+proc proverForChain(chain: string): string {.nimcall.} =
+  ## The driver's hook (drivers/lez_msig.nim `lezMsigProverFor`): the prover a private lez-msig on
+  ## `chain` needs, from the configured zone's line; the v0.3 module when that cannot be read.
+  ## Manifests are built often, so a zone that cannot be read is not asked again for 30 s.
+  if chain != gLezChain or gLezMsigProgram.len == 0: return ProverModuleV03
+  if gLezRpc notin gZoneLines and epochTime() - gZoneLineFailedAt < 30: return ProverModuleV03
+  try: proverModuleFor(lezZoneLine(hexToBytes(gLezMsigProgram)))
+  except CatchableError:
+    gZoneLineFailedAt = epochTime()
+    ProverModuleV03
+lezMsigProverFor = proverForChain
 
 proc msigMembersNow(ck: string): seq[string] =
   ## The room identities of a disclosed lez-msig's members now (exo-0d3.13): who its private
@@ -4015,13 +4038,13 @@ proc msigPrivFor(chain: string, program, createKey: seq[byte]): MsigPrivate =
   if ck notin gMsigPriv:
     let gms = groupSecretOf(gSession.roomEvents(), ks, gSession.topic, ck, msigMembersNow(ck))
     if gms.isNone: raise newException(WalletError, "you hold no group secret for this private multisig")
-    let p = msigProver()
-    if p == nil: raise newException(WalletError, "lez_msig_module is not loaded: install it to prove a private multisig's transactions")
-    # the prover must prove for this zone's LEZ line: v0.3 and v0.4 are separate builds (exo-cc7)
+    # the prover for this zone's LEZ line: v0.3 and v0.4 are separate modules (exo-cc7)
     let line = newMsigLive(newLezRpc(gLezRpc), ks, chain, program, lezMemberLabel(0)).zoneLine()
+    let p = msigProver(line)
+    if p == nil: raise newException(WalletError, proverModuleFor(line) & " is not loaded: install it to prove a private multisig's transactions on this zone")
     let fit = proverFits(p.health(), line)
     if not fit.ok:
-      raise newException(WalletError, "the installed lez_msig_module proves for another LEZ line than this zone's (" & line &
+      raise newException(WalletError, "the loaded " & proverModuleFor(line) & " proves for another LEZ line than this zone's (" & line &
                          "): install " & fit.want)
     let cer = ceremonyOf(gSession.roomEvents(), gSession.topic, ck)
     if cer.isNone: raise newException(WalletError, "no ceremony in this room for that multisig")
@@ -4246,9 +4269,15 @@ proc musterLezMsigOpen(specJson: string): string =
     members.add (id: id, roles: roles, weight: uint16(if w != nil: w.getInt(1) else: 1))
   let program = hexToBytes(gLezMsigProgram)
   let private = spec{"private"}.getBool(false)
-  if private and msigProver() == nil:
-    return $(%*{"error": "no-prover", "install": "lez_msig_module",
-                "detail": "a private multisig's transactions are proved by the lez_msig_module: install it first"})
+  if private:
+    var line: string
+    try: line = lezZoneLine(program)
+    except CatchableError as e:
+      return $(%*{"error": "refused", "detail": "cannot read the zone's LEZ line: " & e.msg})
+    if msigProver(line) == nil:
+      let name = proverModuleFor(line)
+      return $(%*{"error": "no-prover", "install": name,
+                  "detail": "a private multisig's transactions on this zone (LEZ " & line & ") are proved by " & name & ": install it first"})
   # an account a member disclosed in this room, picked as their approval key (exo-1f9)
   var accounts = initTable[string, string]()
   if spec{"accounts"} != nil and spec{"accounts"}.kind == JObject:

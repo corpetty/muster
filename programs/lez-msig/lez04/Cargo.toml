@@ -4,8 +4,8 @@
 #   v04      msig_v04 — the v0.4 wire types and the multisig's account (guest + host)
 #   methods  builds the v0.4 guest (methods/guest) with risc0-build
 #   host     msig_host04 — transactions, the executor, and the tests on LEE's own state
-#   module   lez_msig_module 0.2.0 — the executor as a Logos module (exo-cc7); this directory is
-#            its module package (metadata.json, lez_msig_module.lidl, flake.nix)
+#   module   lez_msig_v04_module 0.2.0 — the executor as a Logos module (exo-cc7); this directory is
+#            its module package (metadata.json, lez_msig_v04_module.lidl, flake.nix)
 [workspace]
 resolver = "2"
 members = ["v04", "methods", "host", "module"]

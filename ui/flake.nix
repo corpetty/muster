@@ -62,13 +62,15 @@
     # 0.3.2 bundles the same 3.0.2 (7548f41). Same pin as module/flake.nix; muster_ui does
     # not call it.
     logos-storage-module.url = "github:logos-co/logos-storage-module/7548f41ae189917d58c37f0fb6d3a2700b99f59b";
-    # lez-msig's prover (exo-efa, exo-e77): a private lez-msig's transactions are proved by
-    # lez_msig_module, a Rust module in this repo (programs/lez-msig). muster_module calls it
+    # lez-msig's provers (exo-efa, exo-e77, exo-cc7): a private lez-msig's transactions are proved
+    # by lez_msig_module on a LEZ v0.3 zone (programs/lez-msig) and lez_msig_v04_module on a v0.4
+    # one (programs/lez-msig/lez04), Rust modules in this repo. muster_module calls the zone's one
     # over lp_* (src/wallet/msig_prover_lp.nim) and declares it optional, so it rides the
     # RUNNER's module set only (runnerUi below); the published muster_ui does not require it,
     # since it builds for linux-amd64 alone. This tree's copy, as muster_module is; `make
     # build` overrides it with an absolute path.
     lez_msig_module.url = "git+file:../?dir=programs/lez-msig";
+    lez_msig_v04_module.url = "git+file:../?dir=programs/lez-msig/lez04";
   };
 
   outputs = inputs@{ logos-module-builder, ... }:
@@ -144,16 +146,16 @@
       };
 
       base = uiWith ./metadata.json;
-      # The runner's muster_ui: the same, with lez_msig_module among its dependencies, because
+      # The runner's muster_ui: the same, with both provers among its dependencies, because
       # the builder puts only `dependencies` in the runner's module set (exo-e77). It is a file
       # beside metadata.json, because the runner reads the icon relative to it; evaluation
-      # refuses it unless it is metadata.json plus lez_msig_module, so the two never drift.
+      # refuses it unless it is metadata.json plus the two provers, so the two never drift.
       runnerUi =
         let cfg = builtins.fromJSON (builtins.readFile ./metadata.json);
             runnerCfg = builtins.fromJSON (builtins.readFile ./metadata.runner.json);
-        in if runnerCfg == cfg // { dependencies = cfg.dependencies ++ [ "lez_msig_module" ]; }
+        in if runnerCfg == cfg // { dependencies = cfg.dependencies ++ [ "lez_msig_module" "lez_msig_v04_module" ]; }
            then uiWith ./metadata.runner.json
-           else throw "ui/metadata.runner.json must be ui/metadata.json with lez_msig_module appended to dependencies";
+           else throw "ui/metadata.runner.json must be ui/metadata.json with lez_msig_module and lez_msig_v04_module appended to dependencies";
 
       nixpkgs = logos-module-builder.inputs.nixpkgs;
 

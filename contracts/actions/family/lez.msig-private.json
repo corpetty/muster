@@ -151,7 +151,7 @@
           "name": "lez_msig_module",
           "party": "instance",
           "class": "infra",
-          "target": "lez_msig_module (LEZ's prover as a Logos module), loaded by the host",
+          "target": "lez_msig_module on a LEZ v0.3 zone, lez_msig_v04_module on a v0.4 one (LEZ's prover as a Logos module, one per line), loaded by the host",
           "field": "",
           "evidence": [
             "module/tests/lez_msig_private_e2e.nim"
@@ -325,7 +325,7 @@
           "name": "lez_msig_module",
           "party": "instance",
           "class": "infra",
-          "target": "lez_msig_module (LEZ's prover as a Logos module), loaded by the host",
+          "target": "lez_msig_module on a LEZ v0.3 zone, lez_msig_v04_module on a v0.4 one (LEZ's prover as a Logos module, one per line), loaded by the host",
           "field": "",
           "evidence": [
             "module/tests/lez_msig_private_e2e.nim"
@@ -386,7 +386,7 @@
         {
           "step": "settle",
           "who": "the member topping up",
-          "does": "lez_msig_topup(account, amount): the lez_msig_module 0.2.0 proves the transfer (mode topup, the payer's public key only); the client signs the message hash with the member's own LEZ key (lez-member/0) and the module sends it (send). Once included, the client seals the fee account's new note to every member (lmsig/<ck>/feenote/<n>/<who>). account may be the ceremony's create key, before anything is disclosed.",
+          "does": "lez_msig_topup(account, amount): the lez_msig_v04_module proves the transfer (mode topup, the payer's public key only); the client signs the message hash with the member's own LEZ key (lez-member/0) and the module sends it (send). Once included, the client seals the fee account's new note to every member (lmsig/<ck>/feenote/<n>/<who>). account may be the ceremony's create key, before anything is disclosed.",
           "signs": "the member's LEZ key signs the privacy-preserving message's hash (BIP-340)",
           "reveals": [
             {
@@ -461,7 +461,7 @@
           "name": "lez_msig_module",
           "party": "instance",
           "class": "infra",
-          "target": "lez_msig_module (LEZ's prover as a Logos module), loaded by the host",
+          "target": "lez_msig_module on a LEZ v0.3 zone, lez_msig_v04_module on a v0.4 one (LEZ's prover as a Logos module, one per line), loaded by the host",
           "field": "",
           "evidence": [
             "module/tests/lez_msig_private_e2e.nim"
@@ -655,7 +655,7 @@
           "name": "lez_msig_module",
           "party": "instance",
           "class": "infra",
-          "target": "lez_msig_module (LEZ's prover as a Logos module), loaded by the host",
+          "target": "lez_msig_module on a LEZ v0.3 zone, lez_msig_v04_module on a v0.4 one (LEZ's prover as a Logos module, one per line), loaded by the host",
           "field": "",
           "evidence": [
             "module/tests/lez_msig_private_e2e.nim"

@@ -12,7 +12,7 @@
 #                                                        # the .lgx files of a catalogue release
 #
 # Options:
-#   --lgx-dir DIR   use muster_module-*.lgx, muster_ui-*.lgx and lez_msig_module-*.lgx from DIR (the files the
+#   --lgx-dir DIR   use muster_module-*.lgx, muster_ui-*.lgx, lez_msig_module-*.lgx and lez_msig_v04_module-*.lgx from DIR (the files the
 #                   catalogue release publishes), instead of building .#lgx-portable here
 #   --out FILE      the AppImage to write (default .run/appimage/Muster-<version>-Basecamp-
 #                   <tag>-linux-x86_64.AppImage)
@@ -51,12 +51,14 @@ mkdir -p "$(dirname "$SRC")"
 echo "$BASECAMP_SHA256  $SRC" | sha256sum -c --quiet
 chmod +x "$SRC"
 
-# 2. muster's packages; lez_msig_module (the private lez-msig's prover, linux-amd64 only,
-#    exo-e77) too, so the AppImage proves a private multisig with nothing to install
+# 2. muster's packages; the private lez-msig's provers too (linux-amd64 only, exo-e77, exo-cc7:
+#    lez_msig_module for LEZ v0.3, lez_msig_v04_module for v0.4), so the AppImage proves a
+#    private multisig on either line with nothing to install
 if [ -n "$LGX_DIR" ]; then
   MOD_LGX=$(ls "$LGX_DIR"/muster_module-*.lgx | tail -1)
   UI_LGX=$(ls "$LGX_DIR"/muster_ui-*.lgx | tail -1)
   MSIG_LGX=$(ls "$LGX_DIR"/lez_msig_module-*.lgx | tail -1)
+  MSIG04_LGX=$(ls "$LGX_DIR"/lez_msig_v04_module-*.lgx | tail -1)
 else
   if [ $ALLOW_DIRTY = 0 ] && ! git diff --quiet HEAD -- module ui; then
     echo "module/ or ui/ has uncommitted changes; commit them (or --allow-dirty for a trial)" >&2; exit 1
@@ -64,8 +66,9 @@ else
   MOD_LGX=$(ls "$( (cd module && nix build .#lgx-portable "${SUB[@]}" --no-link --print-out-paths) | tail -1)"/*.lgx)
   UI_LGX=$(ls "$( (cd ui && nix build .#lgx-portable "${SUB[@]}" --no-link --print-out-paths) | tail -1)"/*.lgx)
   MSIG_LGX=$(ls "$( (cd programs/lez-msig && nix build .#lgx-portable "${SUB[@]}" --no-link --print-out-paths) | tail -1)"/*.lgx)
+  MSIG04_LGX=$(ls "$( (cd programs/lez-msig/lez04 && nix build .#lgx-portable "${SUB[@]}" --no-link --print-out-paths) | tail -1)"/*.lgx)
 fi
-echo "muster: $(basename "$MOD_LGX"), $(basename "$UI_LGX"), $(basename "$MSIG_LGX")"
+echo "muster: $(basename "$MOD_LGX"), $(basename "$UI_LGX"), $(basename "$MSIG_LGX"), $(basename "$MSIG04_LGX")"
 
 # 3. the Logos Official packages they need, each checked
 grep -v '^#' "$BUNDLE" | while IFS=$'\t' read -r pkg url sha; do
@@ -89,7 +92,8 @@ grep -v '^#' "$BUNDLE" | while IFS=$'\t' read -r pkg _ _; do inst "$WORK/lgx/$pk
 inst "$MOD_LGX"
 inst "$UI_LGX"
 inst "$MSIG_LGX"
-for p in muster_module delivery_module lez_core lez_msig_module; do
+inst "$MSIG04_LGX"
+for p in muster_module delivery_module lez_core lez_msig_module lez_msig_v04_module; do
   [ -f "$APPDIR/usr/modules/$p/manifest.json" ] || { echo "$p did not install into the AppDir" >&2; exit 1; }
 done
 [ -f "$APPDIR/usr/plugins/muster_ui/metadata.json" ] || [ -f "$APPDIR/usr/plugins/muster_ui/manifest.json" ] \

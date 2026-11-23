@@ -36,8 +36,13 @@
           pkgs = import nixpkgs { inherit system; };
           # risc0-circuit-recursion 4.0.4 downloads this in build.rs unless RECURSION_SRC_PATH
           # names it; the hash is both its file name and its sha256 (LEZ's flake does the same).
+          # Since 2026-11-23 risc0's bucket answers 403 (exo-ba5), so muster-v0.4.0 carries a copy;
+          # the hash pins the bytes whichever answers, and S3 stays first so the store path holds.
           recursionZkr = pkgs.fetchurl {
-            url = "https://risc0-artifacts.s3.us-west-2.amazonaws.com/zkr/744b999f0a35b3c86753311c7efb2a0054be21727095cf105af6ee7d3f4d8849.zip";
+            urls = [
+              "https://risc0-artifacts.s3.us-west-2.amazonaws.com/zkr/744b999f0a35b3c86753311c7efb2a0054be21727095cf105af6ee7d3f4d8849.zip"
+              "https://github.com/corpetty/muster/releases/download/muster-v0.4.0/744b999f0a35b3c86753311c7efb2a0054be21727095cf105af6ee7d3f4d8849.zip"
+            ];
             sha256 = "744b999f0a35b3c86753311c7efb2a0054be21727095cf105af6ee7d3f4d8849";
           };
           # Put LEZ's artifacts/ where build_utils' upward walk looks from a vendored crate. The

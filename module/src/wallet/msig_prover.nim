@@ -17,15 +17,24 @@ type
   MsigProver* = ref object of RootObj
 
 method health*(p: MsigProver): JsonNode {.base.} =
-  ## The prover's own report: {ok, line ("v0.4" from lez_msig_module 0.2.0; absent before), …}.
+  ## The prover's own report: {ok, line ("v0.4" from lez_msig_v04_module; absent from lez_msig_module, the v0.3 line), …}.
   %*{}
 
+const
+  ProverModuleV03* = "lez_msig_module"      ## 0.1.x, LEZ v0.3 (programs/lez-msig)
+  ProverModuleV04* = "lez_msig_v04_module"  ## 0.2.x, LEZ v0.4 (programs/lez-msig/lez04)
+
+proc proverModuleFor*(zoneLine: string): string =
+  ## The prover module for a zone's LEZ line (exo-cc7). The lines cannot share one build, so
+  ## each is its own module and a host may hold both; muster calls the one its zone needs.
+  if zoneLine == "v0.4": ProverModuleV04 else: ProverModuleV03
+
 proc proverFits*(health: JsonNode, zoneLine: string): tuple[ok: bool, want: string] =
-  ## Whether a prover proves for the zone's LEZ line (exo-cc7). The lines cannot share one build,
-  ## so a host holds lez_msig_module 0.1.0 (v0.3) or 0.2.0 (v0.4), never both. A module that
-  ## answers health without a line is 0.1.0, the v0.3 line; a prover that reports nothing (the
-  ## test CLI, chosen by its caller) is taken at its word. `want` names the version to install.
-  let want = (if zoneLine == "v0.4": "lez_msig_module 0.2.0 (LEZ v0.4)" else: "lez_msig_module 0.1.0 (LEZ v0.3)")
+  ## Whether a prover proves for the zone's LEZ line (exo-cc7): a guard on what the chosen
+  ## module reports of itself. A module that answers health without a line is the v0.3 one; a
+  ## prover that reports nothing (the test CLI, chosen by its caller) is taken at its word.
+  ## `want` names the module to install.
+  let want = proverModuleFor(zoneLine) & (if zoneLine == "v0.4": " (LEZ v0.4)" else: " (LEZ v0.3)")
   if health.kind != JObject or not health.hasKey("ok"): return (true, want)
   let line = health{"line"}.getStr("v0.3")
   (line == (if zoneLine == "v0.4": "v0.4" else: "v0.3"), want)
@@ -34,7 +43,7 @@ method derive*(p: MsigProver, req: JsonNode): JsonNode {.base.} =
   %*{"error": "unavailable", "detail": "no prover"}
 method submit*(p: MsigProver, req: JsonNode): JsonNode {.base.} =
   ## {mode: exec | fund | topup | scan, …} → {job} at once, or {error, detail}. topup is the LEZ
-  ## v0.4 line's (lez_msig_module 0.2.0).
+  ## v0.4 line's (lez_msig_v04_module).
   %*{"error": "unavailable", "detail": "no prover"}
 method job*(p: MsigProver, id: string): JsonNode {.base.} =
   ## {state: proving | done | failed, …the mode's answer} or {error}.

@@ -122,6 +122,12 @@ proc lezMsigAccountOf*(chain, address, config: string): tuple[ok: bool, account:
 
 proc newLezMsigDriver*(a: LezMsigAccount): LezMsigDriver = LezMsigDriver(account: a)
 
+var lezMsigProverFor*: proc(chain: string): string {.nimcall.} = proc(chain: string): string = "lez_msig_module"
+  ## The prover module a private lez-msig on `chain` needs (exo-cc7): `lez_msig_module` on a LEZ
+  ## v0.3 zone, `lez_msig_v04_module` on a v0.4 one. The driver is built from the room and
+  ## cannot read a zone's line, so the host sets this once it can (muster_module); unset, it
+  ## names the v0.3 module.
+
 # ── the effect ────────────────────────────────────────────────────────────────
 proc lezMsigEffect*(p: MsigProposal, payee: seq[byte] = @[]): string =
   ## The room's effect for a proposal: its exact bytes, and for a payment to a private payee on
@@ -412,11 +418,13 @@ method manifest*(d: LezMsigDriver, effect: Effect): ActionManifest =
       else: discard
   except CatchableError: discard
   if d.account.private:
-    # proved by the lez_msig_module; the chain sees a nullifier, a commitment and a proof, and
+    var prover: string
+    {.cast(gcsafe).}: prover = lezMsigProverFor(d.account.chain)   # set once by the host, read only
+    # proved by the zone line's prover module; the chain sees a nullifier, a commitment and a proof, and
     # only a public payee's credit (its amount and payee) in the clear
     return ActionManifest(declared: true, agreement: d.describeFor(effect),
       requirements: @[req(rqEnvironment, d.account.chain), req(rqInfra, "lez-sequencer-rpc"),
-                      req(rqModule, "lez_msig_module"), req(rqAuthority, "lez-msig-key", rpContributor)],
+                      req(rqModule, prover), req(rqAuthority, "lez-msig-key", rpContributor)],
       discloses: @[row("payee-and-amount", obChainObserver), row("signed-tx", obRpcProvider)],
       touches: touches)
   ActionManifest(declared: true, agreement: d.describeFor(effect),

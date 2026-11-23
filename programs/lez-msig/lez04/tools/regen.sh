@@ -10,5 +10,5 @@ locked=$(nix flake metadata --json github:logos-co/logos-module-builder/0.3.3 \
 [ "$locked" = "$REV" ] || { echo "builder 0.3.3 locks logos-rust-sdk $locked; Cargo.toml pins $REV" >&2; exit 1; }
 gen=$(nix build --no-link --print-out-paths "github:logos-co/logos-rust-sdk/$REV#lidl-gen")
 mkdir -p generated
-"$gen/bin/logos-lidl-gen" lez_msig_module.lidl --provider --protocol-version 0.9.0 -o generated/provider_gen.rs
-echo "generated/provider_gen.rs from lez_msig_module.lidl (logos-rust-sdk ${REV:0:8})"
+"$gen/bin/logos-lidl-gen" lez_msig_v04_module.lidl --provider --protocol-version 0.9.0 -o generated/provider_gen.rs
+echo "generated/provider_gen.rs from lez_msig_v04_module.lidl (logos-rust-sdk ${REV:0:8})"

@@ -3411,7 +3411,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "lez_msig_module"
+name = "lez_msig_v04_module"
 version = "0.2.0"
 dependencies = [
  "hex",
