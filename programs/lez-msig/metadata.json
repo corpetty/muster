@@ -1,7 +1,7 @@
 {
   "name": "lez_msig_module",
   "display_name": "LEZ Multisig Prover",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Proves and sends lez-msig's private transactions on a LEZ v0.3 zone, for Muster.",
   "author": "Muster",
   "type": "core",

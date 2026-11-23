@@ -298,6 +298,21 @@ if extra:
     sys.exit(f"index lists packages that are not ours: {sorted(extra)}")
 EOF
 
+# One version, one build: a package rebuilt with different bytes under a version already
+# published (e.g. a prover whose code changed but whose version did not) is two packages that
+# Basecamp cannot tell apart. Bump the version in its metadata.json and .lidl instead.
+python3 - "$OUT/index.json" <<'EOF'
+import json, sys
+seen = {}
+for p in json.load(open(sys.argv[1]))["packages"]:
+    for v in p["versions"]:
+        key = (p["name"], v["manifest"]["version"])
+        seen.setdefault(key, set()).add(v["rootHash"])
+dup = sorted(f"{n} {ver}" for (n, ver), roots in seen.items() if len(roots) > 1)
+if dup:
+    sys.exit("one version, two builds (bump the version): " + ", ".join(dup))
+EOF
+
 echo
 echo "commit $COMMIT, version $VERSION"
 for pkg in $PACKAGES; do

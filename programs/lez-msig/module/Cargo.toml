@@ -1,6 +1,6 @@
 [package]
 name = "lez_msig_module"
-version = "0.1.0"
+version = "0.1.1"
 edition.workspace = true
 license.workspace = true
 description = "lez-msig's private posture as a Logos module: proves and sends its privacy-preserving transactions."
