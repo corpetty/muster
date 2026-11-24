@@ -16,6 +16,8 @@ import ../src/crypto/epoch_crypto
 import ../src/crypto/keystore
 import ../src/crypto/curve25519
 import ../src/coordination/session
+import ../src/coordination/live
+import ../src/crypto/binding
 import ../src/coordination/intents
 import ../src/coordination/invoker
 import ../src/drivers/driver as drivercore
@@ -59,9 +61,15 @@ bobCrypto.ingestGrant(aliceCrypto.grantFor(0, bobEnc))
 let alice = newCoordinationSession(newLocalTransport(net), aliceCrypto, topic)
 let bob = newCoordinationSession(newLocalTransport(net), bobCrypto, topic)
 
+# The room is driven the way the hosted surface drives it (exo-af5): propose through
+# liveProposeIntent (the policy, the propose, the signed proposer claim and context), and
+# approve in-app through liveContribute (the endorsement plus its attestation over P). The
+# invoke driver is room-bound, so an approval with no attestation would count for nothing.
+const Now = 1_700_000_000'u64
+let bindCtx = LinkContext(account: topic, slot: "0", expiry: high(uint64))
+
 # 1. Alice proposes the invoke intent; Bob recovers the effect from the shared log.
-alice.publish(policyDeclEvent(id, "invoke"))
-alice.publish(proposeEvent(id, effectJson))
+doAssert liveProposeIntent(alice, aliceKs, foldDrv, "invoke", effectJson, int64(Now), 1, topic) == id
 doAssert effectJsonOf(bob.log.allEvents(), id) == effectJson, "Bob recovers the invoke effect"
 doAssert intentState(bob.log.allEvents(), foldDrv, id) == "proposed"
 echo "1. invoke intent proposed; effect propagates OK"
@@ -70,13 +78,13 @@ echo "1. invoke intent proposed; effect propagates OK"
 let aliceSig = toHex(edSign(aliceMem, mat.bytes))
 let who0 = contributorOf(drv, effectJson, aliceSig)
 doAssert who0.len > 0, "alice's endorsement identifies a roster member"
-alice.publish(contributeEvent(id, who0, aliceSig))
+doAssert liveContribute(alice, aliceKs, foldDrv, id, "", "", bindCtx, Now) == "collecting"
 doAssert intentState(alice.log.allEvents(), foldDrv, id) == "collecting"
 
 let bobSig = toHex(edSign(bobMem, mat.bytes))
 let who1 = contributorOf(drv, effectJson, bobSig)
 doAssert who1.len > 0 and who1 != who0, "bob is a distinct roster member"
-bob.publish(contributeEvent(id, who1, bobSig))
+doAssert liveContribute(bob, bobKs, foldDrv, id, "", "", bindCtx, Now) == "executable"
 let aState = intentState(alice.log.allEvents(), foldDrv, id)
 let bState = intentState(bob.log.allEvents(), foldDrv, id)
 doAssert aState == "executable" and bState == "executable", "k-of-n met -> executable both"
@@ -114,14 +122,15 @@ block:
     "a different action canonicalizes to different signed bytes (invariant 5 domain separation)"
   doAssert vid != id, "a distinct content-addressed intent"
 
-  alice.publish(policyDeclEvent(vid, "invoke"))
-  alice.publish(proposeEvent(vid, voteJson))
+  doAssert liveProposeIntent(alice, aliceKs, foldDrv, "invoke", voteJson, int64(Now), 2, topic) == vid
   doAssert effectJsonOf(bob.log.allEvents(), vid) == voteJson, "Bob recovers the second action's effect"
 
   let vaSig = toHex(edSign(aliceMem, vmat.bytes))
   let vbSig = toHex(edSign(bobMem, vmat.bytes))
-  alice.publish(contributeEvent(vid, contributorOf(drv, voteJson, vaSig), vaSig))
-  bob.publish(contributeEvent(vid, contributorOf(drv, voteJson, vbSig), vbSig))
+  doAssert contributorOf(drv, voteJson, vaSig).len > 0 and contributorOf(drv, voteJson, vbSig).len > 0,
+    "both endorsements identify roster members"
+  discard liveContribute(alice, aliceKs, foldDrv, vid, "", "", bindCtx, Now)
+  discard liveContribute(bob, bobKs, foldDrv, vid, "", "", bindCtx, Now)
   doAssert intentState(alice.log.allEvents(), foldDrv, vid) == "executable" and
            intentState(bob.log.allEvents(), foldDrv, vid) == "executable",
            "the second action reaches executable over the same driver"

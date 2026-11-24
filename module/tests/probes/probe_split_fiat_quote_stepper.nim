@@ -83,21 +83,25 @@ proc correct(k: int): bool =
     var qq = q.quote
     qq.source = src
     qq.at = $at
-    splitEffectJson(chain, asset, t, alice, payTo, evenShares(t, alice, @[bob, carol], distinctAmounts = lez),
+    # every share distinct, in every family (exo-3b3.14): the second debtor owes one unit less
+    splitEffectJson(chain, asset, t, alice, payTo, evenShares(t, alice, @[bob, carol]),
                     "fiat " & $k, qq)
   let refusal = drv.signRefusal(effectFromJson(splitOf(total)))
-  let dust = btc and u256(total) div 3.u256 < 546.u256
-  if dust: (if "dust" notin refusal: return false)
+  let each = u256(total) div 3.u256
+  let tooSmall = each < 2.u256                                   # two distinct shares of at least 1
+  let dust = btc and not tooSmall and each - 1.u256 < 546.u256  # the smaller share decides dust
+  if tooSmall: (if refusal.len == 0: return false)
+  elif dust: (if "dust" notin refusal: return false)
   elif refusal.len > 0: return false
   if drv.signRefusal(effectFromJson(splitOf($(u256(total) + 1.u256)))).len == 0: return false
   if total != "1" and drv.signRefusal(effectFromJson(splitOf($(u256(total) - 1.u256)))).len == 0: return false
-  if not dust:
+  if not dust and not tooSmall:
     let base = canonicalize(drv, effectFromJson(splitOf(total))).bytes
     if canonicalize(drv, effectFromJson(splitOf(total, src = "another source"))).bytes == base: return false
     if canonicalize(drv, effectFromJson(splitOf(total, at = At + 1))).bytes == base: return false
     if decode(base).arr.len != 10: return false
   # invariant 10, over the live path: the quote counts only as a recorded read (all but BTC)
-  if not btc and not dust:
+  if not btc and not dust and not tooSmall:
     var r = newRoom4("/muster/1/probe-fiat-" & $k & "/proto")
     let policy = (if lez: LezPolicy else: EvmPolicy)
     let account = (if lez: LezChain else: EvmChain & ":" & AlicePayTo)

@@ -20,6 +20,7 @@ import ../transport/inbound_queue # foreign-thread-safe result hand-off (as deli
 import ./types
 import ./lez_core
 import ./lez_encoding
+import ../security/private_files   # the wallet folder: 0700, ours (exo-3b3.16)
 
 const
   kReadMs  = cint(15_000)         ## Zone.h: a read that doesn't prove
@@ -76,6 +77,14 @@ proc newLpLezCore*(instancePath: string, origin = "muster_module", sequencer = "
   ## at https://testnet.lez.logos.co). `sequencer` (this instance's LEZ zone, the
   ## lez-rpc setting) sets only its sequencer, when it differs (exo-eb6.4: a local v0.3
   ## chain), always before lez_core reads it. Raises if lez_core can't be reached.
+  # The wallet's keys live in this folder (lez_core writes them with its own modes, and an
+  # empty password): only this user may enter it, and a folder someone else made or linked
+  # here is refused rather than used, before any client is made (exo-3b3.16, audit P4-03).
+  if instancePath.len == 0:
+    raise newException(WalletError, "lez_core: no instance folder for the wallet")
+  try: ensureOwnPrivateDir(instancePath / "lez")
+  except PrivateFileError as e:
+    raise newException(WalletError, "lez_core wallet folder: " & e.msg)
   let client = lp_client_create("lez_core", origin.cstring, nil, nil)
   if client == nil:
     raise newException(WalletError, "lez_core: lp_client_create returned null (module not loaded?)")
@@ -95,7 +104,6 @@ proc newLpLezCore*(instancePath: string, origin = "muster_module", sequencer = "
   else:
     let fresh = newWalletConfig(sequencer)
     if fresh.len > 0:
-      createDir(instancePath / "lez")
       writeFile(cfg, fresh)
   # open() returns int 0 on success; if it fails (no wallet yet), create_new().
   let opened = result.rawCall("open", args(%cfg, %sto, %sta), kReadMs)

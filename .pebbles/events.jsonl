@@ -3025,5 +3025,107 @@
 {"type":"close","timestamp":"2026-11-23T18:50:46.334725235Z","issue_id":"exo-ba5","payload":{}}
 {"type":"comment","timestamp":"2026-11-23T18:50:46.614746822Z","issue_id":"exo-05f","payload":{"body":"Shipped in muster-v0.4.0: D17 fees in the proof from a GMS-derived fee account, D18 undisclosed program, deposits from outside by claims with a cursor, private payees from the room (exo-ea3); on LEE state, a local zone and the devnet with real proofs, and through the real UI. Follow-ups: exo-0db (Call from the room), exo-8ef (fee-account balance)."}}
 {"type":"close","timestamp":"2026-11-23T18:50:46.882845313Z","issue_id":"exo-05f","payload":{}}
+{"type":"create","timestamp":"2026-11-23T19:41:35.361086916Z","issue_id":"exo-3b3","payload":{"description":"Findings of an external security review of 0.4.0 (e94568d), fixed in 0.5.0. The room's grants and envelopes are now signed and checked against membership at ingest (FS-2); approvals under room-bound drivers need a room attestation; and the FROST, split, keystore and local-API findings are fixed or named as gaps. Design: docs/design/signed-room-wire.md. 0.5.0 cannot read 0.4.x rooms.","priority":"0","title":"Security review 2026-11-22: room wire, signing path, FROST, settlement, local surface; release 0.5.0","type":"epic"}}
+{"type":"create","timestamp":"2026-11-23T19:41:57.471181162Z","issue_id":"exo-262","payload":{"description":"Epoch grants: signed by the admitter, bound to the room, taken only as the next epoch","priority":"0","title":"Epoch grants: signed by the admitter, bound to the room, taken only as the next epoch","type":"bug"}}
+{"type":"rename","timestamp":"2026-11-23T19:41:57.728340206Z","issue_id":"exo-262","payload":{"new_id":"exo-3b3.1"}}
+{"type":"dep_add","timestamp":"2026-11-23T19:41:57.728340206Z","issue_id":"exo-3b3.1","payload":{"dep_type":"parent-child","depends_on":"exo-3b3"}}
+{"type":"create","timestamp":"2026-11-23T19:41:58.014381865Z","issue_id":"exo-4147","payload":{"description":"Envelopes signed by their sender; sender and authors must be members of the epoch (FS-2)","priority":"0","title":"Envelopes signed by their sender; sender and authors must be members of the epoch (FS-2)","type":"bug"}}
+{"type":"dep_add","timestamp":"2026-11-23T19:41:58.295550619Z","issue_id":"exo-3b3.2","payload":{"dep_type":"parent-child","depends_on":"exo-3b3"}}
+{"type":"rename","timestamp":"2026-11-23T19:41:58.295550619Z","issue_id":"exo-4147","payload":{"new_id":"exo-3b3.2"}}
+{"type":"create","timestamp":"2026-11-23T19:41:58.590256688Z","issue_id":"exo-cd3","payload":{"description":"Wire decoders bounded and fuzzed; the dispatch reports a Defect as an error","priority":"1","title":"Wire decoders bounded and fuzzed; the dispatch reports a Defect as an error","type":"bug"}}
+{"type":"dep_add","timestamp":"2026-11-23T19:41:58.856653653Z","issue_id":"exo-3b3.3","payload":{"dep_type":"parent-child","depends_on":"exo-3b3"}}
+{"type":"rename","timestamp":"2026-11-23T19:41:58.856653653Z","issue_id":"exo-cd3","payload":{"new_id":"exo-3b3.3"}}
+{"type":"create","timestamp":"2026-11-23T19:41:59.099804802Z","issue_id":"exo-a16","payload":{"description":"Concurrent re-keys converge; every client enforces the room's removals","priority":"1","title":"Concurrent re-keys converge; every client enforces the room's removals","type":"bug"}}
+{"type":"dep_add","timestamp":"2026-11-23T19:41:59.384510875Z","issue_id":"exo-3b3.4","payload":{"dep_type":"parent-child","depends_on":"exo-3b3"}}
+{"type":"rename","timestamp":"2026-11-23T19:41:59.384510875Z","issue_id":"exo-a16","payload":{"new_id":"exo-3b3.4"}}
+{"type":"create","timestamp":"2026-11-23T19:41:59.621407853Z","issue_id":"exo-5b5","payload":{"description":"Inbox takes invites only; journal keeps accepted frames; caps on held queues","priority":"2","title":"Inbox takes invites only; journal keeps accepted frames; caps on held queues","type":"bug"}}
+{"type":"dep_add","timestamp":"2026-11-23T19:41:59.928073226Z","issue_id":"exo-3b3.5","payload":{"dep_type":"parent-child","depends_on":"exo-3b3"}}
+{"type":"rename","timestamp":"2026-11-23T19:41:59.928073226Z","issue_id":"exo-5b5","payload":{"new_id":"exo-3b3.5"}}
+{"type":"create","timestamp":"2026-11-23T19:42:00.18624692Z","issue_id":"exo-045","payload":{"description":"Membership records signed by the member who re-keyed","priority":"2","title":"Membership records signed by the member who re-keyed","type":"bug"}}
+{"type":"rename","timestamp":"2026-11-23T19:42:00.46828808Z","issue_id":"exo-045","payload":{"new_id":"exo-3b3.6"}}
+{"type":"dep_add","timestamp":"2026-11-23T19:42:00.46828808Z","issue_id":"exo-3b3.6","payload":{"dep_type":"parent-child","depends_on":"exo-3b3"}}
+{"type":"create","timestamp":"2026-11-23T19:42:00.735206745Z","issue_id":"exo-3e0","payload":{"description":"Epoch probes over the shipped EpochCrypto, adversarial inputs included","priority":"2","title":"Epoch probes over the shipped EpochCrypto, adversarial inputs included","type":"bug"}}
+{"type":"dep_add","timestamp":"2026-11-23T19:42:01.042701175Z","issue_id":"exo-3b3.7","payload":{"dep_type":"parent-child","depends_on":"exo-3b3"}}
+{"type":"rename","timestamp":"2026-11-23T19:42:01.042701175Z","issue_id":"exo-3e0","payload":{"new_id":"exo-3b3.7"}}
+{"type":"create","timestamp":"2026-11-23T19:42:01.340499434Z","issue_id":"exo-ea8","payload":{"description":"Intent context and reads signed; only a proposer's count","priority":"1","title":"Intent context and reads signed; only a proposer's count","type":"bug"}}
+{"type":"dep_add","timestamp":"2026-11-23T19:42:01.62077412Z","issue_id":"exo-3b3.8","payload":{"dep_type":"parent-child","depends_on":"exo-3b3"}}
+{"type":"rename","timestamp":"2026-11-23T19:42:01.62077412Z","issue_id":"exo-ea8","payload":{"new_id":"exo-3b3.8"}}
+{"type":"create","timestamp":"2026-11-23T19:42:01.872683362Z","issue_id":"exo-af5","payload":{"description":"Room-bound approvals count only with a room attestation; round 2 follows only one's own","priority":"1","title":"Room-bound approvals count only with a room attestation; round 2 follows only one's own","type":"bug"}}
+{"type":"dep_add","timestamp":"2026-11-23T19:42:02.160130958Z","issue_id":"exo-3b3.9","payload":{"dep_type":"parent-child","depends_on":"exo-3b3"}}
+{"type":"rename","timestamp":"2026-11-23T19:42:02.160130958Z","issue_id":"exo-af5","payload":{"new_id":"exo-3b3.9"}}
+{"type":"create","timestamp":"2026-11-23T19:42:02.455591202Z","issue_id":"exo-83c","payload":{"description":"A failing attestation never voids an approval; LEZ vote attestation binding","priority":"2","title":"A failing attestation never voids an approval; LEZ vote attestation binding","type":"bug"}}
+{"type":"dep_add","timestamp":"2026-11-23T19:42:02.717305265Z","issue_id":"exo-3b3.10","payload":{"dep_type":"parent-child","depends_on":"exo-3b3"}}
+{"type":"rename","timestamp":"2026-11-23T19:42:02.717305265Z","issue_id":"exo-83c","payload":{"new_id":"exo-3b3.10"}}
+{"type":"create","timestamp":"2026-11-23T19:42:02.983585657Z","issue_id":"exo-c38","payload":{"description":"Intent id as a 128-bit domain-separated record","priority":"2","title":"Intent id as a 128-bit domain-separated record","type":"bug"}}
+{"type":"dep_add","timestamp":"2026-11-23T19:42:03.254241026Z","issue_id":"exo-3b3.11","payload":{"dep_type":"parent-child","depends_on":"exo-3b3"}}
+{"type":"rename","timestamp":"2026-11-23T19:42:03.254241026Z","issue_id":"exo-c38","payload":{"new_id":"exo-3b3.11"}}
+{"type":"create","timestamp":"2026-11-23T19:42:03.518832105Z","issue_id":"exo-ffc","payload":{"description":"Safe fields parsed strictly; gas refunds refused","priority":"2","title":"Safe fields parsed strictly; gas refunds refused","type":"bug"}}
+{"type":"dep_add","timestamp":"2026-11-23T19:42:03.767196126Z","issue_id":"exo-3b3.12","payload":{"dep_type":"parent-child","depends_on":"exo-3b3"}}
+{"type":"rename","timestamp":"2026-11-23T19:42:03.767196126Z","issue_id":"exo-ffc","payload":{"new_id":"exo-3b3.12"}}
+{"type":"create","timestamp":"2026-11-23T19:42:04.066988995Z","issue_id":"exo-2ef","payload":{"description":"FROST ceremony: one host per member, signed open and steps, joins commit to the terms","priority":"0","title":"FROST ceremony: one host per member, signed open and steps, joins commit to the terms","type":"bug"}}
+{"type":"rename","timestamp":"2026-11-23T19:42:04.344664981Z","issue_id":"exo-2ef","payload":{"new_id":"exo-3b3.13"}}
+{"type":"dep_add","timestamp":"2026-11-23T19:42:04.344664981Z","issue_id":"exo-3b3.13","payload":{"dep_type":"parent-child","depends_on":"exo-3b3"}}
+{"type":"create","timestamp":"2026-11-23T19:42:04.592314798Z","issue_id":"exo-f7e","payload":{"description":"Split payments identify their part; references canonical and unique across rooms","priority":"1","title":"Split payments identify their part; references canonical and unique across rooms","type":"bug"}}
+{"type":"dep_add","timestamp":"2026-11-23T19:42:04.898446391Z","issue_id":"exo-3b3.14","payload":{"dep_type":"parent-child","depends_on":"exo-3b3"}}
+{"type":"rename","timestamp":"2026-11-23T19:42:04.898446391Z","issue_id":"exo-f7e","payload":{"new_id":"exo-3b3.14"}}
+{"type":"create","timestamp":"2026-11-23T19:42:05.165524339Z","issue_id":"exo-1c9","payload":{"description":"Settle-up sums overflow-checked; strict tx_sender legs and RPC quantities; EVM confirmation depth","priority":"2","title":"Settle-up sums overflow-checked; strict tx_sender legs and RPC quantities; EVM confirmation depth","type":"bug"}}
+{"type":"rename","timestamp":"2026-11-23T19:42:05.444712724Z","issue_id":"exo-1c9","payload":{"new_id":"exo-3b3.15"}}
+{"type":"dep_add","timestamp":"2026-11-23T19:42:05.444712724Z","issue_id":"exo-3b3.15","payload":{"dep_type":"parent-child","depends_on":"exo-3b3"}}
+{"type":"create","timestamp":"2026-11-23T19:42:05.734317473Z","issue_id":"exo-cb1c","payload":{"description":"Keyfile written atomically 0600; passphrase never echoed; LEZ wallet private","priority":"1","title":"Keyfile written atomically 0600; passphrase never echoed; LEZ wallet private","type":"bug"}}
+{"type":"dep_add","timestamp":"2026-11-23T19:42:06.026460311Z","issue_id":"exo-3b3.16","payload":{"dep_type":"parent-child","depends_on":"exo-3b3"}}
+{"type":"rename","timestamp":"2026-11-23T19:42:06.026460311Z","issue_id":"exo-cb1c","payload":{"new_id":"exo-3b3.16"}}
+{"type":"create","timestamp":"2026-11-23T19:42:06.297973026Z","issue_id":"exo-9d5","payload":{"description":"Local callers: file sharing paths restricted; access policy where we launch; caller identity gap named","priority":"1","title":"Local callers: file sharing paths restricted; access policy where we launch; caller identity gap named","type":"bug"}}
+{"type":"dep_add","timestamp":"2026-11-23T19:42:06.57763078Z","issue_id":"exo-3b3.17","payload":{"dep_type":"parent-child","depends_on":"exo-3b3"}}
+{"type":"rename","timestamp":"2026-11-23T19:42:06.57763078Z","issue_id":"exo-9d5","payload":{"new_id":"exo-3b3.17"}}
+{"type":"create","timestamp":"2026-11-23T19:42:06.867541925Z","issue_id":"exo-e6d","payload":{"description":"Peer text as plain text; no typed cards from chat; invoke arguments shown; aliases and file names cleaned","priority":"2","title":"Peer text as plain text; no typed cards from chat; invoke arguments shown; aliases and file names cleaned","type":"bug"}}
+{"type":"dep_add","timestamp":"2026-11-23T19:42:07.138472609Z","issue_id":"exo-3b3.18","payload":{"dep_type":"parent-child","depends_on":"exo-3b3"}}
+{"type":"rename","timestamp":"2026-11-23T19:42:07.138472609Z","issue_id":"exo-e6d","payload":{"new_id":"exo-3b3.18"}}
+{"type":"create","timestamp":"2026-11-23T19:42:07.438092614Z","issue_id":"exo-2f0","payload":{"description":"CI: every action and tool pinned to a commit","priority":"3","title":"CI: every action and tool pinned to a commit","type":"bug"}}
+{"type":"rename","timestamp":"2026-11-23T19:42:07.735766831Z","issue_id":"exo-2f0","payload":{"new_id":"exo-3b3.19"}}
+{"type":"dep_add","timestamp":"2026-11-23T19:42:07.735766831Z","issue_id":"exo-3b3.19","payload":{"dep_type":"parent-child","depends_on":"exo-3b3"}}
 {"type":"create","timestamp":"2026-11-23T20:54:36.237549436Z","issue_id":"exo-2b8","payload":{"description":"bugger hard-reset twice on 2026-11-23 under parallel run-suite.sh fan-out; uncorrected MCEs (poison, SIGBUS to cc1/nim) before each reset. Add a doctrine rule capping concurrent heavy work on bugger until the hardware is fixed.","priority":"1","title":"doctrine: throttle parallel load on bugger (failing memory)","type":"task"}}
 {"type":"close","timestamp":"2026-11-23T20:58:10.859632834Z","issue_id":"exo-2b8","payload":{}}
+{"type":"create","timestamp":"2026-11-24T02:01:15.613723693Z","issue_id":"exo-42f","payload":{"description":"Graded committed today on any valid room-key signature over P; bind it to the member who disclosed the voting account. Grading only: the vote is counted from the chain.","priority":"2","title":"A LEZ vote's room attestation bound to the voter's disclosed account","type":"task"}}
+{"type":"dep_add","timestamp":"2026-11-24T02:01:15.905181399Z","issue_id":"exo-3b3.20","payload":{"dep_type":"parent-child","depends_on":"exo-3b3"}}
+{"type":"rename","timestamp":"2026-11-24T02:01:15.905181399Z","issue_id":"exo-42f","payload":{"new_id":"exo-3b3.20"}}
+{"type":"create","timestamp":"2026-11-24T02:01:16.182763822Z","issue_id":"exo-26e","payload":{"description":"Named as a gap in the claims registry. Needs a live Basecamp to verify that opening the keyfile behind signer_manager_module's unlock cannot lock a person out of their identity.","priority":"2","title":"The keyfile sealed under a platform-held secret instead of a built-in passphrase","type":"task"}}
+{"type":"rename","timestamp":"2026-11-24T02:01:16.482250682Z","issue_id":"exo-26e","payload":{"new_id":"exo-3b3.21"}}
+{"type":"dep_add","timestamp":"2026-11-24T02:01:16.482250682Z","issue_id":"exo-3b3.21","payload":{"dep_type":"parent-child","depends_on":"exo-3b3"}}
+{"type":"create","timestamp":"2026-11-24T02:01:16.767650325Z","issue_id":"exo-1dd","payload":{"description":"An invoke intent needs min(2,n) endorsements, and any member may admit, so one person with two identities meets it alone. Both show in the roster.","priority":"2","title":"Invoke threshold and admission follow the room's charter","type":"task"}}
+{"type":"rename","timestamp":"2026-11-24T02:01:17.057409106Z","issue_id":"exo-1dd","payload":{"new_id":"exo-3b3.22"}}
+{"type":"dep_add","timestamp":"2026-11-24T02:01:17.057409106Z","issue_id":"exo-3b3.22","payload":{"dep_type":"parent-child","depends_on":"exo-3b3"}}
+{"type":"create","timestamp":"2026-11-24T02:01:18.842332006Z","issue_id":"exo-0d7","payload":{"description":"The cross-room ledger and distinct shares make a payment identify its part; an older payment of exactly the share to the same address would still match.","priority":"2","title":"A split payment must be newer than its proposal","type":"task"}}
+{"type":"rename","timestamp":"2026-11-24T02:01:19.657282144Z","issue_id":"exo-0d7","payload":{"new_id":"exo-3b3.23"}}
+{"type":"dep_add","timestamp":"2026-11-24T02:01:19.657282144Z","issue_id":"exo-3b3.23","payload":{"dep_type":"parent-child","depends_on":"exo-3b3"}}
+{"type":"create","timestamp":"2026-11-24T02:01:19.909810803Z","issue_id":"exo-eec","payload":{"description":"The legs are checked (to, value, data as strings, chainId and from); send is not yet tied to the exact prepared transaction.","priority":"2","title":"tx_sender: send bound to a digest of what prepare returned","type":"task"}}
+{"type":"dep_add","timestamp":"2026-11-24T02:01:20.732431624Z","issue_id":"exo-3b3.24","payload":{"dep_type":"parent-child","depends_on":"exo-3b3"}}
+{"type":"rename","timestamp":"2026-11-24T02:01:20.732431624Z","issue_id":"exo-eec","payload":{"new_id":"exo-3b3.24"}}
+{"type":"create","timestamp":"2026-11-24T02:01:21.028405619Z","issue_id":"exo-284","payload":{"description":"Covered today only by the rule that a reference two parties report confirms neither.","priority":"2","title":"Settle-up: equal net transfers to one recipient identify their part","type":"task"}}
+{"type":"rename","timestamp":"2026-11-24T02:01:21.342089429Z","issue_id":"exo-284","payload":{"new_id":"exo-3b3.25"}}
+{"type":"dep_add","timestamp":"2026-11-24T02:01:21.342089429Z","issue_id":"exo-3b3.25","payload":{"dep_type":"parent-child","depends_on":"exo-3b3"}}
+{"type":"create","timestamp":"2026-11-24T02:01:21.612013214Z","issue_id":"exo-d13","payload":{"description":"Today such a member takes no further grant and has to leave and rejoin the room.","priority":"2","title":"A member away for more than 16 re-keys can rejoin without leaving","type":"task"}}
+{"type":"dep_add","timestamp":"2026-11-24T02:01:21.944572261Z","issue_id":"exo-3b3.26","payload":{"dep_type":"parent-child","depends_on":"exo-3b3"}}
+{"type":"rename","timestamp":"2026-11-24T02:01:21.944572261Z","issue_id":"exo-d13","payload":{"new_id":"exo-3b3.26"}}
+{"type":"create","timestamp":"2026-11-24T02:01:22.262496948Z","issue_id":"exo-32b","payload":{"description":"A member who asks to join by name takes the first valid grant addressed to it; an invite pins the inviter, a name does not.","priority":"2","title":"Joining by name: pin the room, not only the first grant","type":"task"}}
+{"type":"rename","timestamp":"2026-11-24T02:01:22.529708077Z","issue_id":"exo-32b","payload":{"new_id":"exo-3b3.27"}}
+{"type":"dep_add","timestamp":"2026-11-24T02:01:22.529708077Z","issue_id":"exo-3b3.27","payload":{"dep_type":"parent-child","depends_on":"exo-3b3"}}
+{"type":"close","timestamp":"2026-11-24T02:01:28.748999578Z","issue_id":"exo-3b3.1","payload":{}}
+{"type":"close","timestamp":"2026-11-24T02:01:29.040487203Z","issue_id":"exo-3b3.2","payload":{}}
+{"type":"close","timestamp":"2026-11-24T02:01:29.305131539Z","issue_id":"exo-3b3.3","payload":{}}
+{"type":"close","timestamp":"2026-11-24T02:01:29.576505332Z","issue_id":"exo-3b3.4","payload":{}}
+{"type":"close","timestamp":"2026-11-24T02:01:29.87207962Z","issue_id":"exo-3b3.5","payload":{}}
+{"type":"close","timestamp":"2026-11-24T02:01:30.151812014Z","issue_id":"exo-3b3.6","payload":{}}
+{"type":"close","timestamp":"2026-11-24T02:01:30.448930234Z","issue_id":"exo-3b3.7","payload":{}}
+{"type":"close","timestamp":"2026-11-24T02:01:30.698730726Z","issue_id":"exo-3b3.8","payload":{}}
+{"type":"close","timestamp":"2026-11-24T02:01:30.965627818Z","issue_id":"exo-3b3.9","payload":{}}
+{"type":"close","timestamp":"2026-11-24T02:01:31.234984669Z","issue_id":"exo-3b3.11","payload":{}}
+{"type":"close","timestamp":"2026-11-24T02:01:31.553868514Z","issue_id":"exo-3b3.12","payload":{}}
+{"type":"close","timestamp":"2026-11-24T02:01:31.831011205Z","issue_id":"exo-3b3.13","payload":{}}
+{"type":"close","timestamp":"2026-11-24T02:01:32.120248734Z","issue_id":"exo-3b3.14","payload":{}}
+{"type":"close","timestamp":"2026-11-24T02:01:32.431966512Z","issue_id":"exo-3b3.15","payload":{}}
+{"type":"close","timestamp":"2026-11-24T02:01:32.729022411Z","issue_id":"exo-3b3.16","payload":{}}
+{"type":"close","timestamp":"2026-11-24T02:01:33.008615312Z","issue_id":"exo-3b3.17","payload":{}}
+{"type":"close","timestamp":"2026-11-24T02:01:33.277050094Z","issue_id":"exo-3b3.18","payload":{}}
+{"type":"close","timestamp":"2026-11-24T02:01:33.551360927Z","issue_id":"exo-3b3.19","payload":{}}
+{"type":"comment","timestamp":"2026-11-24T02:01:33.850641841Z","issue_id":"exo-3b3.10","payload":{"body":"A failing attestation no longer voids an approval (fixed). The LEZ vote attestation's binding to the voter is filed separately."}}
+{"type":"close","timestamp":"2026-11-24T02:01:34.116247105Z","issue_id":"exo-3b3.10","payload":{}}

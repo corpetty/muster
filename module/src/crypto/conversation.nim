@@ -71,6 +71,30 @@ method members*(cc: ConversationCrypto): seq[Member] {.base.} =
   ## The current member set (the current epoch's recipients).
   raise newException(CatchableError, "ConversationCrypto.members is abstract")
 
+method membersAt*(cc: ConversationCrypto, epoch: int): seq[Member] {.base.} =
+  ## The roster of one epoch this member holds (a sibling's too): who may author an event
+  ## sealed in it (exo-3b3). Empty when unknown.
+  @[]
+
+method bindRoom*(cc: ConversationCrypto, room: string) {.base.} =
+  ## The room (content topic) every grant and envelope signs, so a signature made for one
+  ## room never counts in another (invariant 2). Set once, by the session.
+  discard
+
+method expectGrant*(cc: ConversationCrypto, fromMember: seq[Member] = @[]) {.base.} =
+  ## We asked to join (anyone may admit us), or were invited by `fromMember`: a first
+  ## grant is welcome while we hold no epoch anyone else holds. Without this, a member
+  ## alone in a room takes no grant — nobody re-keys a room they were never asked into.
+  discard
+
+method refuseGrants*(cc: ConversationCrypto) {.base.} =
+  ## An inbox never joins anything: no grant is ever taken there (exo-5b5).
+  discard
+
+method setReplaying*(cc: ConversationCrypto, on: bool) {.base.} =
+  ## Frames from the member's own journal follow: each was accepted when it arrived.
+  discard
+
 method epoch*(cc: ConversationCrypto): int {.base.} =
   ## The current epoch index — monotonic, incremented on every membership change.
   raise newException(CatchableError, "ConversationCrypto.epoch is abstract")

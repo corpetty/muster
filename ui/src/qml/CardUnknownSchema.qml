@@ -20,6 +20,7 @@ ColumnLayout {
     spacing: Theme.spacing.tiny
 
     LogosText {
+        textFormat: Text.PlainText
         Layout.fillWidth: true
         wrapMode: Text.WordWrap
         text: qsTr("⚠ Muster can't show this proposal")
@@ -29,6 +30,7 @@ ColumnLayout {
         font.weight: Theme.typography.weightBold
     }
     LogosText {
+        textFormat: Text.PlainText
         Layout.fillWidth: true
         wrapMode: Text.WordWrap
         text: qsTr("It says it is “%1”, a kind of proposal this version of Muster doesn't "

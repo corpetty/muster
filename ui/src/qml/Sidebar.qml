@@ -85,6 +85,7 @@ Rectangle {
                 radius: Theme.spacing.radiusMedium
                 color: Theme.palette.primary
                 LogosText {
+                    textFormat: Text.PlainText
                     anchors.centerIn: parent
                     text: "M"
                     color: Theme.palette.background
@@ -93,6 +94,7 @@ Rectangle {
                 }
             }
             LogosText {
+                textFormat: Text.PlainText
                 visible: !side.rail
                 Layout.fillWidth: true
                 text: qsTr("Muster")

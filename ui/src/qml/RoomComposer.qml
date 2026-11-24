@@ -54,6 +54,7 @@ ColumnLayout {
                 Layout.rightMargin: Theme.spacing.small
                 spacing: Theme.spacing.small
                 LogosText {
+                    textFormat: Text.PlainText
                     objectName: "roomComposeTitle"
                     Layout.fillWidth: true
                     elide: Text.ElideRight
@@ -145,6 +146,7 @@ ColumnLayout {
                                 Layout.fillWidth: true
                                 spacing: Theme.spacing.small
                                 LogosText {
+                                    textFormat: Text.PlainText
                                     text: qsTr("Sending")
                                     color: Theme.palette.textTertiary
                                     font.family: MusterStyle.mono
@@ -152,6 +154,7 @@ ColumnLayout {
                                     font.weight: Theme.typography.weightMedium
                                 }
                                 LogosText {
+                                    textFormat: Text.PlainText
                                     Layout.fillWidth: true
                                     text: {
                                         if (!room.roomAsset) return qsTr("checking the Safe…");
@@ -170,6 +173,7 @@ ColumnLayout {
 
                             // from the Safe (the room's account — whose funds move)
                             LogosText {
+                                textFormat: Text.PlainText
                                 Layout.fillWidth: true
                                 text: qsTr("from Safe %1").arg(String((room.roomAccount && room.roomAccount.account) || "…"))
                                 color: Theme.palette.textTertiary
@@ -182,6 +186,7 @@ ColumnLayout {
                             // owner check that turns the old "insufficient-signatures"
                             // surprise into a warning you see before you propose.
                             LogosText {
+                                textFormat: Text.PlainText
                                 Layout.fillWidth: true
                                 text: {
                                     var a = String((room.roomAccount && room.roomAccount.actingAs) || "");
@@ -201,6 +206,7 @@ ColumnLayout {
                             // soft guard: typing more than the Safe holds would revert
                             // on-chain — say so before the propose, not after the settle.
                             LogosText {
+                                textFormat: Text.PlainText
                                 Layout.fillWidth: true
                                 visible: room.overSends(proposeValue.text)
                                 text: qsTr("⚠ more than the Safe holds — Propose is off until the amount fits")
@@ -223,6 +229,7 @@ ColumnLayout {
                         spacing: Theme.spacing.tiny
 
                         LogosText {
+                            textFormat: Text.PlainText
                             Layout.fillWidth: true
                             wrapMode: Text.WordWrap
                             text: room.availableActions.length > 0
@@ -253,6 +260,7 @@ ColumnLayout {
                                                                : Theme.palette.borderSubtle
 
                                 LogosText {
+                                    textFormat: Text.PlainText
                                     id: actionLbl
                                     anchors.left: parent.left
                                     anchors.right: parent.right
@@ -407,6 +415,7 @@ ColumnLayout {
                             }
                         }
                         LogosText {
+                            textFormat: Text.PlainText
                             objectName: "roomSplitFiatNote"
                             visible: room.splitFiat && !room.acrossOpen
                             Layout.fillWidth: true
@@ -438,6 +447,7 @@ ColumnLayout {
                             }
                         }
                         LogosText {
+                            textFormat: Text.PlainText
                             visible: !room.splitPrivate && !room.splitBitcoin && !room.splitMonero && room.splitToken.length > 0
                             Layout.fillWidth: true
                             Layout.preferredWidth: 0
@@ -493,6 +503,7 @@ ColumnLayout {
                             Layout.fillWidth: true
                             spacing: Theme.spacing.tiny
                             LogosText {
+                                textFormat: Text.PlainText
                                 Layout.fillWidth: true
                                 Layout.preferredWidth: 0
                                 wrapMode: Text.WordWrap
@@ -510,6 +521,7 @@ ColumnLayout {
                                     Layout.fillWidth: true
                                     spacing: Theme.spacing.small
                                     LogosText {
+                                        textFormat: Text.PlainText
                                         // wraps: a chain id is long, and the row never widens the column
                                         Layout.fillWidth: true
                                         Layout.preferredWidth: 0
@@ -531,6 +543,7 @@ ColumnLayout {
                                         }
                                     }
                                     LogosText {
+                                        textFormat: Text.PlainText
                                         text: room.splitUnit
                                         color: Theme.palette.textSecondary
                                         font.pixelSize: Theme.typography.secondaryText
@@ -538,6 +551,7 @@ ColumnLayout {
                                 }
                             }
                             LogosText {
+                                textFormat: Text.PlainText
                                 visible: room.acrossOthers.length === 0
                                 Layout.fillWidth: true
                                 wrapMode: Text.WordWrap
@@ -583,6 +597,7 @@ ColumnLayout {
                         // who fronted it (exo-770): you, or someone else — then it is paid at the
                         // address they shared, and nobody pays until they agree it is theirs
                         LogosText {
+                            textFormat: Text.PlainText
                             visible: (room.splitSend || (!room.splitPrivate && !room.splitBitcoin && !room.splitRequest))
                                      && room.members.length > 1 && !room.acrossOpen
                             text: room.splitSend ? qsTr("Send to:") : qsTr("Who paid the bill?")
@@ -609,6 +624,7 @@ ColumnLayout {
                             }
                         }
                         LogosText {
+                            textFormat: Text.PlainText
                             objectName: "roomSplitPaidTo"
                             visible: room.splitFor.length > 0 && !room.acrossOpen
                             Layout.fillWidth: true
@@ -683,6 +699,7 @@ ColumnLayout {
                         }
 
                         LogosText {
+                            textFormat: Text.PlainText
                             visible: !room.acrossOpen && !room.splitSend
                             text: room.splitRequest
                                   ? (room.members.length > 1 ? qsTr("Who pays you? Tap one person:")
@@ -733,6 +750,7 @@ ColumnLayout {
                         }
 
                         LogosText {
+                            textFormat: Text.PlainText
                             objectName: "roomSplitPreview"
                             readonly property var pv: room.splitPreview(splitTotal.text)
                             visible: splitTotal.text.length > 0 && !room.acrossOpen
@@ -744,7 +762,7 @@ ColumnLayout {
                                      : qsTr("⚠ Type the total in %1, e.g. 1.2 (at most %2 decimals).").arg(room.splitUnit).arg(room.splitDecimals))
                                   : pv === null ? qsTr("Leave at least one person in.")
                                   : room.splitDust(pv)
-                                  ? qsTr("⚠ Each share would be %1 sat — below Bitcoin's 546-sat dust limit, so it could never be paid.").arg(pv.each)
+                                  ? qsTr("⚠ A share would be %1 sat — below Bitcoin's 546-sat dust limit, so it could never be paid.").arg(String(pv.least || "0"))
                                   : room.splitSend
                                   ? (room.splitFor.length === 0
                                      ? qsTr("Pick who to send it to.")
@@ -779,7 +797,7 @@ ColumnLayout {
                                      ? qsTr("1 person owes %4 %1 %3; %4's own share is %2 %3 (it absorbs any rounding). They pay from their own wallet — the payment is public on the chain.")
                                            .arg(room.weiToEth(pv.each)).arg(room.weiToEth(pv.mine)).arg(room.splitUnit)
                                            .arg(room.memberLabel(room.splitFor))
-                                     : qsTr("%1 people owe %5 %2 %4 each; %5's own share is %3 %4 (it absorbs any rounding). Each pays from their own wallet — every payment is public on the chain.")
+                                     : qsTr("%1 people owe %5 about %2 %4 each — every share a few base units apart, so a payment shows whose share it pays; %5's own share is %3 %4 (it absorbs the rest). Each pays from their own wallet — every payment is public on the chain.")
                                            .arg(pv.n).arg(room.weiToEth(pv.each)).arg(room.weiToEth(pv.mine)).arg(room.splitUnit)
                                            .arg(room.memberLabel(room.splitFor)))
                                   : room.splitPrivate
@@ -791,11 +809,12 @@ ColumnLayout {
                                   : (pv.n === 1
                                      ? qsTr("1 person owes you %1 %3; your own share is %2 %3 (it absorbs any rounding). They pay from their own wallet — the payment is public on the chain.")
                                            .arg(room.weiToEth(pv.each)).arg(room.weiToEth(pv.mine)).arg(room.splitUnit)
-                                     : qsTr("%1 people owe you %2 %4 each; your own share is %3 %4 (it absorbs any rounding). Each pays from their own wallet — every payment is public on the chain.")
+                                     : qsTr("%1 people owe you about %2 %4 each — every share a few base units apart, so a payment shows whose share it pays; your own share is %3 %4 (it absorbs the rest). Each pays from their own wallet — every payment is public on the chain.")
                                            .arg(pv.n).arg(room.weiToEth(pv.each)).arg(room.weiToEth(pv.mine)).arg(room.splitUnit))
                                   // a Bitcoin share in the unit it is paid and confirmed in: exact satoshis
                                   + (room.splitBitcoin && pv !== null && !room.splitDust(pv)
-                                     ? qsTr(" Each share is exactly %1 sat.").arg(pv.each) : "")
+                                     ? (pv.apart ? qsTr(" The shares run from %1 down to %2 sat, one apart.").arg(pv.each).arg(pv.least)
+                                                 : qsTr(" The share is exactly %1 sat.").arg(pv.each)) : "")
                             color: (pv === null || room.splitDust(pv))
                                    ? Theme.palette.warning : Theme.palette.textSecondary
                             font.pixelSize: MusterStyle.caption
@@ -803,6 +822,7 @@ ColumnLayout {
 
                         // where a Monero request is paid: an address your own wallet makes for it
                         LogosText {
+                            textFormat: Text.PlainText
                             objectName: "roomSplitMoneroNote"
                             visible: room.splitMonero && !room.acrossOpen
                             Layout.fillWidth: true
@@ -828,6 +848,7 @@ ColumnLayout {
                             Layout.fillWidth: true
                             spacing: Theme.spacing.small
                             LogosText {
+                                textFormat: Text.PlainText
                                 Layout.fillWidth: true
                                 Layout.preferredWidth: 0
                                 wrapMode: Text.WordWrap
@@ -903,6 +924,7 @@ ColumnLayout {
                     // is off until the room fills. You compose it now; you submit it once the
                     // people it takes to agree are here (so it isn't sealed away from them).
                     LogosText {
+                        textFormat: Text.PlainText
                         objectName: "roomProposeGate"
                         visible: !room.enoughToPropose
                         Layout.fillWidth: true
@@ -923,6 +945,7 @@ ColumnLayout {
                         Layout.fillWidth: true
                         spacing: Theme.spacing.small
                         LogosText {
+                            textFormat: Text.PlainText
                             text: qsTr("Fee rate")
                             color: Theme.palette.textTertiary
                             font.pixelSize: MusterStyle.caption
@@ -937,6 +960,7 @@ ColumnLayout {
                             validator: IntValidator { bottom: 1 }
                         }
                         LogosText {
+                            textFormat: Text.PlainText
                             text: qsTr("sat/vB, paid from the account's own coins")
                             color: Theme.palette.textTertiary
                             font.pixelSize: MusterStyle.caption

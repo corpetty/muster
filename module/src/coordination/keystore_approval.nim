@@ -37,21 +37,31 @@ const AttestationPurpose* =
   "expiry, and to where each of its inputs came from. Muster's own commitment, shown " &
   "as a hash; the signer cannot read it."
 
+proc knownTestChain*(chainId: int): bool =
+  ## A chain that holds no real value by its id alone: a local devnet, Sepolia, Hoodi or
+  ## Holesky. Unknown is not a testnet. The hosted module also asks the person's chain
+  ## registry (isTestChain).
+  chainId in [31337, 1337, 11155111, 560048, 17000]
+
 proc safeApprover*(backend: string, attested: bool, selected, own: string, testChain: bool): string =
   ## Who approves THIS member's Safe intents: their selected keystore_module account, or the
-  ## module's own key. "interim" always uses the account; "auto" (the default) where
-  ## keystore_module attests muster and only on a test chain, since the attestation still
-  ## reaches the signer as an opaque digest until its typed form lands (exo-149.6); "off"
-  ## never. The composer says who you act as, and contribute routes the approval, by this
-  ## one rule, so the warning and the signature never disagree.
+  ## module's own key. "interim" uses the account even where keystore_module does not attest
+  ## muster, and "auto" (the default) where it does; both only on a test chain, since the
+  ## attestation still reaches the signer as an opaque digest until its typed form lands
+  ## (exo-149.6; exo-3b3.18, audit P4-08: interim once applied on any chain). "off" never.
+  ## The composer says who you act as, and contribute routes the approval, by this one rule,
+  ## so the warning and the signature never disagree.
   let on = backend == "interim" or (backend == "auto" and attested)
-  if on and selected.len > 0 and (backend == "interim" or testChain): selected.toLowerAscii()
+  if on and selected.len > 0 and testChain: selected.toLowerAscii()
   else: own
 
 proc planKeystoreApproval*(s: CoordinationSession, driverFor: DriverFor, intentId, account: string,
-                           nowSec: uint64): KeystoreApproval =
+                           nowSec: uint64,
+                           testChain: proc(chainId: int): bool = knownTestChain): KeystoreApproval =
   ## The request for `account` (a keystore_module account) to approve `intentId`, after
-  ## every check liveContribute makes before signing. Safe intents only for now.
+  ## every check liveContribute makes before signing. Safe intents only for now. Its second
+  ## leg, the attestation, reaches the signer as a raw digest, so the request is refused on
+  ## a chain `testChain` does not call a test chain (exo-3b3.18, audit P4-08).
   let plan = planApproval(s, driverFor, intentId, inApp = true, nowSec)
   if plan.refusal.len > 0: return KeystoreApproval(refusal: plan.refusal)
   if not (plan.drv of SafeDriver): return KeystoreApproval(refusal: "keystore-unsupported-kind")
@@ -60,6 +70,7 @@ proc planKeystoreApproval*(s: CoordinationSession, driverFor: DriverFor, intentI
   if plan.drv.mayContribute(effect, @[account.toLowerAscii()]) == elNo:
     return KeystoreApproval(refusal: "not-a-signer")
   let d = SafeDriver(plan.drv)
+  if not testChain(int(d.chainId)): return KeystoreApproval(refusal: "attestation-digest-on-mainnet")
   var matHash: array[32, byte]
   if plan.mat.bytes.len != 32: return KeystoreApproval(refusal: "no-materialization")
   for i in 0 ..< 32: matHash[i] = plan.mat.bytes[i]

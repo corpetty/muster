@@ -1024,11 +1024,11 @@ proc autopayTick(o: MusterUi) =
   if not shared and (shareOn.startsWith("monero:") or shareOn.startsWith("bip122:")) and othersIn:
     shared = true
     o.shareAddressDo(shareOn)
+  # an Ethereum address goes through coordinate_share_address too: the module refuses an
+  # address-share posted as chat (exo-3b3.18)
   if not shared and shareOn.len > 0 and othersIn:
-    let address = obj(o.settingsJson){"identity"}{"address"}.getStr("")
-    if address.len > 0:
-      shared = true
-      o.postMessageDo($(%*{"kind": "address-share", "asset": "ETH", "address": address, "form": 1}))
+    shared = true
+    o.shareAddressDo(if shareOn.startsWith("eip155:"): shareOn else: "")
   # Founder only: admit the first pending asker (one admitter keeps one shared epoch),
   # then propose one intent so the other side's convergence can be observed.
   if founder:

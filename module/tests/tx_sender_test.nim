@@ -64,21 +64,50 @@ block:
 # ── 3. prepare's legs must be exactly the call ─────────────────────────────────
 block:
   let c = callFor(tr("erc20:" & Token, "900000"))
-  let good = %*{"ok": true, "legs": [{"to": Token.toUpperAscii().replace("0X", "0x"), "value": "0x0",
+  let good = %*{"ok": true, "chainId": 11155111, "from": Alice, "legs": [{"to": Token.toUpperAscii().replace("0X", "0x"), "value": "0x0",
                                        "data": c.data.toUpperAscii().replace("0X", "0x"), "gasLimit": 52000}]}
-  doAssert legsMismatch(good, c) == "", "case and 0x-hex vs decimal are not differences"
-  let goodDec = %*{"ok": true, "legs": [{"to": Token, "value": "0", "data": c.data, "gasLimit": 52000}]}
-  doAssert legsMismatch(goodDec, c) == ""
-  doAssert "to" in legsMismatch(%*{"ok": true, "legs": [{"to": Alice, "value": "0", "data": c.data}]}, c)
-  doAssert "value" in legsMismatch(%*{"ok": true, "legs": [{"to": Token, "value": "1", "data": c.data}]}, c)
-  doAssert "data" in legsMismatch(%*{"ok": true, "legs": [{"to": Token, "value": "0", "data": "0xa9059cbb"}]}, c)
-  doAssert "legs" in legsMismatch(%*{"ok": true, "legs": []}, c)
-  doAssert "legs" in legsMismatch(%*{"ok": true, "legs": [{"to": Token, "value": "0", "data": c.data},
-                                                          {"to": Token, "value": "0", "data": c.data}]}, c)
-  doAssert "insufficient" in legsMismatch(%*{"ok": false, "error": "insufficient funds"}, c)
+  doAssert legsMismatch(good, c, 11155111, Alice) == "", "case and 0x-hex vs decimal are not differences"
+  let goodDec = %*{"ok": true, "chainId": 11155111, "from": Alice, "legs": [{"to": Token, "value": "0", "data": c.data, "gasLimit": 52000}]}
+  doAssert legsMismatch(goodDec, c, 11155111, Alice) == ""
+  doAssert "to" in legsMismatch(%*{"ok": true, "chainId": 11155111, "from": Alice, "legs": [{"to": Alice, "value": "0", "data": c.data}]}, c, 11155111, Alice)
+  doAssert "value" in legsMismatch(%*{"ok": true, "chainId": 11155111, "from": Alice, "legs": [{"to": Token, "value": "1", "data": c.data}]}, c, 11155111, Alice)
+  doAssert "data" in legsMismatch(%*{"ok": true, "chainId": 11155111, "from": Alice, "legs": [{"to": Token, "value": "0", "data": "0xa9059cbb"}]}, c, 11155111, Alice)
+  doAssert "legs" in legsMismatch(%*{"ok": true, "chainId": 11155111, "from": Alice, "legs": []}, c, 11155111, Alice)
+  doAssert "legs" in legsMismatch(%*{"ok": true, "chainId": 11155111, "from": Alice, "legs": [{"to": Token, "value": "0", "data": c.data},
+                                                          {"to": Token, "value": "0", "data": c.data}]}, c, 11155111, Alice)
+  doAssert "insufficient" in legsMismatch(%*{"ok": false, "error": "insufficient funds"}, c, 11155111, Alice)
   let e = callFor(tr("ETH", "7"))
-  doAssert legsMismatch(%*{"ok": true, "legs": [{"to": Devon, "value": "0x7"}]}, e) == "", "a plain transfer's leg has no data"
-  doAssert legsMismatch(%*{"ok": true, "legs": [{"to": Devon, "value": "0x7", "data": "0x"}]}, e) == ""
+  doAssert legsMismatch(%*{"ok": true, "chainId": 11155111, "from": Alice, "legs": [{"to": Devon, "value": "0x7"}]}, e, 11155111, Alice) == "", "a plain transfer's leg has no data"
+  doAssert legsMismatch(%*{"ok": true, "chainId": 11155111, "from": Alice, "legs": [{"to": Devon, "value": "0x7", "data": "0x"}]}, e, 11155111, Alice) == ""
+
+# ── 3b. a leg's fields are read as what they are, never as a default (exo-1c9, P5-08) ─
+block:
+  let c = callFor(tr("erc20:" & Token, "900000"))
+  # a numeric value is not "0": an ERC-20 call moves no ether, and a value the sender wrote
+  # as a number must not read as matching it
+  doAssert "value" in legsMismatch(%*{"ok": true, "chainId": 11155111, "from": Alice, "legs": [{"to": Token, "value": 0, "data": c.data}]}, c, 11155111, Alice),
+    "a numeric value is refused, never read as the default"
+  doAssert "value" in legsMismatch(%*{"ok": true, "chainId": 11155111, "from": Alice, "legs": [{"to": Token, "data": c.data}]}, c, 11155111, Alice),
+    "a missing value is refused, never read as zero"
+  doAssert "to" in legsMismatch(%*{"ok": true, "chainId": 11155111, "from": Alice, "legs": [{"to": 5, "value": "0", "data": c.data}]}, c, 11155111, Alice)
+  doAssert "data" in legsMismatch(%*{"ok": true, "chainId": 11155111, "from": Alice, "legs": [{"to": Token, "value": "0", "data": 7}]}, c, 11155111, Alice)
+  let e = callFor(tr("ETH", "7"))
+  doAssert "data" in legsMismatch(%*{"ok": true, "chainId": 11155111, "from": Alice, "legs": [{"to": Devon, "value": "0x7", "data": nil}]}, e, 11155111, Alice),
+    "a null data is not a plain transfer's absent one"
+  # the chain and the account the sender prepared for are the ones asked, or nothing is sent
+  let ok = %*{"ok": true, "chainId": 11155111, "from": Alice, "legs": [{"to": Devon, "value": "0x7"}]}
+  doAssert legsMismatch(ok, e, 11155111, Alice) == ""
+  doAssert legsMismatch(%*{"ok": true, "chainId": "0xaa36a7", "from": Alice.toUpperAscii().replace("0X", "0x"),
+                           "legs": [{"to": Devon, "value": "0x7"}]}, e, 11155111, Alice) == "",
+    "a hex chain id and an address's case are not differences"
+  doAssert "chainId" in legsMismatch(%*{"ok": true, "chainId": 1, "from": Alice, "legs": [{"to": Devon, "value": "0x7"}]},
+                                     e, 11155111, Alice)
+  doAssert "chainId" in legsMismatch(%*{"ok": true, "from": Alice, "legs": [{"to": Devon, "value": "0x7"}]},
+                                     e, 11155111, Alice), "a missing chain id is refused"
+  doAssert "from" in legsMismatch(%*{"ok": true, "chainId": 11155111, "from": Devon, "legs": [{"to": Devon, "value": "0x7"}]},
+                                  e, 11155111, Alice)
+  doAssert "from" in legsMismatch(%*{"ok": true, "chainId": 11155111, "legs": [{"to": Devon, "value": "0x7"}]},
+                                  e, 11155111, Alice), "a missing from is refused"
 
 # ── 4. send_status ─────────────────────────────────────────────────────────────
 block:

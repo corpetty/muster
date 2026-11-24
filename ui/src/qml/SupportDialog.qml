@@ -68,6 +68,7 @@ Popup {
                 Layout.fillWidth: true
                 spacing: Theme.spacing.small
                 LogosText {
+                    textFormat: Text.PlainText
                     text: String(row.modelData.name || "")
                     color: Theme.palette.text
                     font.pixelSize: MusterStyle.body
@@ -81,6 +82,7 @@ Popup {
                 Item { Layout.fillWidth: true }
             }
             LogosText {
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 text: String(row.modelData["for"] || "")
@@ -93,6 +95,7 @@ Popup {
                 Layout.fillWidth: true
                 spacing: Theme.spacing.small
                 LogosText {
+                    textFormat: Text.PlainText
                     objectName: "supportAddress_" + String(row.modelData.id || "")
                     Layout.fillWidth: true
                     elide: Text.ElideMiddle
@@ -136,6 +139,7 @@ Popup {
 
             // who sees it, said before anything is sent
             LogosText {
+                textFormat: Text.PlainText
                 objectName: "supportDiscloses_" + String(row.modelData.id || "")
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
@@ -156,6 +160,7 @@ Popup {
                         Layout.fillWidth: true
                         spacing: Theme.spacing.small
                         LogosText {
+                            textFormat: Text.PlainText
                             Layout.fillWidth: true
                             elide: Text.ElideRight
                             text: qsTr("%1 from your %2 wallet%3 · %4")
@@ -191,6 +196,7 @@ Popup {
                     }
                     // the LEZ: the rail follows the account sent from
                     LogosText {
+                        textFormat: Text.PlainText
                         visible: sender.modelData.discloses
                                  && row.modelData.discloses
                                  && sender.modelData.discloses.note !== row.modelData.discloses.note
@@ -205,6 +211,7 @@ Popup {
 
             // what came of a send from this row
             LogosText {
+                textFormat: Text.PlainText
                 objectName: "supportResult_" + String(row.modelData.id || "")
                 visible: tip.answered && tip.lastFor === row.modelData.id
                 Layout.fillWidth: true
@@ -215,7 +222,7 @@ Popup {
                 font.pixelSize: MusterStyle.caption
             }
 
-            TextEdit { id: addrClip; visible: false; width: 0; height: 0 }
+            TextEdit { textFormat: TextEdit.PlainText; id: addrClip; visible: false; width: 0; height: 0 }
         }
     }
 
@@ -234,6 +241,7 @@ Popup {
             RowLayout {
                 Layout.fillWidth: true
                 LogosText {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     text: qsTr("Like Muster?")
                     color: Theme.palette.text
@@ -247,6 +255,7 @@ Popup {
                 }
             }
             LogosText {
+                textFormat: Text.PlainText
                 objectName: "supportAbout"
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
@@ -255,6 +264,7 @@ Popup {
                 font.pixelSize: MusterStyle.body
             }
             LogosText {
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 text: qsTr("Send from a wallet you connected, or pay from any wallet with the link or QR code. "
@@ -264,6 +274,7 @@ Popup {
                 font.pixelSize: MusterStyle.caption
             }
             LogosText {
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 text: "corpetty.github.io/muster/support/"
                 color: Theme.palette.textSecondary

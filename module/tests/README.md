@@ -82,6 +82,10 @@ wants (below), which the runner supplies.
 - `provenance_all_test`
 - `flow_test`
 - `room_infra_test` (exo-428 — the room's infrastructure is dictated by its drivers; also needs `$SECP` for the real Safe driver)
+- `private_files_test` (exo-863, exo-3b3.16 — every file kept beside the keystore is owner-only from its first byte, replaced all or nothing by an O_EXCL temp file and rename, never through a planted link (the keyfile included, v1 upgrade too): a new file 0600 in a 0700 directory made for it, an older build's world-readable file narrowed on its next write or append; joined rooms, room titles, contacts and the room journal checked through their own stores; a directory another user owns is refused; the real LEZ wallet folder is 0700 and refused when it is a link or someone else's)
+- `chat_cards_test` (exo-3b3.18 — a chat body never becomes a card Muster posts itself: coordinate_post_message refuses intent-ref / intent-propose / intent-approve / send-receipt / receipt / address-share, by kind or type; the thread draws only a reference, an ask for an address and a shared address from a body; pure)
+- `invoke_summary_test` (exo-3b3.18 — a module action's summary names every argument, decoded, in order, as the exact call; JSON-text, missing and undecodable args shown as they are)
+- `invoke_run_gate_test` (exo-3b3.18 — only a member whose own endorsement the fold counts runs an executable module action: coordinate_execute's gate, invoke_run.runRefusal)
 - `rpc_url_redaction_test` (exo-14f.2 — a configured RPC URL never reaches text whole: `wallet/redact.nim` shows scheme, host and port, `***` for userinfo and for any path, query or fragment; the split composer's "your RPC did not answer", the room's RPC connectivity row (which the MUSTER-LP debug log prints) and the readiness card's details carry neither `user:pass@` nor a `/v3/<key>` path, against an endpoint that refuses and one that answers; web3 + `$SECP` + `$SODIUM`)
 - `materialshare_test` (exo-45e K5)
 - `schema_unknown_test` (exo-1ec.3 — the schema-driven rendering gate)
@@ -125,6 +129,7 @@ wants (below), which the runner supplies.
 - `frost_keystore_test` (S7: host keys, the ceremony steps, nonces consumed before use, shares recovered from public recovery data, a restart aborts; `$SECP` + `$STINT` + `$SODIUM`)
 - `btc_frost_driver_test` (the btc.frost-bip445 driver: account from recovery data, key-path sighashes, round-tagged contributions, aggregation into one witness signature, the profile)
 - `frost_ceremony_room_test` (the ceremony and both rounds over a three-member room's log)
+- `frost_mainnet_gate_test` (exo-863: FROST is demonstration-grade, so no account, ceremony or step on Bitcoin mainnet, including a ceremony another member opened)
 - `phase_d_exit_test` (Phase D exit on a FRESH regtest bitcoind: in-room ChillDKG, then a spend Core cannot tell from single-sig)
 - `lez_frost_account_e2e` (a FROST key owns a LEZ public account on a real v0.2.4 sequencer; web3 closure)
 - `lez_frost_room_e2e` (exo-55e: a FROST group acts on LEZ from the room — in-room ceremony on lez:local, a lez-call at the chain-read nonce, both rounds, settled; a stale nonce refused; web3 closure + a local sequencer)

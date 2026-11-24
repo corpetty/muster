@@ -69,6 +69,7 @@ Item {
 
         // the local test Safe, a development surface: only where its chain answers
         LogosText {
+            textFormat: Text.PlainText
             visible: !root.account || root.account.available !== false
             text: qsTr("The local test Safe — inspect it, act on it directly, and settle on-chain. "
                        + "To coordinate with people, open a Room.")
@@ -100,6 +101,7 @@ Item {
                 spacing: Theme.spacing.tiny
 
                 LogosText {
+                    textFormat: Text.PlainText
                     text: qsTr("LOCAL TEST SAFE · disclose it into a room to use it")
                     color: Theme.palette.textTertiary
                     font.family: MusterStyle.mono
@@ -108,6 +110,7 @@ Item {
                 }
 
                 LogosText {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     wrapMode: Text.WrapAnywhere
                     text: root.account
@@ -119,6 +122,7 @@ Item {
                 }
 
                 LogosText {
+                    textFormat: Text.PlainText
                     visible: !!root.account
                     text: root.account
                         ? qsTr("%1 of %2 owners · chain %3 · %4")
@@ -144,6 +148,7 @@ Item {
                              && root.account.owners.length > 0
 
                     LogosText {
+                        textFormat: Text.PlainText
                         id: ownersToggle
                         text: root.ownersOpen
                             ? qsTr("Owners — tap to hide  −")
@@ -167,6 +172,7 @@ Item {
                            ? root.account.owners : []
 
                     delegate: LogosText {
+                        textFormat: Text.PlainText
                         required property var modelData
                         Layout.fillWidth: true
                         Layout.leftMargin: Theme.spacing.small
@@ -198,6 +204,7 @@ Item {
                 spacing: Theme.spacing.small
 
                 LogosText {
+                    textFormat: Text.PlainText
                     text: qsTr("Propose a transfer — directly")
                     color: Theme.palette.text
                     font.pixelSize: Theme.typography.primaryText
@@ -205,6 +212,7 @@ Item {
                 }
 
                 LogosText {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
                     text: qsTr("The direct path: you drive the whole lifecycle here — propose, "
@@ -284,6 +292,7 @@ Item {
 
                 // The effect, in plain terms: amount leads, destination follows.
                 LogosText {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     wrapMode: Text.WrapAnywhere
                     text: root.effect
@@ -295,6 +304,7 @@ Item {
                 }
 
                 LogosText {
+                    textFormat: Text.PlainText
                     text: qsTr("%1 · nonce %2")
                         .arg(root.intentId)
                         .arg(root.effect && root.effect.nonce !== undefined ? String(root.effect.nonce) : "0")
@@ -340,6 +350,7 @@ Item {
                             }
 
                             LogosText {
+                                textFormat: Text.PlainText
                                 text: step.modelData.t
                                 color: step.lit ? Theme.palette.textSecondary : Theme.palette.textTertiary
                                 font.family: MusterStyle.mono
@@ -372,6 +383,7 @@ Item {
                         spacing: Theme.spacing.tiny
 
                         LogosText {
+                            textFormat: Text.PlainText
                             Layout.fillWidth: true
                             wrapMode: Text.WordWrap
                             text: qsTr("✓ your client re-derived this — these are the exact bytes each owner signs")
@@ -404,6 +416,7 @@ Item {
                                 spacing: Theme.spacing.small
 
                                 LogosText {
+                                    textFormat: Text.PlainText
                                     Layout.preferredWidth: 72
                                     text: modelData.k
                                     color: Theme.palette.textTertiary
@@ -412,6 +425,7 @@ Item {
                                 }
 
                                 LogosText {
+                                    textFormat: Text.PlainText
                                     Layout.fillWidth: true
                                     wrapMode: Text.WrapAnywhere
                                     text: modelData.v
@@ -458,6 +472,7 @@ Item {
                     }
 
                     LogosText {
+                        textFormat: Text.PlainText
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
                         text: qsTr("Each owner signs on their own device — the client never holds their keys. "
@@ -480,6 +495,7 @@ Item {
                     spacing: Theme.spacing.small
 
                     LogosText {
+                        textFormat: Text.PlainText
                         objectName: "executableNotice"
                         Layout.fillWidth: true
                         visible: root.isExecutable
@@ -504,6 +520,7 @@ Item {
                     }
 
                     LogosText {
+                        textFormat: Text.PlainText
                         Layout.fillWidth: true
                         visible: root.isSubmitting
                         wrapMode: Text.WordWrap
@@ -513,6 +530,7 @@ Item {
                     }
 
                     LogosText {
+                        textFormat: Text.PlainText
                         objectName: "finalNotice"
                         Layout.fillWidth: true
                         visible: root.isFinal
@@ -556,6 +574,7 @@ Item {
                 spacing: Theme.spacing.small
 
                 LogosText {
+                    textFormat: Text.PlainText
                     objectName: "errorText"
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
@@ -591,6 +610,7 @@ Item {
             }
 
             LogosText {
+                textFormat: Text.PlainText
                 text: root.ready ? qsTr("module.health() → %1").arg(root.health)
                                  : qsTr("connecting to backend…")
                 color: Theme.palette.textTertiary

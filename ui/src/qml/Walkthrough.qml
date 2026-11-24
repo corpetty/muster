@@ -131,6 +131,7 @@ Item {
                     spacing: Theme.spacing.small
 
                     LogosText {
+                        textFormat: Text.PlainText
                         Layout.fillWidth: true
                         text: modelData.title
                         color: stepBlock.focused ? Theme.palette.primary : Theme.palette.text
@@ -141,6 +142,7 @@ Item {
                     }
 
                     LogosText {
+                        textFormat: Text.PlainText
                         Layout.fillWidth: true
                         text: modelData.summary
                         color: Theme.palette.textSecondary
@@ -168,6 +170,7 @@ Item {
                                 spacing: Theme.spacing.tiny
 
                                 LogosText {
+                                    textFormat: Text.PlainText
                                     text: walkthrough.kindLabel(modelData.kind)
                                     color: walkthrough.kindColor(modelData.kind)
                                     font.family: MusterStyle.mono
@@ -176,6 +179,7 @@ Item {
                                 }
 
                                 LogosText {
+                                    textFormat: Text.PlainText
                                     Layout.fillWidth: true
                                     text: modelData.title
                                     color: Theme.palette.text
@@ -185,6 +189,7 @@ Item {
                                 }
 
                                 LogosText {
+                                    textFormat: Text.PlainText
                                     Layout.fillWidth: true
                                     text: modelData.body
                                     color: Theme.palette.textSecondary
@@ -193,6 +198,7 @@ Item {
                                 }
 
                                 LogosText {
+                                    textFormat: Text.PlainText
                                     Layout.fillWidth: true
                                     text: walkthrough.evidenceOf(modelData)
                                     color: Theme.palette.textTertiary
@@ -202,6 +208,7 @@ Item {
                                 }
 
                                 LogosText {
+                                    textFormat: Text.PlainText
                                     objectName: "claimCredibility"
                                     visible: walkthrough.credibilityOf(modelData).length > 0
                                     Layout.fillWidth: true

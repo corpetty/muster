@@ -181,7 +181,10 @@ for policy in ["threshold", "safe"]:
     var parents = proposeIdsOf(r.events(), id)
     for e in sigEventsFor(r.events(), id): parents.add eventId(e)
     r.bob.publish(contributeEvent(id, nameB, sigB, parents = parents))
-    doAssert intentState(r.events(), liveDriverFor, id) == "executable"
+    # exo-af5: Bob's pasted approval completes the Safe (its chain binds the signature) and
+    # counts for nothing under the room threshold — it is still his approval on the card,
+    # graded rejected, and still carried, so the export refusal below holds for both
+    doAssert intentState(r.events(), liveDriverFor, id) == (if policy == "safe": "executable" else: "collecting")
     let file = r.exportAs("alice", id)
     doAssert not file.ok or verifyAudit(file.bytes).ok,
       policy & ": the export produced a file its own verifier refuses: " & verifyAudit(file.bytes).reason

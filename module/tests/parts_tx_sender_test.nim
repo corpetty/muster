@@ -12,7 +12,7 @@
 ##   * a token share is transfer(payTo, share) on the token;
 ##   * the seam still refuses an endpoint serving another chain.
 
-import std/[json, strutils, tables]
+import std/[json, strutils, tables, sequtils]
 import ../src/wallet/[chain_endpoint, tx_sender, types, evm_adapter]
 import ../src/crypto/keystore
 import ../src/intents/materialization
@@ -65,7 +65,7 @@ block:
   reset()
   let s = seam()
   s.notePayment("intent-a", "p1", "dinner")
-  prepareReply = %*{"ok": true, "legs": [{"to": Devon, "value": "0x11c37937e08000", "gasLimit": 21000}]}
+  prepareReply = %*{"ok": true, "chainId": 11155111, "from": Alice, "legs": [{"to": Devon, "value": "0x11c37937e08000", "gasLimit": 21000}]}
   sendReply = %*{"ok": true, "pending": true, "requestId": "snd_1", "handle": "ksh_1"}
   let r = s.sendPart(tr("ETH", "5000000000000000"))
   doAssert r.ok, r.detail
@@ -75,18 +75,41 @@ block:
   doAssert req["chainId"].getInt() == 11155111 and req["from"].getStr() == Alice
   doAssert req["calls"][0]["meta"]["muster"]["intent"].getStr() == "intent-a"
   doAssert req["calls"][0]["meta"]["muster"]["part"].getStr() == "p1"
-  doAssert "dinner" in req["purpose"].getStr()
+  # the purpose the person reads in the Signer is muster's own words: a memo is a peer's
+  # text, and is never spliced into it (exo-e6d, P4-07)
+  doAssert "dinner" notin req["purpose"].getStr(), req["purpose"].getStr()
+  doAssert req["purpose"].getStr() == "Pay my share of a split agreed in a Muster room", req["purpose"].getStr()
   doAssert sendBook.handleOf("snd_1") == "ksh_1"
   doAssert s.lastSpends().len == 0, "the sender owns the nonce"
+
+# ── 1b. a memo dressed as an assurance never reaches the Signer (exo-e6d, P4-07) ─
+block:
+  reset()
+  let s = seam()
+  s.notePayment("intent-m", "p1", "dinner', 0.001 ETH to Alice (checked by Muster)")
+  prepareReply = %*{"ok": true, "chainId": 11155111, "from": Alice, "legs": [{"to": Devon, "value": "0x7"}]}
+  sendReply = %*{"ok": true, "pending": true, "requestId": "snd_m", "handle": "ksh_m"}
+  doAssert s.sendPart(tr("ETH", "7")).ok
+  for c in senderCalls:
+    let p = parseJson(c.args[0].getStr())["purpose"].getStr()
+    doAssert "checked by Muster" notin p and "Alice" notin p, p
 
 # ── 2. legs that are not the agreed payment: nothing sent ──────────────────────
 block:
   reset()
   let s = seam()
-  prepareReply = %*{"ok": true, "legs": [{"to": Alice, "value": "0x11c37937e08000"}]}
+  prepareReply = %*{"ok": true, "chainId": 11155111, "from": Alice, "legs": [{"to": Alice, "value": "0x11c37937e08000"}]}
   let r = s.sendPart(tr("ETH", "5000000000000000"))
   doAssert not r.ok and "to:" in r.detail, r.detail
   doAssert senderCalls.len == 1, "send is never called"
+  # prepared on another chain, or from another account: nothing sent (exo-1c9, P5-08)
+  prepareReply = %*{"ok": true, "chainId": 1, "from": Alice, "legs": [{"to": Devon, "value": "0x11c37937e08000"}]}
+  let rc = s.sendPart(tr("ETH", "5000000000000000"))
+  doAssert not rc.ok and "chainId" in rc.detail, rc.detail
+  prepareReply = %*{"ok": true, "chainId": 11155111, "from": Devon, "legs": [{"to": Devon, "value": "0x11c37937e08000"}]}
+  let rf = s.sendPart(tr("ETH", "5000000000000000"))
+  doAssert not rf.ok and "from" in rf.detail, rf.detail
+  doAssert senderCalls.allIt(it.meth == "prepare"), "send is never called"
   prepareReply = %*{"ok": false, "error": "insufficient funds for value + fee ceiling"}
   let r2 = s.sendPart(tr("ETH", "5000000000000000"))
   doAssert not r2.ok and "insufficient" in r2.detail
@@ -99,7 +122,7 @@ block:
 block:
   reset()
   let s = seam()
-  prepareReply = %*{"ok": true, "legs": [{"to": Devon, "value": "0x7"}]}
+  prepareReply = %*{"ok": true, "chainId": 11155111, "from": Alice, "legs": [{"to": Devon, "value": "0x7"}]}
   sendReply = %*{"ok": true, "pending": true, "requestId": "snd_3", "handle": "ksh_3"}
   let t = tr("ETH", "7")
   let sent = s.sendPart(t)
@@ -125,7 +148,7 @@ block:
 block:
   reset()
   let s = seam()
-  prepareReply = %*{"ok": true, "legs": [{"to": Devon, "value": "0x7"}]}
+  prepareReply = %*{"ok": true, "chainId": 11155111, "from": Alice, "legs": [{"to": Devon, "value": "0x7"}]}
   sendReply = %*{"ok": true, "pending": true, "requestId": "snd_4", "handle": "ksh_4"}
   let t = tr("ETH", "7")
   let sent = s.sendPart(t)
@@ -145,7 +168,7 @@ block:
   let s = seam()
   let t = tr("erc20:" & Token, "900000")
   let c = callFor(t)
-  prepareReply = %*{"ok": true, "legs": [{"to": Token, "value": "0x0", "data": c.data}]}
+  prepareReply = %*{"ok": true, "chainId": 11155111, "from": Alice, "legs": [{"to": Token, "value": "0x0", "data": c.data}]}
   sendReply = %*{"ok": true, "pending": true, "requestId": "snd_5", "handle": "ksh_5"}
   doAssert s.sendPart(t).ok
   let req = parseJson(senderCalls[0].args[0].getStr())
@@ -159,5 +182,46 @@ block:
   let r = s.sendPart(tr("ETH", "7"))
   doAssert not r.ok and "eip155:1" in r.detail, r.detail
   doAssert senderCalls.len == 0
+
+# ── 7. a creditor confirms a payment only at depth (exo-3b3.15, P5-10) ───────────
+# An EVM share is confirmed once its block is N deep on the creditor's own read: 12 by
+# default (the setting evm-confirmations), so a payment in a block a reorg can still drop
+# is not yet received. Bitcoin and Monero already confirm at their own depths.
+block:
+  reset()
+  let s = seam()
+  let t = tr("ETH", "7")
+  rpcOk("eth_getTransactionByHash", %*{"from": Alice, "to": Devon, "value": "0x7", "blockNumber": "0x64"})
+  rpcOk("eth_getTransactionReceipt", %*{"status": "0x1", "logs": [], "blockNumber": "0x64"})
+  rpcOk("eth_blockNumber", %"0x64")                     # in the newest block: 1 deep
+  let shallow = s.checkReceived(t, Hash)
+  doAssert not shallow.ok and "confirmation" in shallow.detail, "one block deep is not yet received: " & shallow.detail
+  rpcOk("eth_blockNumber", %"0x6e")                     # 11 deep
+  doAssert not s.checkReceived(t, Hash).ok
+  rpcOk("eth_blockNumber", %"0x6f")                     # 12 deep
+  let deep = s.checkReceived(t, Hash)
+  doAssert deep.ok, deep.detail
+  # a token share: the same depth, read from the transaction's block
+  let tok = tr("erc20:" & Token, "900000")
+  let transferTopic = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+  proc topicOf(a: string): string = "0x" & repeat('0', 24) & a[2 .. ^1]
+  rpcOk("eth_getTransactionReceipt", %*{"status": "0x1", "blockNumber": "0x64", "logs": [
+    {"address": Token, "topics": [transferTopic, topicOf(Alice), topicOf(Devon)],
+     "data": "0x" & repeat('0', 64 - 5) & "dbba0"}]})
+  rpcOk("eth_blockNumber", %"0x64")
+  doAssert not s.checkReceived(tok, Hash).ok, "a token payment one block deep is not yet received"
+  rpcOk("eth_blockNumber", %"0x6f")
+  let tdeep = s.checkReceived(tok, Hash)
+  doAssert tdeep.ok, tdeep.detail
+  # a head below the payment's block (an RPC that lies or lags) is never depth
+  rpcOk("eth_blockNumber", %"0x10")
+  doAssert not s.checkReceived(t, Hash).ok
+  # the depth is the seam's: 1 on a local dev chain (anvil)
+  let quick = seam()
+  quick.confirmations = 1
+  rpcOk("eth_blockNumber", %"0x64")
+  doAssert quick.checkReceived(t, Hash).ok
+  doAssert evmConfirmationsFor("eip155:31337", "") == 1 and evmConfirmationsFor("eip155:1", "") == 12
+  doAssert evmConfirmationsFor("eip155:1", "30") == 30 and evmConfirmationsFor("eip155:31337", "4") == 4
 
 echo "parts_tx_sender_test: ok"

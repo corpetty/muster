@@ -95,11 +95,13 @@ Item {
             Layout.fillWidth: true
             spacing: Theme.spacing.small
             LogosText {
+                textFormat: Text.PlainText
                 text: flowView.collapsed ? "▸" : "▾"
                 color: Theme.palette.textTertiary
                 font.pixelSize: MusterStyle.caption
             }
             LogosText {
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 text: qsTr("Who can see what")
                 color: Theme.palette.text
@@ -107,6 +109,7 @@ Item {
                 font.pixelSize: Theme.typography.subtitleText
             }
             LogosText {
+                textFormat: Text.PlainText
                 objectName: "flowRowCount"
                 text: qsTr("%1 actions").arg(flowView.rows.length)
                 color: Theme.palette.textTertiary
@@ -144,6 +147,7 @@ Item {
                         Layout.fillWidth: true
                         spacing: Theme.spacing.small
                         LogosText {
+                            textFormat: Text.PlainText
                             objectName: "flowObserver_" + String(modelData.to)
                             Layout.preferredWidth: 150
                             Layout.alignment: Qt.AlignTop
@@ -156,6 +160,7 @@ Item {
                             Layout.fillWidth: true
                             spacing: 2
                             LogosText {
+                                textFormat: Text.PlainText
                                 Layout.fillWidth: true
                                 wrapMode: Text.WordWrap
                                 text: modelData.fields
@@ -165,6 +170,7 @@ Item {
                             }
                             // what this chain shows: a public ledger, or only that a transaction happened
                             LogosText {
+                                textFormat: Text.PlainText
                                 objectName: "flowObserverSees_" + String(modelData.to)
                                 Layout.fillWidth: true
                                 visible: String(modelData.sees || "").length > 0
@@ -188,6 +194,7 @@ Item {
                 Repeater {
                     model: (!flowView.collapsed && flowView.rowsOpen) ? flowView.rows : []
                     delegate: LogosText {
+                        textFormat: Text.PlainText
                         required property var modelData
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap

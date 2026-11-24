@@ -105,4 +105,30 @@ block:
   doAssert canonicalize(drv, effectFromJson(other)).bytes != canonicalize(drv, e).bytes
   echo "3. every named party agrees; each net transfer is a part, paid by its payer, confirmed by its recipient OK"
 
+# ── 4. conservation is checked without wrapping (exo-3b3.15, P5-07) ──────────────
+# Covers: Alice and Bob each owe Carol 100, Dave owes Bob 1. Transfers whose sums only
+# balance modulo 2^256 (Alice → Bob 2^256 − 50) are refused: the sums are checked, never
+# wrapped, so no transfer can hide an amount that overflows the balance it claims to keep.
+block:
+  let dave = idOf(encFromSeed(filled(74)))
+  const PayC = "0xcccc000000000000000000000000000000000003"
+  const S3 = "0x3333333333333333"
+  let wcov = @[
+    Cover(intent: S3, debtor: a, creditor: c, amount: "100", payTo: PayC),
+    Cover(intent: S3, debtor: b, creditor: c, amount: "100", payTo: PayC),
+    Cover(intent: S2, debtor: dave, creditor: b, amount: "1", payTo: PayB)]
+  let huge = "115792089237316195423570985008687907853269984665640564039457584007913129639886"  # 2^256 - 50
+  let wts = @[
+    NetTransfer(frm: a, to: b, payTo: PayB, amount: huge),
+    NetTransfer(frm: a, to: c, payTo: PayC, amount: "150"),
+    NetTransfer(frm: b, to: c, payTo: PayC, amount: "50"),
+    NetTransfer(frm: dave, to: b, payTo: PayB, amount: "1")]
+  let wdrv = newSplitDriver(EvmSplitFamily, Chain, @[a, b, c, dave])
+  let why = wdrv.signRefusal(effectFromJson(settleUpEffectJson(Chain, "ETH", wcov, wts, "wrap")))
+  doAssert why.len > 0, "a netting that balances only modulo 2^256 is refused"
+  doAssert "overflow" in why, why
+  # the honest netting of the same covers still conserves
+  doAssert wdrv.signRefusal(effectFromJson(settleUpEffectJson(Chain, "ETH", wcov, netTransfers(wcov), "ok"))) == ""
+  echo "4. settle-up sums are overflow-checked: a wrapped conservation is refused OK"
+
 echo "settle_up_test: all OK"

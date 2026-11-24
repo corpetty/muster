@@ -296,4 +296,39 @@ block node:
   doAssert "node_health" in w.calls
   echo "7. the payee's node: own or remote, said only when read; none for a payer OK"
 
+# ── 8. a time-locked transfer is not received until it unlocks (exo-3b3.14, P5-06) ──
+# history rows carry unlockTime (model.rs): 0 = spendable at the usual depth; below
+# 500,000,000 a block height, else a unix time (wallet2's is_tx_spendtime_unlocked). A
+# transfer of exactly the share, deep enough, still locked, keeps the part pending.
+block timeLocked:
+  let w = newFakeMonero("wallet-lock", "stagenet")
+  let payTo = w.mint("lock").address
+  let si = $w.subs[^1].index
+  let t = PartTransfer(ok: true, chain: XmrStage, asset: "XMR", to: payTo, amount: "300")
+  proc verdict(unlock: JsonNode, conf = 12, height = 1000): XmrMatch =
+    var r = row(txidOf(80), "in", "300", conf, si)
+    r["unlockTime"] = unlock
+    r["height"] = %height
+    w.rows = @[r]
+    matchXmrPayment(t, w.walletStatus(), w.receiveInfo(), w.history(), initHashSet[string]())
+  doAssert verdict(%0).verdict == xvConfirmed, "no lock: confirmed at depth"
+  # locked to a height the chain has not reached: height 1000 + 12 confirmations is 1012
+  let byHeight = verdict(%5000)
+  doAssert byHeight.verdict == xvPending and "lock" in byHeight.detail, $byHeight
+  doAssert verdict(%1012).verdict == xvConfirmed, "unlocked at its height"
+  # locked until a time in the future (years away), and one long past
+  let byTime = verdict(%4_000_000_000'i64)
+  doAssert byTime.verdict == xvPending and "lock" in byTime.detail, $byTime
+  doAssert verdict(%600_000_000).verdict == xvConfirmed, "a time lock long past"
+  # an unlockTime the wallet wrote that cannot be read is a lock, never "none"
+  doAssert verdict(%"soon").verdict == xvPending
+  # a payer who sent too little and topped up with a locked transfer: still pending
+  var a = row(txidOf(81), "in", "100", 12, si)
+  var b = row(txidOf(82), "in", "200", 12, si)
+  b["unlockTime"] = %4_000_000_000'i64
+  w.rows = @[a, b]
+  let topped = matchXmrPayment(t, w.walletStatus(), w.receiveInfo(), w.history(), initHashSet[string](), alone = true)
+  doAssert topped.verdict == xvPending, $topped
+  echo "8. a time-locked transfer keeps the part pending until it unlocks OK"
+
 echo "xmr_request_edges_test: all OK"

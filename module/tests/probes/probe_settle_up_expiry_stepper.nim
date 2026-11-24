@@ -24,7 +24,7 @@
 ##     renewed, s6).
 ## Run by hand (no argv), it checks all 81 with doAssert.
 
-import std/[json, strutils]
+import std/[json, strutils, sequtils]
 import ../../src/intents/materialization
 import ../../src/coordination/parts
 import ../../src/coordination/covers
@@ -112,7 +112,9 @@ proc correct(k: int): bool =
     let effectivePaid = (if cancelling: "none" else: paid)
     if effectivePaid in ["first", "all"]: (if pay("carol", su, Now) != "": return false)
     if effectivePaid == "all": (if pay("carol", su, Now) != "": return false)
-    let carolShare = (if cancelling: "200" else: "300")
+    # Carol's own share of the dinner (distinct shares, exo-3b3.14: read, never assumed)
+    let carolShare = (if cancelling: "200"
+                      else: evenShares("900", alice, @[bob, carol]).filterIt(it.who == carol)[0].amount)
     case action
     of "own":
       if cancelling:
@@ -146,7 +148,8 @@ proc correct(k: int): bool =
       let want = (if carolPaid: "already-settled" elif clock == "before": "" else: "expired")
       return o == want
     else:
-      return coverAccepted(lunch, "alice", alice, AlicePayTo, "300") == not carolPaid
+      return coverAccepted(lunch, "alice", alice, AlicePayTo,
+                           evenShares("900", alice, @[bob, carol]).filterIt(it.who == carol)[0].amount) == not carolPaid
 
 proc state(k: int): JsonNode = %*{"case": k, "decision_correct": correct(k)}
 

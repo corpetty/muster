@@ -11,6 +11,7 @@ import ../src/drivers/threshold
 import ../src/crypto/curve25519
 import ../src/log/log
 import ../src/coordination/intents
+import ./probes/attested
 
 proc seed(b: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = b)
 proc hex(sig: Ed25519Sig): string =
@@ -37,16 +38,22 @@ proc endorse(k: EncKeys): string = hex(edSign(k, m.bytes))
 # Published as the hosted path does: under the name its signer is identified by (exo-a5a).
 proc named(k: EncKeys): string = contributorOf(drv, effectJson, endorse(k))
 
+# The threshold driver is room-bound: every fold below sees each roster member's
+# endorsement with that member's attestation over P beside it, as the live path publishes
+# it (exo-af5).
+proc att(ev: seq[Event], dfor: DriverFor, iid: string): seq[Event] =
+  withAttestations(ev, dfor, iid, signers = [a, b, c])
+
 # Propose, then one endorsement → collecting (1 of 2).
 var events = @[proposeEvent(id, effectJson), contributeEvent(id, named(a), endorse(a))]
-doAssert intentState(events, foldDrv, id) == "collecting",
+doAssert intentState(att(events, foldDrv, id), foldDrv, id) == "collecting",
          "one roster endorsement -> collecting"
 echo "1. propose + one endorsement -> collecting OK"
 
 # A second distinct endorsement → executable (threshold met), through the SAME
 # generic reduceIntents — no Safe, no secp.
 events.add contributeEvent(id, named(b), endorse(b))
-doAssert intentState(events, foldDrv, id) == "executable",
+doAssert intentState(att(events, foldDrv, id), foldDrv, id) == "executable",
          "two distinct roster endorsements -> executable"
 echo "2. two endorsements -> executable (generic fold, non-Safe driver) OK"
 
@@ -64,7 +71,7 @@ block:
   let revents = @[proposeEvent(id, effectJson),
                   contributeEvent(id, contributorOf(drv, effectJson, sigA), sigA),
                   contributeEvent(id, contributorOf(drv, effectJson, sigB), sigB)]
-  let views = reduceIntentViews(revents, foldDrv)
+  let views = reduceIntentViews(att(revents, foldDrv, id), foldDrv)
   doAssert views.len == 1, "one intent"
   let v = views[0]
   doAssert v.state == "executable", "render view state matches the fold"
@@ -74,7 +81,7 @@ block:
   # is well-formed, non-empty hex — the length is the driver's business, not ours.
   doAssert v.txhash.len > 2 and v.txhash.startsWith("0x"),
            "the materialization is re-derived generically (no Safe, no secp)"
-  let prov = intentProvenance(revents, foldDrv, id)
+  let prov = intentProvenance(att(revents, foldDrv, id), foldDrv, id)
   var proposes = 0
   var endorsers: seq[string]
   for it in prov:
@@ -95,9 +102,9 @@ let id2 = intentIdFor(effectJson, "threshold")
 var ev2 = @[policyDeclEvent(id2, "threshold"), proposeEvent(id2, effectJson),
             contributeEvent(id2, named(a), endorse(a)),
             contributeEvent(id2, "mallory", endorse(mal))]
-doAssert intentState(ev2, foldDrv, id2) == "collecting",
+doAssert intentState(att(ev2, foldDrv, id2), foldDrv, id2) == "collecting",
          "the roster endorsement counts; the intent is folded"
-doAssert intentState(ev2, foldDrv, id2) != "executable",
+doAssert intentState(att(ev2, foldDrv, id2), foldDrv, id2) != "executable",
          "a non-member endorsement must not reach the threshold"
 echo "3. non-member endorsement refused OK"
 
@@ -122,7 +129,7 @@ block:
   let sevents = @[proposeEvent(sid, stmtJson),
                   contributeEvent(sid, contributorOf(drv, stmtJson, sa), sa),
                   contributeEvent(sid, contributorOf(drv, stmtJson, sb), sb)]
-  doAssert intentState(sevents, foldDrv, sid) == "executable",
+  doAssert intentState(att(sevents, foldDrv, sid), foldDrv, sid) == "executable",
            "a statement effect folds to executable under the same threshold path"
 echo "4. a second effect type (statement) folds through the same path OK"
 
@@ -163,9 +170,9 @@ block:
   ev.add policyDeclEvent(idY, "solo")
   ev.add proposeEvent(idY, effectJson)
   ev.add contributeEvent(idY, named(a), endorse(a))
-  doAssert intentState(ev, resolve, idX) == "collecting",
+  doAssert intentState(att(ev, resolve, idX), resolve, idX) == "collecting",
            "the k=2 intent: one endorsement -> still collecting"
-  doAssert intentState(ev, resolve, idY) == "executable",
+  doAssert intentState(att(ev, resolve, idY), resolve, idY) == "executable",
            "the k=1 intent in the SAME log: one endorsement -> executable"
 echo "5. per-intent policy: two drivers in one log, each intent folds under its own OK"
 

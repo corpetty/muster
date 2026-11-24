@@ -1,13 +1,24 @@
 ## FROST in the room (Phase D, exo-a50.4.5): the aggregate locus over the room's log.
 ##
 ## THE CEREMONY (ChillDKG). The room is the authenticated coordinator ChillDKG asks for,
-## and the coordinator only relays, so every member computes its steps from the log:
-##   frost/<cid>/open                 {network, t, n}, published by whoever opens it
-##   frost/<cid>/join/<member>        {host}: the member's host key for this ceremony,
-##                                    derived in its keystore under "frost/<cid>"; the first
-##                                    n joins are the participants, in log order
-##   frost/<cid>/pmsg1/<host>         a participant's step-1 message
-##   frost/<cid>/pmsg2/<host>         a participant's step-2 message (its CertEq signature)
+## and the coordinator only relays, so every member computes its steps from the log. Every
+## entry is author-signed (coordination/authorship.nim), so each is its named member's
+## (exo-3b3.13):
+##   frost/<cid>/open                 {network, t, n, author}: the opener's terms. The open
+##                                    in force is the first in canonical order that names
+##                                    its author and has 1 <= t <= n
+##   frost/<cid>/join/<member>        {host, opener, network, t, n, pop}: the member's host
+##                                    key for this ceremony, derived in its keystore under
+##                                    "frost/<cid>", the terms it joins, and the host key's
+##                                    BIP-340 signature over (ceremony, member, host, terms):
+##                                    the key's holder offers it for this member. The first n
+##                                    joins committed to the terms in force are the
+##                                    participants, in log order, ONE per member — a member's
+##                                    later join is ignored, and no host is held twice
+##   frost/<cid>/pmsg1/<member>       {host, msg}: a participant's step-1 message
+##   frost/<cid>/pmsg2/<member>       {host, msg}: its step-2 message (its CertEq signature)
+## So a rival open changes nothing for the joins that committed to another, one member never
+## holds two shares, t is bounded, and no member's step message can be taken by another.
 ## A participant finalizes (its keystore checks the certificate) and discloses the account,
 ## with {ceremony, recovery} as config. The recovery data is public by the draft's design,
 ## and it is what every member later recovers its share from (seam S7). No share and no
@@ -35,6 +46,9 @@ import ../frost/chilldkg
 import ../crypto/keystore
 import ../crypto/curve25519
 import ../bitcoin/tx                 # toHex / hexToBytes
+import ../bitcoin/keys as btckeys    # schnorrVerify: a join's proof of its host key
+import ../dcbor/dcbor
+import ../hashing/hash_input
 import ./session
 import ./authorship   # the room's authentic view + author-signed publishing (exo-f76)
 import ./intent_events
@@ -42,55 +56,135 @@ import ./intents
 import ./attest
 import ./accounts
 
+const FrostJoinDomain* = "muster.frost.join.v1"
+
 proc ceremonyLabel*(cid: string): string = "frost/" & cid
 
-type CeremonyView* = object
-  open*: bool
-  network*: string
-  t*, n*: int
-  hosts*: seq[seq[byte]]            ## the participants' host keys, in join order
-  pmsg1*: Table[string, seq[byte]]  ## host hex → step-1 message (first seen)
-  pmsg2*: Table[string, seq[byte]]
+type
+  CeremonyTerms* = object
+    ## What a ceremony is: who opened it, on which network, t of n. A join commits to it.
+    opener*, network*: string
+    t*, n*: int
+
+  CeremonyView* = object
+    open*: bool
+    opener*: string                   ## the member whose open is in force (room identity, hex)
+    network*: string
+    t*, n*: int
+    hosts*: seq[seq[byte]]            ## the participants' host keys, in join order
+    members*: seq[string]             ## beside each host, the member whose it is
+    pmsg1*: Table[string, seq[byte]]  ## host hex → that participant's step-1 message
+    pmsg2*: Table[string, seq[byte]]
+
+proc terms*(v: CeremonyView): CeremonyTerms =
+  CeremonyTerms(opener: v.opener, network: v.network, t: v.t, n: v.n)
+
+proc normMember(s: string): string =
+  ## A room identity as the views compare it: lowercase hex, no 0x (an author's signature
+  ## verifies under either spelling, so a view must not count two spellings as two members).
+  result = s.strip().toLowerAscii()
+  if result.startsWith("0x"): result = result[2 .. ^1]
+
+proc validTerms(t: CeremonyTerms): bool =
+  t.n >= 1 and t.t >= 1 and t.t <= t.n and t.network.len > 0 and t.opener.len == 128
+
+proc frostJoinClaim*(cid, member, host: string, terms: CeremonyTerms): array[32, byte] =
+  ## What a join's host key signs: that its holder offers it to ceremony `cid` for `member`,
+  ## on these terms. The join itself is author-signed for the room, so this names no room.
+  digest(hashInput(FrostJoinDomain, @[
+    ("ceremony", cbText(cid)), ("member", cbText(normMember(member))),
+    ("host", cbText(normMember(host))), ("opener", cbText(normMember(terms.opener))),
+    ("network", cbText(terms.network)), ("t", cbInt(int64(terms.t))), ("n", cbInt(int64(terms.n)))]))
+
+proc termsOf(j: JsonNode, opener: string): CeremonyTerms =
+  if j["t"].kind != JInt or j["n"].kind != JInt: raise newException(ValueError, "t and n are integers")
+  CeremonyTerms(opener: normMember(opener), network: j["network"].getStr(),
+                t: j["t"].getInt(), n: j["n"].getInt())
 
 proc ceremonyView*(events: seq[Event], cid: string): CeremonyView =
-  ## The ceremony as the log holds it: reduce(log), nothing else. Canonical order is not
-  ## arrival order, so the open is read first, then everything else in that order.
+  ## The ceremony as the log holds it: reduce(log), nothing else. Read it over the room's
+  ## authentic view (`roomEvents`), where each open, join and step message is its named
+  ## member's. Canonical order is not arrival order, so the open is read first, then the
+  ## participants, then their step messages.
   let ordered = canonicalOrder(events)
   for e in ordered:
-    if e.key == "frost/" & cid & "/open":
-      try:
-        let j = parseJson(e.value)
-        result = CeremonyView(open: true, network: j["network"].getStr(), t: j["t"].getInt(), n: j["n"].getInt())
-        break
-      except CatchableError: discard
+    if e.key != "frost/" & cid & "/open": continue
+    try:
+      let j = parseJson(e.value)
+      let t = termsOf(j, j["author"].getStr())
+      if not validTerms(t): continue              # t outside 1..n, or no author: no open
+      result = CeremonyView(open: true, opener: t.opener, network: t.network, t: t.t, n: t.n)
+      break
+    except CatchableError: discard
   if not result.open: return
+  let want = result.terms
+  for e in ordered:
+    if result.hosts.len >= result.n: break
+    let p = e.key.split('/')
+    if p.len != 4 or p[0] != "frost" or p[1] != cid or p[2] != "join": continue
+    try:
+      let who = normMember(p[3])
+      if who.len != 128 or who in result.members: continue   # one host per member
+      let j = parseJson(e.value)
+      if termsOf(j, j["opener"].getStr()) != want: continue  # it joined other terms
+      let h = hexToBytes(j["host"].getStr())
+      if h.len != 33 or h[0] notin [2'u8, 3'u8] or h in result.hosts: continue
+      let pop = hexToBytes(j["pop"].getStr())
+      if not btckeys.schnorrVerify(pop, frostJoinClaim(cid, who, toHex(h), want), h[1 .. 32]): continue
+      result.hosts.add h
+      result.members.add who
+    except CatchableError: discard       # a malformed entry is not part of the ceremony
   for e in ordered:
     let p = e.key.split('/')
-    if p.len < 3 or p[0] != "frost" or p[1] != cid: continue
+    if p.len != 4 or p[0] != "frost" or p[1] != cid or p[2] notin ["pmsg1", "pmsg2"]: continue
     try:
-      case p[2]
-      of "join":
-        if result.open and result.hosts.len < result.n:
-          let h = hexToBytes(parseJson(e.value)["host"].getStr())
-          if h.len == 33 and h notin result.hosts: result.hosts.add h
-      of "pmsg1":
-        if p.len >= 4 and p[3] notin result.pmsg1: result.pmsg1[p[3]] = hexToBytes(e.value)
-      of "pmsg2":
-        if p.len >= 4 and p[3] notin result.pmsg2: result.pmsg2[p[3]] = hexToBytes(e.value)
-      else: discard
-    except CatchableError: discard       # a malformed entry is not part of the ceremony
-
-proc frostCeremonyOpen*(s: CoordinationSession, cid, network: string, t, n: int): string =
-  s.publish(Event(key: "frost/" & cid & "/open", value: $(%*{"network": network, "t": t, "n": n})))
-  cid
+      let i = result.members.find(normMember(p[3]))
+      if i < 0: continue                 # only a participant's own step messages count
+      let hh = toHex(result.hosts[i])
+      let j = parseJson(e.value)
+      if normMember(j["host"].getStr()) != hh: continue
+      let msg = hexToBytes(j["msg"].getStr())
+      if p[2] == "pmsg1":
+        if hh notin result.pmsg1: result.pmsg1[hh] = msg
+      elif hh notin result.pmsg2: result.pmsg2[hh] = msg
+    except CatchableError: discard
 
 proc memberId(ks: Keystore): string = toHex(ks.encIdentity().toBytes())
 
+proc frostCeremonyOpen*(s: CoordinationSession, ks: Keystore, cid, network: string,
+                        t, n: int): CeremonyTerms =
+  ## Open a ceremony as this member: an author-signed open naming its terms, which it
+  ## returns for this member's own join to commit to. Refuses t outside 1..n.
+  result = CeremonyTerms(opener: memberId(ks), network: network, t: t, n: n)
+  if cid.len == 0 or '/' in cid: raise newException(ValueError, "a ceremony id is a name without /")
+  if not validTerms(result): raise newException(ValueError, "a t-of-n ceremony needs 1 <= t <= n and a network")
+  s.publishAuthored(ks, Event(key: "frost/" & cid & "/open",
+    value: $(%*{"network": network, "t": t, "n": n, "author": result.opener})))
+
+proc frostJoinEvent*(ks: Keystore, cid: string, terms: CeremonyTerms): Event =
+  ## This member's join, committed to `terms`: its host key for the ceremony, and the host
+  ## key's signature that its holder offers it for this member.
+  let lab = ceremonyLabel(cid)
+  let me = memberId(ks)
+  let host = toHex(ks.frostHostPubkey(lab))
+  let pop = ks.frostHostSign(lab, frostJoinClaim(cid, me, host, terms))
+  Event(key: "frost/" & cid & "/join/" & me,
+        value: $(%*{"host": host, "opener": normMember(terms.opener), "network": terms.network,
+                    "t": terms.t, "n": terms.n, "pop": toHex(pop)}))
+
+proc frostCeremonyJoin*(s: CoordinationSession, ks: Keystore, cid: string,
+                        terms: CeremonyTerms): string =
+  ## Offer this member's host key for the ceremony on `terms`; returns it (hex).
+  let ev = frostJoinEvent(ks, cid, terms)
+  s.publishAuthored(ks, ev)
+  parseJson(ev.value)["host"].getStr()
+
 proc frostCeremonyJoin*(s: CoordinationSession, ks: Keystore, cid: string): string =
-  ## Offer this member's host key for the ceremony; returns it (hex).
-  let host = toHex(ks.frostHostPubkey(ceremonyLabel(cid)))
-  s.publishAuthored(ks, Event(key: "frost/" & cid & "/join/" & memberId(ks), value: $(%*{"host": host})))
-  host
+  ## Join the ceremony in force, committing to its terms as this member reads them now.
+  s.poll()
+  let v = ceremonyView(s.roomEvents(), cid)
+  if not v.open: raise newException(ValueError, "no ceremony " & cid & " is open in this room")
+  frostCeremonyJoin(s, ks, cid, v.terms)
 
 proc frostCeremonyStep*(s: CoordinationSession, ks: Keystore, cid: string): string =
   ## Advance this member's part of the ceremony by what the log allows: "step1",
@@ -101,19 +195,25 @@ proc frostCeremonyStep*(s: CoordinationSession, ks: Keystore, cid: string): stri
   let v = ceremonyView(events, cid)
   if not v.open: return "waiting: the ceremony is not open"
   if v.hosts.len < v.n: return "waiting: " & $v.hosts.len & " of " & $v.n & " participants joined"
+  if v.members.len != v.n or v.members.deduplicate().len != v.n or v.hosts.deduplicate().len != v.n:
+    return "refused: the participants are not " & $v.n & " distinct members"
   let lab = ceremonyLabel(cid)
   let host = ks.frostHostPubkey(lab)
   let hh = toHex(host)
-  if host notin v.hosts: return "not-a-participant"
+  let me = memberId(ks)
+  let at = v.hosts.find(host)
+  if at < 0 or v.members[at] != me: return "not-a-participant"
   let params = SessionParams(hostpubkeys: v.hosts, t: v.t)
   try:
     if hh notin v.pmsg1:
-      s.publish(Event(key: "frost/" & cid & "/pmsg1/" & hh, value: toHex(ks.frostDkgStep1(lab, params))))
+      s.publishAuthored(ks, Event(key: "frost/" & cid & "/pmsg1/" & me,
+        value: $(%*{"host": hh, "msg": toHex(ks.frostDkgStep1(lab, params))})))
       return "step1"
     if v.pmsg1.len < v.n: return "waiting: step 1 from " & $(v.n - v.pmsg1.len) & " participants"
     let (cst, cmsg1) = coordinatorStep1(v.hosts.mapIt(v.pmsg1[toHex(it)]), params)
     if hh notin v.pmsg2:
-      s.publish(Event(key: "frost/" & cid & "/pmsg2/" & hh, value: toHex(ks.frostDkgStep2(lab, params, cmsg1))))
+      s.publishAuthored(ks, Event(key: "frost/" & cid & "/pmsg2/" & me,
+        value: $(%*{"host": hh, "msg": toHex(ks.frostDkgStep2(lab, params, cmsg1))})))
       return "step2"
     if v.pmsg2.len < v.n: return "waiting: step 2 from " & $(v.n - v.pmsg2.len) & " participants"
     let (cmsg2, _, rec) = coordinatorFinalize(cst, v.hosts.mapIt(v.pmsg2[toHex(it)]))
@@ -124,7 +224,6 @@ proc frostCeremonyStep*(s: CoordinationSession, ks: Keystore, cid: string): stri
     else:
       let ba = frostAccount(v.network, rec)
       (chain, address) = (ba.chain, ba.address)
-    let me = memberId(ks)
     let (found, ra) = findAccount(reduceAccounts(events), accountId(chain, address))
     if not (found and me in ra.disclosedBy):
       discard ks.frostDkgFinalize(lab, params, cmsg2)   # this member's check of the certificate

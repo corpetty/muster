@@ -84,7 +84,9 @@ for policy in ["safe", "threshold"]:
     let eH = effectFor(policy, 41)
     let id = intentIdFor(eH, policy)
     let joined = eH & "|" & policy
-    doAssert intentIdFor(joined) == id, "the joined form hashes to the honest id under no policy"
+    # exo-c38: the id is a domain-separated record of (effect, policy), so the joined form
+    # no longer hashes to the honest id; the substitutes below are still published under it
+    doAssert intentIdFor(joined) != id, "the joined form names another intent"
     let subs = @[ground("intent/" & id & "/propose", effectFor(policy, 999_999), proposeEvent(id, eH)),
                  ground("intent/" & id & "/policy", other, policyDeclEvent(id, policy)),
                  ground("intent/" & id & "/propose", joined, proposeEvent(id, eH)),

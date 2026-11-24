@@ -19,6 +19,7 @@ RowLayout {
         Layout.fillWidth: true
         spacing: 2
         LogosText {
+            textFormat: Text.PlainText
             Layout.fillWidth: true
             text: header.title
             color: Theme.palette.text
@@ -26,6 +27,7 @@ RowLayout {
             font.weight: Theme.typography.weightBold
         }
         LogosText {
+            textFormat: Text.PlainText
             visible: header.subtitle.length > 0
             Layout.fillWidth: true
             wrapMode: Text.WordWrap

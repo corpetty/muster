@@ -9,8 +9,9 @@
 ## The FROST tests publish raw contributions, so neither showed.
 ##   1. both members approve both rounds in-app: each lands, every grade is committed, the
 ##      card knows who approved, the intent is executable, and its audit verifies;
-##   2. a member's own signature made outside muster and pasted in lands unattested, and
-##      the audit verifies.
+##   2. a member's own signature made outside muster and pasted in is published but counts
+##      for nothing — the room FROST scaffold is room-bound, and since exo-af5 an approval
+##      there counts only attested over P in this room — graded rejected; the audit verifies.
 ## Build: see probes/live_room.nim (the secp closure + stint + libsodium).
 
 import std/[strutils, sequtils]
@@ -61,11 +62,14 @@ block:
   var r = newRoom("/muster/1/75c-pasted/proto")
   let id = r.proposeFrost(2)
   let mat = canonicalize(frostDrv, effectFromJson(effectJsonOf(r.events(), id)))
-  doAssert liveContribute(r.alice, aliceKs, dFor, id, hexOf(aliceKs.edSign(mat.bytes)), "", bindCtx(), Now) == "collecting"
+  # exo-af5 (was: counted, graded unattested): no chain binds a room-FROST signature to this
+  # room, so a pasted one — which could have been copied from any room proposing the same
+  # effect — is published, graded rejected, and counts toward nothing
+  doAssert liveContribute(r.alice, aliceKs, dFor, id, hexOf(aliceKs.edSign(mat.bytes)), "", bindCtx(), Now) == "proposed"
   let grades = approvalGrades(r.events(), dFor, id)
-  doAssert grades.len == 1 and grades[0].grade == agUnattested, $grades.mapIt($it.grade)
-  auditVerifies("pasted", r, id, 1, "unattested")
-  echo "2. room FROST: a pasted signature lands unattested, and the audit verifies OK"
+  doAssert grades.len == 1 and grades[0].grade == agRejected, $grades.mapIt($it.grade)
+  auditVerifies("pasted", r, id, 1, "rejected")
+  echo "2. room FROST: a pasted signature is graded rejected and counts for nothing; the audit verifies OK"
 
 # ── 3. approve once: round 2 follows on the tick (exo-720) ───────────────────────
 # The card offers Approve until a member has approved; nothing contributed round 2 for them,

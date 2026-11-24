@@ -53,7 +53,9 @@ proc pasteAs*(r: Room, who, policy, id: string): string =
   liveContribute(r.sessOf(who), ks, liveDriverFor, id, sig, "", bindCtx(), Now)
 
 proc misattestAs*(r: Room, who, policy, id: string) =
-  ## A pasted approval that also carries a bogus attestation: the fold rejects it.
+  ## A pasted approval that also carries a bogus attestation. Under a room-bound policy it
+  ## counts for nothing (rejected); on the Safe a failing attestation voids nothing — the
+  ## chain binds the signature — so it counts, graded unattested (exo-83c).
   discard r.pasteAs(who, policy, id)
   let sigs = sigEventsFor(r.events(), id)
   let w = sigs[^1].key.split('/')[3]
@@ -73,7 +75,7 @@ proc joinCarol*(r: var Room): CoordinationSession =
   let carol = newCoordinationSession(newLocalTransport(r.net), newEpochJoiner(carolKs), r.topic)
   carol.requestJoin(carolKs.joinRequestFor(r.topic, high(uint64)))
   r.alice.poll()
-  r.alice.admit(carolKs.encIdentity())
+  r.alice.admitAs(aliceKs, carolKs.encIdentity())   # its membership record signed by alice (exo-045)
   r.bob.poll(); carol.poll()
   discard liveReannounce(r.alice, aliceKs, liveDriverFor, int64(Now), r.seqNo)
   r.bob.poll(); carol.poll()

@@ -23,6 +23,7 @@ Rectangle {
         width: parent.width - 2 * Theme.spacing.xlarge
         spacing: Theme.spacing.medium
         LogosText {
+            textFormat: Text.PlainText
             Layout.fillWidth: true
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.WordWrap

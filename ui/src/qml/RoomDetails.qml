@@ -43,6 +43,7 @@ Rectangle {
             Layout.leftMargin: Theme.spacing.large
             Layout.rightMargin: Theme.spacing.small
             LogosText {
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 text: qsTr("Room details")
                 color: Theme.palette.text
@@ -275,6 +276,7 @@ Rectangle {
                             anchors.leftMargin: Theme.spacing.medium
                             anchors.rightMargin: Theme.spacing.tiny
                             LogosText {
+                                textFormat: Text.PlainText
                                 Layout.fillWidth: true
                                 wrapMode: Text.WordWrap
                                 text: {
@@ -297,6 +299,7 @@ Rectangle {
                         }
                     }
                     LogosText {
+                        textFormat: Text.PlainText
                         objectName: "flowOpenMap"
                         text: details.room.detailsIntent.length > 0 ? qsTr("See where this proposal's information went, on the room map")
                                                                     : qsTr("See it on the room map")

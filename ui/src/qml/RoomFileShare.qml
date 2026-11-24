@@ -88,6 +88,7 @@ ColumnLayout {
     }
 
     LogosText {
+        textFormat: Text.PlainText
         Layout.fillWidth: true
         wrapMode: Text.WordWrap
         color: Theme.palette.textSecondary
@@ -152,6 +153,7 @@ ColumnLayout {
     Repeater {
         model: fs.ops.filter(function (o) { return o.kind === "share" && o.state !== "done"; })
         delegate: LogosText {
+            textFormat: Text.PlainText
             required property var modelData
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
@@ -166,6 +168,7 @@ ColumnLayout {
     // ── the room's files ────────────────────────────────────────────────────
     SectionHeader { Layout.fillWidth: true; text: qsTr("In this room"); count: String(fs.files.length) }
     LogosText {
+        textFormat: Text.PlainText
         visible: fs.files.length === 0
         color: Theme.palette.textSecondary
         font.pixelSize: MusterStyle.caption
@@ -199,6 +202,7 @@ ColumnLayout {
             RowLayout {
                 Layout.fillWidth: true
                 LogosText {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     elide: Text.ElideMiddle
                     color: Theme.palette.text
@@ -207,12 +211,14 @@ ColumnLayout {
                     text: row.modelData.name
                 }
                 LogosText {
+                    textFormat: Text.PlainText
                     color: Theme.palette.textSecondary
                     font.pixelSize: MusterStyle.caption
                     text: fs.human(row.modelData.size)
                 }
             }
             LogosText {
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 color: Theme.palette.textSecondary
@@ -225,6 +231,7 @@ ColumnLayout {
                 }
             }
             LogosText {
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 visible: row.op !== null
                 wrapMode: Text.WordWrap
@@ -283,6 +290,7 @@ ColumnLayout {
     // ── what each choice reveals (docs/design/room-swarm.md §5.5) ───────────
     SectionHeader { Layout.fillWidth: true; text: qsTr("Who sees what") }
     LogosText {
+        textFormat: Text.PlainText
         Layout.fillWidth: true
         wrapMode: Text.WordWrap
         color: Theme.palette.textSecondary

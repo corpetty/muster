@@ -956,7 +956,8 @@ Item {
         return String((it && it.policy) || "").indexOf("btc-") === 0 && !(it && (it.split || it.settleUp));
     }
     // a Bitcoin split whose shares would be below the 546-sat dust limit can never be paid
-    function splitDust(pv) { return room.splitBitcoin && pv !== null && pv !== undefined && Number(pv.each) < 546; }
+    function splitDust(pv) { return room.splitBitcoin && pv !== null && pv !== undefined
+                                    && (String(pv.least || "").length === 0 || Number(pv.least) < 546); }
     // Refresh the action menu when the action composer opens — the module queries each
     // candidate module's methods (never a blind scan), so not on the message tick.
     // Also keep the policy coherent with the kind (payment→Safe, statement→endorsement),
@@ -1072,7 +1073,8 @@ Item {
                  : isStatement ? qsTr("Statement") : qsTr("Payment"),
             // an invoke intent's target, rendered by the card as "call module.method(…)".
             action: isInvoke ? (String(eff.module || "") + "." + String(eff.method || "")) : "",
-            actionArgs: invokeArgs,
+            // each argument decoded by the module, in order (exo-3b3.18): the card shows the call
+            actionArgs: (isInvoke && it && it.summary && Array.isArray(it.summary.args)) ? it.summary.args : invokeArgs,
             // a statement the room ratifies, or a governance decision — the card shows
             // the text instead of amount → destination.
             statement: isGovernance
@@ -1549,6 +1551,19 @@ Item {
         while (carry > 0) { out = String(carry % 10) + out; carry = Math.floor(carry / 10); }
         return out.replace(/^0+/, "") || "0";
     }
+    // A canonical decimal string less a small integer ("" when that would be below one).
+    function subSmall(dec, k) {
+        var s = String(dec || "0"), out = "", borrow = k;
+        for (var i = s.length - 1; i >= 0; --i) {
+            var d = Number(s.charAt(i)) - (borrow % 10);
+            borrow = Math.floor(borrow / 10);
+            if (d < 0) { d += 10; borrow += 1; }
+            out = String(d) + out;
+        }
+        if (borrow > 0) return "";
+        out = out.replace(/^0+/, "");
+        return out.length > 0 ? out : "";
+    }
     // Who owes in the next split: every member but whoever fronted it, unless left out.
     function splitDebtors() {
         var out = [];
@@ -1627,7 +1642,13 @@ Item {
         if (total.length === 0 || total === "0" || n === 0) return null;
         var parts = n + (room.splitCreditorIn ? 1 : 0);
         var qr = room.divSmall(total, parts);
-        return { each: qr[0], mine: room.addSmall(room.splitCreditorIn ? qr[0] : "0", qr[1]), total: total, n: n };
+        // every share distinct (exo-3b3.14, as the module composes it): the i-th debtor owes i
+        // smallest units less, so a payment identifies its share by amount; the creditor's own
+        // share absorbs those units with the rounding. `least` is the smallest share.
+        var spread = n * (n - 1) / 2;
+        var least = room.subSmall(qr[0], n - 1);
+        return { each: qr[0], least: least, spread: spread, apart: n > 1,
+                 mine: room.addSmall(room.addSmall(room.splitCreditorIn ? qr[0] : "0", qr[1]), spread), total: total, n: n };
     }
     function proposeSplit(totalEth, memo) {
         if (!room.backend) return;
@@ -1762,6 +1783,7 @@ Item {
                     spacing: Theme.spacing.small
                     Loading { anchors.horizontalCenter: parent.horizontalCenter; running: room.opening }
                     LogosText {
+                        textFormat: Text.PlainText
                         width: parent.width
                         horizontalAlignment: Text.AlignHCenter
                         text: qsTr("Opening the room…")
@@ -1770,6 +1792,7 @@ Item {
                         font.weight: Theme.typography.weightMedium
                     }
                     LogosText {
+                        textFormat: Text.PlainText
                         objectName: "roomOpeningSlow"
                         width: parent.width
                         horizontalAlignment: Text.AlignHCenter
@@ -1871,11 +1894,13 @@ Item {
                     color: MusterStyle.settled
                 }
                 LogosText {
+                    textFormat: Text.PlainText
                     text: room.scopeLine
                     color: Theme.palette.textTertiary
                     font.pixelSize: MusterStyle.caption
                 }
                 LogosText {
+                    textFormat: Text.PlainText
                     objectName: "roomScopeWhoSees"
                     text: qsTr("Who can see what")
                     color: whoHover.hovered ? Theme.palette.text : Theme.palette.textSecondary

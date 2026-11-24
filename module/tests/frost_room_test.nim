@@ -18,6 +18,8 @@ import ../src/drivers/driver
 import ../src/drivers/frost
 import ../src/coordination/intents
 import ../src/crypto/curve25519
+import ../src/log/log
+import ./probes/attested
 
 proc seed(b: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = b)
 proc sigHex(sig: Ed25519Sig): string =
@@ -40,28 +42,32 @@ let w1 = contributorOf(drv, effectJson, s1)   # "frost:<m1 pubkey hex>"
 let w2 = contributorOf(drv, effectJson, s2)
 doAssert w1.len > 0 and w2.len > 0 and w1 != w2, "two distinct roster members"
 
+# The room FROST scaffold is room-bound: each member's contribution, in each round, carries
+# that member's attestation over P, as the live path publishes it (exo-af5).
+proc att(ev: seq[Event]): seq[Event] = withAttestations(ev, foldDrv, id, signers = [m1, m2, m3])
+
 # propose the intent + declare it runs under the FROST policy.
 var events = @[policyDeclEvent(id, "frost"), proposeEvent(id, effectJson)]
 
 # ── round 1 — two distinct members. The core advances to round 2 (from describe()),
 #    but the intent is NOT yet executable: the second round is still open.
 events.add contributeEvent(id, w1, s1, round = 1)
-doAssert intentState(events, foldDrv, id) == "collecting", "one signer in round 1 → collecting"
+doAssert intentState(att(events), foldDrv, id) == "collecting", "one signer in round 1 → collecting"
 events.add contributeEvent(id, w2, s2, round = 1)
-doAssert intentState(events, foldDrv, id) == "collecting", "round-1 threshold met, but round 2 pending"
-doAssert reduceIntents(events, foldDrv)[id].collection.round == 2, "the fold advanced to round 2"
+doAssert intentState(att(events), foldDrv, id) == "collecting", "round-1 threshold met, but round 2 pending"
+doAssert reduceIntents(att(events), foldDrv)[id].collection.round == 2, "the fold advanced to round 2"
 echo "1. round 1 (2 distinct members) → collecting, advanced to round 2 OK"
 
 # ── round 2 — two distinct members → executable.
 events.add contributeEvent(id, w1, s1, round = 2)
-doAssert intentState(events, foldDrv, id) == "collecting", "one signer in round 2 → still collecting"
+doAssert intentState(att(events), foldDrv, id) == "collecting", "one signer in round 2 → still collecting"
 events.add contributeEvent(id, w2, s2, round = 2)
-doAssert intentState(events, foldDrv, id) == "executable", "round-2 threshold met → executable"
+doAssert intentState(att(events), foldDrv, id) == "executable", "round-2 threshold met → executable"
 echo "2. round 2 (2 distinct members) → executable OK"
 
 # ── the view exposes round progress so a card can render "round R of N".
 block:
-  let views = reduceIntentViews(events, foldDrv)
+  let views = reduceIntentViews(att(events), foldDrv)
   doAssert views.len == 1
   doAssert views[0].policy == "frost" and views[0].rounds == 2, "view carries the FROST policy + 2 rounds"
 echo "3. reduceIntentViews exposes rounds=2 for a FROST intent OK"
@@ -73,9 +79,9 @@ block:
                contributeEvent(id, w1, s1, round = 1),
                contributeEvent(id, w1, s1, round = 1),   # same (member, round) → folds once
                contributeEvent(id, w1, s1, round = 2)]
-  doAssert intentState(solo, foldDrv, id) == "collecting",
+  doAssert intentState(att(solo), foldDrv, id) == "collecting",
            "the intent is folded, w1's round-1 contribution counted"
-  doAssert intentState(solo, foldDrv, id) != "executable",
+  doAssert intentState(att(solo), foldDrv, id) != "executable",
            "one member cannot complete a k=2, 2-round FROST intent"
 echo "4. a single member cannot complete it (k distinct signers required) OK"
 

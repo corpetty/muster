@@ -192,11 +192,11 @@ proc reduceIntents*(events: seq[Event], driverFor: DriverFor): Table[string, Int
     sigs.add (id: id, who: who, value: e.value, round: r, ord: i)
   sigs.sort(proc (a, b: auto): int =
     (if a.round != b.round: cmp(a.round, b.round) else: cmp(a.ord, b.ord)))
-  # The attestation gate (invariant 10 on the live path, exo-ef1): an approval that
-  # carries muster attestations counts only if one of them verifies against the P this
-  # fold re-derives from the log — a forged, mismatched, cross-intent or cross-room
-  # attestation leaves the approval uncounted. An approval with NO attestation was
-  # signed outside muster (pasted): it counts, and every surface grades it unattested.
+  # The attestation gate (invariant 10 on the live path, exo-ef1, exo-af5): an approval
+  # counts when one of its attestations verifies against the P this fold re-derives from
+  # the log (P binds the room). Without one it counts only where the chain binds the
+  # signature itself, graded unattested; under a driver no chain checks it counts for
+  # nothing, so a signature copied from another room is no approval here.
   var payloads = initTable[string, seq[byte]]()
   proc payloadOf(id: string): seq[byte] =
     if id notin payloads: payloads[id] = attestationPayload(events, driverFor, id)
@@ -226,11 +226,13 @@ proc reduceIntents*(events: seq[Event], driverFor: DriverFor): Table[string, Int
     if dedup in seenSig: continue
     seenSig.incl dedup
     let ak = s.id & "/" & s.who & "/" & $s.round
-    if ak in attests:
-      var ok = false
-      for a in attests[ak]:
-        if verifyAttestation(s.who, payloadOf(s.id), a): ok = true
-      if not ok: continue                                # rejected: attested, but not over P
+    var attestedHere = false
+    for a in attests.getOrDefault(ak, @[]):
+      if verifyAttestation(s.who, payloadOf(s.id), a): attestedHere = true
+    # the grading rule (attest.gradeFor): counted when attested over P in this room, or
+    # when the chain binds the signature itself; a failing attestation voids nothing
+    # (exo-83c), and a driver no chain checks counts nothing unattested (exo-af5)
+    if gradeFor(attestedHere, chainBindsSignatures(driverOf(s.id))) == agRejected: continue
     inc now
     let driver = driverOf(s.id)
     driver.expectMaterialization(result[s.id].materialization)   # verify against THIS intent (full bytes)
@@ -825,15 +827,20 @@ type LogProvItem* = object
   epoch*: int             ## the membership epoch the entry belongs to (0 = the founding epoch)
   attestation*: string    ## sig entries: "committed" | "unattested" | "rejected" (exo-ef1); "" otherwise
 
-proc membershipEvent*(epoch: int, joinerHex: string, parents: seq[EventId] = @[]): Event =
+proc membershipEvent*(epoch: int, joinerHex: string, parents: seq[EventId] = @[],
+                      author = ""): Event =
   ## Recorded by the admitting member right after re-keying (exo-275): sealed under
   ## the NEW epoch, so the joiner reads its own admission and nothing before it (F-16).
-  Event(parents: parents, key: "membership/" & $epoch & "/admit/" & joinerHex, value: "1")
+  ## Names and is signed by the member who re-keyed (exo-045): who-can-read views read it.
+  Event(parents: parents, key: "membership/" & $epoch & "/admit/" & joinerHex,
+        value: $(%*{"author": author}))
 
-proc removalEvent*(epoch: int, memberHex: string, parents: seq[EventId] = @[]): Event =
+proc removalEvent*(epoch: int, memberHex: string, parents: seq[EventId] = @[],
+                   author = ""): Event =
   ## Recorded by the member who removed someone from the room's encryption (exo-267.6),
-  ## sealed under the NEW epoch: the removed member never reads it.
-  Event(parents: parents, key: "membership/" & $epoch & "/remove/" & memberHex, value: "1")
+  ## sealed under the NEW epoch: the removed member never reads it. Signed, as an admit.
+  Event(parents: parents, key: "membership/" & $epoch & "/remove/" & memberHex,
+        value: $(%*{"author": author}))
 
 proc logProvenance*(events: seq[Event], driverFor: DriverFor,
                     sealedIn = initTable[string, int]()): seq[LogProvItem] =

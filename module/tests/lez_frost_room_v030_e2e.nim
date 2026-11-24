@@ -60,7 +60,7 @@ proc res(s: CoordinationSession): DriverFor =
   let sess = s
   result = proc(policy: string): Driver =
     driverForPolicy(policy, reduceAccounts(sess.log.allEvents()), proc(k: string): Driver = liveDriverFor(k))
-discard frostCeremonyOpen(r.alice, cid, "lez:local", 2, 3)
+discard frostCeremonyOpen(r.alice, aliceKs, cid, "lez:local", 2, 3)
 pollAll()
 for (s, ks) in members: discard frostCeremonyJoin(s, ks, cid)
 var outcomes: seq[string]
@@ -113,7 +113,7 @@ proc propose(amount: string, seqNo: uint64): string =
                              account = a.address, ttlSec = Ttl)
   doAssert id.startsWith("0x"), id
   # the nonce came from the chain: the read is recorded (invariant 10)
-  r.alice.publish(readEvent(id, "nonces", "lez:getAccount", $parseJson(effectJson)["nonces"]))
+  r.alice.publishRead(aliceKs, id, "nonces", "lez:getAccount", $parseJson(effectJson)["nonces"])
   pollAll()
   id
 let id = propose("200", 1)

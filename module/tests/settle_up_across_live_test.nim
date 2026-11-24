@@ -96,9 +96,12 @@ doAssert composed.covers.len == 3
 let eff = parseJson(composed.effectJson)
 var paid = initTable[string, (string, string)]()
 for t in eff["transfers"]: paid[t["to"].getStr()] = (t["payTo"].getStr(), t["amount"].getStr())
-# Alice +600; Bob −300 + 11666 = +11366; Carol −300 −11666 = −11966
-doAssert paid.getOrDefault(alice) == (PayA, "600"), $paid
-doAssert paid.getOrDefault(bob) == (BobEvm, "11366"), "Bob, owed only on Bitcoin, paid at the address he shared: " & $paid
+# Alice + both dinner shares (about 600); Bob − his dinner share + 11666; Carol pays the rest.
+# The dinner's shares are distinct (exo-3b3.14): read from the split, never assumed.
+proc dinnerShare(who: string): int = parseInt(evenShares("900", alice, @[bob, carol]).filterIt(it.who == who)[0].amount)
+doAssert paid.getOrDefault(alice) == (PayA, $(dinnerShare(bob) + dinnerShare(carol))), $paid
+doAssert paid.getOrDefault(bob) == (BobEvm, $(11666 - dinnerShare(bob))),
+         "Bob, owed only on Bitcoin, paid at the address he shared: " & $paid
 echo "1. the composer nets ETH and BTC shares at the rate, paying Bob where he said, or naming him OK"
 
 # ── 2. the rates count only as a recorded read; every cover is checked against its split ──

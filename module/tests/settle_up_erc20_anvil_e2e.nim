@@ -146,7 +146,8 @@ for pp in [pp1, pp2]:
 let n1 = rpc("eth_getTransactionByHash", %*[pp1.tx])["nonce"].getStr()
 let n2 = rpc("eth_getTransactionByHash", %*[pp2.tx])["nonce"].getStr()
 doAssert n1 != n2, "two nonces, neither payment replacing the other: " & n1 & " / " & n2
-doAssert @[pp1.transfer.amount, pp2.transfer.amount].sorted() == @["100000", "400000"]
+# the net amounts (about 0.4 and 0.1 MTD: the shares are distinct, exo-3b3.14)
+doAssert @[pp1.transfer.amount, pp2.transfer.amount].sorted() == net.mapIt(it.amount).sorted()
 discard rpc("evm_mine", newJArray())
 discard rpc("evm_setAutomine", %*[true])
 echo "2. Carol's two payments, the second while the first is pending: nonces ", n1, " and ", n2, " OK"
@@ -174,8 +175,11 @@ discard settleCovered(r.bob, bobKs, splitFor, seamFor(bobKs))
 sync()
 for s in [r.alice, r.bob, r.carol]:
   doAssert intentState(s.roomEvents(), splitFor, dinner) == "final" and intentState(s.roomEvents(), splitFor, taxi) == "final"
-doAssert tokenBalance(token, payA) - beforeA == u256(400_000) and tokenBalance(token, payB) - beforeB == u256(100_000),
-         "Alice +0.4 and Bob +0.1 MTD exactly"
+proc netTo(who: string): UInt256 =
+  for t in net:
+    if t.to == who: return u256(t.amount)
+doAssert tokenBalance(token, payA) - beforeA == netTo(alice) and tokenBalance(token, payB) - beforeB == netTo(bob),
+         "Alice about +0.4 and Bob about +0.1 MTD, exactly their nets"
 echo "3. confirmed from the Transfer logs; the settle-up and both splits final on all three; balances exact OK"
 
 # ── 4. partGone: gone only when the RPC no longer knows it and its nonce is settled ────

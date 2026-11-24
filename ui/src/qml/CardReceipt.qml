@@ -17,6 +17,7 @@ ColumnLayout {
     spacing: Theme.spacing.tiny
 
     LogosText {
+        textFormat: Text.PlainText
         Layout.fillWidth: true
         wrapMode: Text.WordWrap
         text: (String((cardRoot.card && cardRoot.card.amount) || "")
@@ -28,6 +29,7 @@ ColumnLayout {
     }
 
     LogosText {
+        textFormat: Text.PlainText
         Layout.fillWidth: true
         visible: !!(cardRoot.card && cardRoot.card.rail)
         text: String((cardRoot.card && cardRoot.card.rail) || "")
@@ -42,6 +44,7 @@ ColumnLayout {
     // disclosed one is stated plainly. An absent `discloses` says so
     // rather than guessing what a rail leaked.
     LogosText {
+        textFormat: Text.PlainText
         Layout.fillWidth: true
         Layout.topMargin: Theme.spacing.tiny
         text: qsTr("What left the room")
@@ -73,6 +76,7 @@ ColumnLayout {
             spacing: Theme.spacing.small
 
             LogosText {
+                textFormat: Text.PlainText
                 text: modelData.k
                 color: Theme.palette.textTertiary
                 font.pixelSize: MusterStyle.cardCaption
@@ -81,6 +85,7 @@ ColumnLayout {
             Item { Layout.fillWidth: true }
 
             LogosText {
+                textFormat: Text.PlainText
                 text: modelData.v
                 color: modelData.withheld
                     ? Theme.palette.success : Theme.palette.textSecondary

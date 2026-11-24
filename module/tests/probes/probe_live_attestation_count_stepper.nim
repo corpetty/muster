@@ -12,9 +12,15 @@
 ##   tampered_context     — bob signing P under a context with a different expiry;
 ##   other_room           — bob's genuine attestation from the same effect proposed in
 ##                          another room (another context).
-## The fold must count the approval (and grade it committed) ONLY for `valid`, under
-## every live policy. Catches a fold that checks presence without verifying, and one
-## that verifies against the attestation's own claim instead of re-deriving P.
+## The approval is graded committed ONLY for `valid`, under every live policy. A failing
+## attestation is never an attestation; what the approval counts for then is the rule
+## for an approval with none (exo-83c, exo-af5): under a driver the chain binds (safe)
+## it still counts, graded unattested — a junk attestation anyone could add voids
+## nothing; under one only the room binds (threshold) it counts for nothing, graded
+## rejected, so `other_room`, a signature carried in from another room, never counts.
+## Catches a fold that checks presence without verifying, one that verifies against the
+## attestation's own claim instead of re-deriving P, and one where a junk attestation
+## takes an approval away.
 ## Build: see live_room.nim.
 
 import ./live_room
@@ -85,10 +91,13 @@ proc variantCorrect(variant: string): bool =
     evs.add attestEvent(id, bobWho, 1, forged)
     let counted = countedApprovals(evs, id)
     let grade = gradeOf(approvalGrades(evs, liveDriverFor, id), bobWho, 1)
+    let chainBound = chainBindsSignatures(liveDriverFor(policy))
     if variant == "valid":
       if counted != 1 or grade != agCommitted: return false
+    elif chainBound:
+      if counted != 1 or grade != agUnattested: return false
     else:
-      if counted != 0 or grade == agCommitted: return false
+      if counted != 0 or grade == agCommitted or grade == agUnattested: return false
   true
 
 proc state(v: string): JsonNode =

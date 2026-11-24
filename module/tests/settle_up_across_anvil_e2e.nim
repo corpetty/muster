@@ -132,8 +132,18 @@ var net = initTable[string, (string, string)]()
 for t in parseJson(composed.effectJson)["transfers"]:
   doAssert t["from"].getStr() == bob, "only Bob owes, net: " & $t
   net[t["to"].getStr()] = (t["payTo"].getStr(), t["amount"].getStr())
-doAssert net.getOrDefault(carol) == (carolEvm, "400000000000000000"), "Carol, owed only on Bitcoin, at her shared address: " & $net
-doAssert net.getOrDefault(alice) == (payA, "100000000000000000"), $net
+# each member's net in wei, from the splits' own shares (distinct, exo-3b3.14) at the rates:
+# MTD x 5e11, BTC sat x 2e11 — about Carol +0.4 ETH, Alice +0.1 ETH, Bob paying both
+proc sh(total, creditor: string, debtors: seq[string], who: string): int64 =
+  parseBiggestInt(evenShares(total, creditor, debtors).filterIt(it.who == who)[0].amount)
+let dB = sh("900000000000000000", alice, @[bob, carol], bob)
+let dC = sh("900000000000000000", alice, @[bob, carol], carol)
+let tA = sh("600000", bob, @[alice, carol], alice) * 500_000_000_000
+let tC = sh("600000", bob, @[alice, carol], carol) * 500_000_000_000
+let hA = sh("6000000", carol, @[alice, bob], alice) * 200_000_000_000
+let hB = sh("6000000", carol, @[alice, bob], bob) * 200_000_000_000
+doAssert net.getOrDefault(carol) == (carolEvm, $(hA + hB - dC - tC)), "Carol, owed only on Bitcoin, at her shared address: " & $net
+doAssert net.getOrDefault(alice) == (payA, $(dB + dC - tA - hA)), $net
 doAssert settleAgreeRefusal(effectFromJson(composed.effectJson), carol, @[carolEvm]) == "", "Carol's client holds it"
 let su = r.alice.propose(aliceKs, EvmPolicy, composed.effectJson, Chain, @[(field: "rates", source: "rates:proposer")])
 doAssert su.startsWith("0x"), su
@@ -169,8 +179,8 @@ for _ in 0 ..< 50:
   if confirmed == 2: break
   sleep(100)
 doAssert confirmed == 2, "each recipient confirms its own: " & $confirmed
-doAssert ethBalance(payA) - beforeA == u256("100000000000000000") and
-         ethBalance(carolEvm) - beforeC == u256("400000000000000000"), "Alice +0.1 and Carol +0.4 ETH exactly"
+doAssert ethBalance(payA) - beforeA == u256($(dB + dC - tA - hA)) and
+         ethBalance(carolEvm) - beforeC == u256($(hA + hB - dC - tC)), "Alice about +0.1 and Carol about +0.4 ETH, exactly their nets"
 echo "3. Bob's two ETH payments landed; Alice and Carol confirmed from their own reads; balances exact OK"
 
 # ── 4. final: every split, the Bitcoin hotel by Carol's word ──────────────────────────

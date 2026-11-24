@@ -18,6 +18,7 @@ ColumnLayout {
     spacing: 2
 
     LogosText {
+        textFormat: Text.PlainText
         visible: !!(cardRoot.card && cardRoot.card.purpose)
         Layout.fillWidth: true
         wrapMode: Text.WordWrap
@@ -28,6 +29,7 @@ ColumnLayout {
         font.weight: Theme.typography.weightMedium
     }
     LogosText {
+        textFormat: Text.PlainText
         // the ask, while it is still yours to answer
         objectName: "cardAddressAsk"
         visible: cardRoot.askedOfMe && !cardRoot.answeredByMe
@@ -46,6 +48,7 @@ ColumnLayout {
         font.pixelSize: MusterStyle.cardCaption
     }
     LogosText {
+        textFormat: Text.PlainText
         objectName: "cardAddressWaiting"
         visible: !cardRoot.askedOfMe && (cardRoot.askedOf.length > 0 ? !cardRoot.answeredByAsked
                                                                      : (cardRoot.answers || []).length === 0)
@@ -59,6 +62,7 @@ ColumnLayout {
     Repeater {
         model: cardRoot.answers || []
         delegate: LogosText {
+            textFormat: Text.PlainText
             required property var modelData
             objectName: "cardAddressAnswer"
             Layout.fillWidth: true

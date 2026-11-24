@@ -87,6 +87,9 @@ proc restart(net: LocalNetwork, who: string): (CoordinationSession, Keystore) =
   ## A relaunch: the keyfile reopened from disk, the hosted join, then the store catch-up.
   let ks = keystoreOf(who)
   let s = net.join(ks)
+  # a room re-entered with no copy of its own takes its grant from the store, from
+  # whichever member admitted it (muster_module.attachJournal, exo-3b3)
+  s.expectAnyGrant()
   s.catchUp()
   (s, ks)
 

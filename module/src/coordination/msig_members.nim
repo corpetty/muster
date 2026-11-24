@@ -179,3 +179,20 @@ proc queuedProposers*(events: seq[Event], multisig: seq[byte]): Table[string, se
       let p = proposalOf(eff)
       if p.multisig == multisig: result[hexOf(proposalId(p))] = p.proposer
     except CatchableError: discard
+
+proc msigExecutedRemovals*(events: seq[Event], room: string): seq[string] =
+  ## Every room member a lez-msig config change removed and no later one added back, who
+  ## is a member of no lez-msig here now — whoever proposed it (exo-a16).
+  var stillIn: seq[string]
+  let accts = lezMsigAccounts(events)
+  for a in accts: stillIn.add memberIdsNow(events, room, a)
+  for a in accts:
+    for x in lezMsigNow(events, a).applied:
+      for ch in x.changes:
+        if ch.kind == ccRemoveMember:
+          let who = keyOwner(events, room, ch.removed)
+          if who.len > 0 and who notin result: result.add who
+        elif ch.kind == ccAddMember:
+          let who = keyOwner(events, room, ch.member.key)
+          result = result.filterIt(it != who)
+  result = result.filterIt(it notin stillIn)

@@ -177,6 +177,7 @@ Item {
                     onClicked: settings.advanced = true
                 }
                 LogosText {
+                    textFormat: Text.PlainText
                     Layout.leftMargin: Theme.spacing.small
                     text: settings.advanced ? qsTr("Your keys, nodes and network, too")
                                             : qsTr("What most people need")
@@ -203,6 +204,7 @@ Item {
                     spacing: Theme.spacing.tiny
 
                     LogosText {
+                        textFormat: Text.PlainText
                         text: qsTr("You")
                         color: Theme.palette.textTertiary
                         font.pixelSize: MusterStyle.caption
@@ -226,6 +228,7 @@ Item {
                                 spacing: Theme.spacing.small
 
                                 LogosText {
+                                    textFormat: Text.PlainText
                                     Layout.preferredWidth: 70
                                     Layout.alignment: Qt.AlignTop
                                     text: modelData.k
@@ -234,6 +237,7 @@ Item {
                                     font.pixelSize: MusterStyle.caption
                                 }
                                 LogosText {
+                                    textFormat: Text.PlainText
                                     Layout.fillWidth: true
                                     wrapMode: Text.WrapAnywhere
                                     text: modelData.v.length > 0 ? modelData.v : qsTr("(not loaded)")
@@ -247,6 +251,7 @@ Item {
 
                     // ── your contact link (exo-899): your chat id, to give someone ──
                     LogosText {
+                        textFormat: Text.PlainText
                         Layout.topMargin: Theme.spacing.small
                         text: qsTr("Your contact link")
                         color: Theme.palette.textTertiary
@@ -274,6 +279,7 @@ Item {
                         spacing: Theme.spacing.small
                         // ── your Bitcoin key (exo-59c) ─────────────────────────────
                         LogosText {
+                            textFormat: Text.PlainText
                             Layout.topMargin: Theme.spacing.small
                             text: qsTr("Your Bitcoin key")
                             color: Theme.palette.textTertiary
@@ -281,6 +287,7 @@ Item {
                             font.weight: Theme.typography.weightBold
                         }
                         LogosText {
+                            textFormat: Text.PlainText
                             Layout.fillWidth: true
                             wrapMode: Text.WordWrap
                             text: qsTr("Share this with whoever sets up a Bitcoin multisig with you (Accounts → "
@@ -293,6 +300,7 @@ Item {
                             Layout.fillWidth: true
                             spacing: Theme.spacing.small
                             TextEdit {
+                                textFormat: TextEdit.PlainText
                                 id: btcKeyField
                                 Layout.fillWidth: true
                                 Layout.alignment: Qt.AlignVCenter
@@ -316,6 +324,7 @@ Item {
                         // where a Bitcoin split's share is paid from (exo-408 item 12): wpkh of the key
                         // above, one address per bech32 prefix, naming the networks that share it
                         LogosText {
+                            textFormat: Text.PlainText
                             Layout.fillWidth: true
                             Layout.topMargin: Theme.spacing.small
                             visible: settings.btcPayerRows.length > 0
@@ -333,6 +342,7 @@ Item {
                                 Layout.fillWidth: true
                                 spacing: Theme.spacing.small
                                 LogosText {
+                                    textFormat: Text.PlainText
                                     Layout.preferredWidth: 150
                                     text: String(modelData.networks)
                                     color: Theme.palette.textSecondary
@@ -340,6 +350,7 @@ Item {
                                     elide: Text.ElideRight
                                 }
                                 TextEdit {
+                                    textFormat: TextEdit.PlainText
                                     id: payerField
                                     Layout.fillWidth: true
                                     Layout.alignment: Qt.AlignVCenter
@@ -360,6 +371,7 @@ Item {
                         }
 
                         LogosText {
+                            textFormat: Text.PlainText
                             Layout.fillWidth: true
                             Layout.topMargin: 2
                             wrapMode: Text.WordWrap
@@ -390,6 +402,7 @@ Item {
                     spacing: Theme.spacing.small
 
                     LogosText {
+                        textFormat: Text.PlainText
                         text: qsTr("Accounts and network")
                         color: Theme.palette.textTertiary
                         font.pixelSize: MusterStyle.caption
@@ -402,6 +415,7 @@ Item {
                         Layout.fillWidth: true
                         spacing: Theme.spacing.small
                         LogosText {
+                            textFormat: Text.PlainText
                             Layout.fillWidth: true
                             wrapMode: Text.WordWrap
                             text: qsTr("Store nodes and RPC are untrusted infrastructure you choose. "
@@ -420,6 +434,7 @@ Item {
                         Layout.fillWidth: true
                         spacing: Theme.spacing.tiny
                         LogosText {
+                            textFormat: Text.PlainText
                             text: qsTr("Ethereum chains  ·  from your device's chain settings (the Ethereum RPC app)")
                             color: Theme.palette.textSecondary
                             font.family: MusterStyle.mono
@@ -444,6 +459,7 @@ Item {
                                 }
                             }
                             LogosText {
+                                textFormat: Text.PlainText
                                 visible: settings.chainNote.length > 0
                                 text: settings.chainNote
                                 color: Theme.palette.warning
@@ -461,6 +477,7 @@ Item {
                             visible: !(settings.s && settings.s.evmPlatform)
                             spacing: Theme.spacing.small
                             LogosText {
+                                textFormat: Text.PlainText
                                 objectName: "settingsRpcNow"
                                 // bounded: one long value must not widen the whole column
                                 Layout.fillWidth: true
@@ -509,6 +526,7 @@ Item {
                             Layout.topMargin: Theme.spacing.small
                             spacing: Theme.spacing.small
                             LogosText {
+                                textFormat: Text.PlainText
                                 objectName: "settingsBtcRpcNow"
                                 // bounded: one long value must not widen the whole column
                                 Layout.fillWidth: true
@@ -558,6 +576,7 @@ Item {
                             Layout.topMargin: Theme.spacing.small
                             spacing: Theme.spacing.small
                             LogosText {
+                                textFormat: Text.PlainText
                                 objectName: "settingsXmrMsigRpcNow"
                                 // bounded: one long value must not widen the whole column
                                 Layout.fillWidth: true
@@ -579,6 +598,7 @@ Item {
                             }
                         }
                         LogosText {
+                            textFormat: Text.PlainText
                             Layout.fillWidth: true
                             Layout.maximumWidth: 460
                             wrapMode: Text.WordWrap
@@ -614,6 +634,7 @@ Item {
                             Layout.topMargin: Theme.spacing.small
                             spacing: Theme.spacing.small
                             LogosText {
+                                textFormat: Text.PlainText
                                 objectName: "settingsLezRpcNow"
                                 // bounded: one long value must not widen the whole column
                                 Layout.fillWidth: true
@@ -661,6 +682,7 @@ Item {
                         // the zone's name in the room, and the lez-msig program on it (exo-0d3,
                         // exo-cc7): a zone the client does not ship knowing, e.g. the LEZ 0.4 devnet
                         LogosText {
+                            textFormat: Text.PlainText
                             objectName: "settingsLezMsigNow"
                             Layout.fillWidth: true
                             elide: Text.ElideMiddle
@@ -718,6 +740,7 @@ Item {
 
                         // ── delivery config ──
                         LogosText {
+                            textFormat: Text.PlainText
                             // the config is one long JSON line: wrapped and bounded, or its width
                             // widens the whole column and every text in it runs off the page
                             Layout.fillWidth: true
@@ -777,6 +800,7 @@ Item {
                     // Delivery's sender anonymity: each send goes over three mix hops to an
                     // exit that publishes it. It carries sends only, and the text says so.
                     LogosText {
+                        textFormat: Text.PlainText
                         Layout.topMargin: Theme.spacing.small
                         text: qsTr("Send through the mixnet")
                         color: Theme.palette.textTertiary
@@ -784,6 +808,7 @@ Item {
                         font.weight: Theme.typography.weightBold
                     }
                     LogosText {
+                        textFormat: Text.PlainText
                         objectName: "settingsMixNow"
                         visible: settings.advanced
                         Layout.fillWidth: true
@@ -836,6 +861,7 @@ Item {
                                  : Theme.palette.textTertiary
                         }
                         LogosText {
+                            textFormat: Text.PlainText
                             objectName: "settingsMixDetail"
                             Layout.fillWidth: true
                             wrapMode: Text.WordWrap
@@ -845,6 +871,7 @@ Item {
                         }
                     }
                     LogosText {
+                        textFormat: Text.PlainText
                         Layout.fillWidth: true
                         visible: !!settings.mix.remedy
                         wrapMode: Text.WordWrap
@@ -853,6 +880,7 @@ Item {
                         font.pixelSize: MusterStyle.caption
                     }
                     LogosText {
+                        textFormat: Text.PlainText
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
                         visible: !settings.advanced
@@ -862,6 +890,7 @@ Item {
                         font.pixelSize: MusterStyle.caption
                     }
                     LogosText {
+                        textFormat: Text.PlainText
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
                         visible: settings.advanced
@@ -885,6 +914,7 @@ Item {
                         // one. The RLN modules register by themselves once the node's payer is
                         // funded, so the one thing shown to act on is that payer, whole, to copy.
                         LogosText {
+                            textFormat: Text.PlainText
                             Layout.topMargin: Theme.spacing.small
                             text: qsTr("RLN membership")
                             color: Theme.palette.textTertiary
@@ -906,6 +936,7 @@ Item {
                                      : Theme.palette.textTertiary
                             }
                             LogosText {
+                                textFormat: Text.PlainText
                                 objectName: "settingsRlnDetail"
                                 Layout.fillWidth: true
                                 wrapMode: Text.WordWrap
@@ -915,6 +946,7 @@ Item {
                             }
                         }
                         LogosText {
+                            textFormat: Text.PlainText
                             Layout.fillWidth: true
                             visible: !!settings.rln.remedy
                             wrapMode: Text.WordWrap
@@ -927,6 +959,7 @@ Item {
                             visible: rlnPayerField.text.length > 0
                             spacing: Theme.spacing.small
                             TextEdit {
+                                textFormat: TextEdit.PlainText
                                 id: rlnPayerField
                                 Layout.fillWidth: true
                                 Layout.alignment: Qt.AlignVCenter
@@ -946,6 +979,7 @@ Item {
                             }
                         }
                         LogosText {
+                            textFormat: Text.PlainText
                             Layout.fillWidth: true
                             wrapMode: Text.WordWrap
                             text: qsTr("On logos.test every message carries an RLN proof, so a node sends nothing until "
@@ -960,6 +994,7 @@ Item {
                     // ask it for signatures a person approves in the signer. This row says
                     // whether it is there and whether it sees muster's requests as muster's.
                     LogosText {
+                        textFormat: Text.PlainText
                         Layout.topMargin: Theme.spacing.small
                         text: qsTr("Ethereum accounts")
                         color: Theme.palette.textTertiary
@@ -981,6 +1016,7 @@ Item {
                                  : Theme.palette.textTertiary
                         }
                         LogosText {
+                            textFormat: Text.PlainText
                             objectName: "settingsKeystoreDetail"
                             Layout.fillWidth: true
                             wrapMode: Text.WordWrap
@@ -994,6 +1030,7 @@ Item {
                         }
                     }
                     LogosText {
+                        textFormat: Text.PlainText
                         Layout.fillWidth: true
                         visible: settings.advanced && !!settings.keystore.remedy
                         wrapMode: Text.WordWrap
@@ -1026,6 +1063,7 @@ Item {
                             }
                         }
                         LogosText {
+                            textFormat: Text.PlainText
                             visible: settings.manageNote.length > 0
                             text: settings.manageNote
                             color: Theme.palette.warning
@@ -1045,6 +1083,7 @@ Item {
                             Layout.fillWidth: true
                             spacing: 2
                             LogosText {
+                                textFormat: Text.PlainText
                                 Layout.fillWidth: true
                                 elide: Text.ElideMiddle
                                 text: (acctRow.chosen ? "● " : "")
@@ -1066,6 +1105,7 @@ Item {
                     }
                     // the selected account's binding: what lets the room tell its approvals are yours
                     LogosText {
+                        textFormat: Text.PlainText
                         objectName: "settingsKeystoreBinding"
                         Layout.fillWidth: true
                         visible: !!settings.keystore.selected
@@ -1112,6 +1152,7 @@ Item {
                         }
                     }
                     LogosText {
+                        textFormat: Text.PlainText
                         Layout.fillWidth: true
                         visible: !!settings.signerInstall.state && settings.keystore.binding !== "valid"
                         wrapMode: Text.WordWrap
@@ -1127,6 +1168,7 @@ Item {
                     }
 
                     LogosText {
+                        textFormat: Text.PlainText
                         Layout.fillWidth: true
                         Layout.topMargin: 2
                         visible: settings.advanced
@@ -1159,6 +1201,7 @@ Item {
                     spacing: Theme.spacing.tiny
 
                     LogosText {
+                        textFormat: Text.PlainText
                         text: qsTr("ABOUT & LEGAL")
                         color: Theme.palette.textTertiary
                         font.family: MusterStyle.mono
@@ -1166,6 +1209,7 @@ Item {
                         font.weight: Theme.typography.weightMedium
                     }
                     LogosText {
+                        textFormat: Text.PlainText
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
                         text: qsTr("Muster is experimental, pre-release software for demonstration and "

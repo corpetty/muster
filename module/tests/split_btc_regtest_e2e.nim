@@ -11,7 +11,7 @@
 ## someone else; nothing confirms before the payment is in a block; Alice's balance at payTo
 ## rises by exactly the shares; the split is final on all three members.
 
-import std/[os, strutils, json, math]
+import std/[os, strutils, json, math, sequtils]
 import ../src/log/log
 import ../src/drivers/driver
 import ../src/drivers/split
@@ -85,7 +85,9 @@ proc pay(s: CoordinationSession, ks: Keystore): string =
   let tx = rpc("getrawtransaction", %*[pp.tx, true])
   var paysShare = false
   for o in tx{"vout"}:
-    if o{"scriptPubKey"}{"address"}.getStr() == payTo and uint64(round(o{"value"}.getFloat() * 1e8)) == 150_000'u64:
+    # this payer's own share (every share distinct, exo-3b3.14: about 0.0015 BTC each)
+    let mine = evenShares("450000", alice, @[bob, carol]).filterIt(it.who == idHex(ks))[0].amount
+    if o{"scriptPubKey"}{"address"}.getStr() == payTo and uint64(round(o{"value"}.getFloat() * 1e8)) == parseBiggestUInt(mine):
       paysShare = true
   doAssert paysShare, "the payment pays payTo exactly the share: " & $tx{"vout"}
   let own = seamFor(ks).payerAddress()

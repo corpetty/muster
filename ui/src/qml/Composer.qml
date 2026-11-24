@@ -196,6 +196,7 @@ Item {
                 spacing: Theme.spacing.small
 
                 LogosText {
+                    textFormat: Text.PlainText
                     text: qsTr("What are we doing together?")
                     color: Theme.palette.text
                     font.family: Theme.typography.publicSans
@@ -230,6 +231,7 @@ Item {
                             spacing: Theme.spacing.tiny
 
                             LogosText {
+                                textFormat: Text.PlainText
                                 text: modelData.name
                                 color: Theme.palette.text
                                 font.family: Theme.typography.publicSans
@@ -237,6 +239,7 @@ Item {
                                 font.weight: Theme.typography.weightMedium
                             }
                             LogosText {
+                                textFormat: Text.PlainText
                                 Layout.fillWidth: true
                                 text: modelData.note
                                 color: Theme.palette.textTertiary
@@ -255,6 +258,7 @@ Item {
                 spacing: Theme.spacing.small
 
                 LogosText {
+                    textFormat: Text.PlainText
                     text: qsTr("Who's doing it with you?")
                     color: Theme.palette.text
                     font.family: Theme.typography.publicSans
@@ -272,6 +276,7 @@ Item {
                 // identity, 128 hex) can carry an invite. Anything else opens the room
                 // without telling them, which used to happen silently.
                 LogosText {
+                    textFormat: Text.PlainText
                     objectName: "composerPeerHint"
                     visible: composer.hasPeer
                     Layout.fillWidth: true
@@ -288,6 +293,7 @@ Item {
 
                 // …or tap a name from your address book instead of pasting.
                 LogosText {
+                    textFormat: Text.PlainText
                     visible: (composer.contacts || []).length > 0
                     text: qsTr("or pick from your contacts")
                     color: Theme.palette.textTertiary
@@ -313,6 +319,7 @@ Item {
                                 onClicked: peerField.text = String(modelData.identity || "")
                             }
                             LogosText {
+                                textFormat: Text.PlainText
                                 id: chipText
                                 anchors.centerIn: parent
                                 text: String(modelData.alias || "").length > 0
@@ -329,6 +336,7 @@ Item {
                     Layout.fillWidth: true
                     spacing: Theme.spacing.small
                     LogosText {
+                        textFormat: Text.PlainText
                         Layout.fillWidth: true
                         text: qsTr("Only these people can read the room. Someone added later reads from then on.")
                         color: Theme.palette.textTertiary
@@ -352,6 +360,7 @@ Item {
                     Layout.fillWidth: true
                     spacing: Theme.spacing.small
                     LogosText {
+                        textFormat: Text.PlainText
                         Layout.fillWidth: true
                         text: composer.pickedPolicy === "safe"
                               ? qsTr("Settles on a shared Safe once the room signs off.")
@@ -392,6 +401,7 @@ Item {
                 onVisibleChanged: if (visible) composer.refreshComposeOffers()
 
                 LogosText {
+                    textFormat: Text.PlainText
                     text: qsTr("What to send (optional)")
                     color: Theme.palette.text
                     font.family: Theme.typography.publicSans
@@ -399,6 +409,7 @@ Item {
                     font.weight: Theme.typography.weightMedium
                 }
                 LogosText {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     text: qsTr("From the room's shared account, signed off together. Pick what you hold; leave it blank to sort it out in the room.")
                     color: Theme.palette.textTertiary
@@ -423,6 +434,7 @@ Item {
                     }
                 }
                 LogosText {
+                    textFormat: Text.PlainText
                     visible: composer.assetCandidates().length === 0
                     text: qsTr("(no holdings to send from this account yet)")
                     color: Theme.palette.textTertiary
@@ -455,6 +467,7 @@ Item {
 
             // ── footer ────────────────────────────────────────────────────────
             LogosText {
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 text: composer.scopeCount === 1 ? qsTr("Only you can read this, until someone joins.")
                                                 : qsTr("%1 people can read this. Nobody else.").arg(composer.scopeCount)

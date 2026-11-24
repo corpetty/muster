@@ -21,7 +21,7 @@
 ## driver allows. One transaction settles at most one part: the creditor's client refuses
 ## a reference it already confirmed for another part in this room.
 
-import std/[json, sequtils, strutils, sets, tables]
+import std/[json, os, sequtils, strutils, sets, tables]
 import ../log/log
 import ../crypto/keystore
 import ../crypto/curve25519
@@ -119,7 +119,32 @@ proc myIdentity*(ks: Keystore): string = hx(ks.encIdentity().toBytes())
 proc myPartName*(ks: Keystore): string = "ed:" & hx(ks.encIdentity().ed)
   ## This member's name as a party (the convention every room-key driver uses).
 
-proc normRef(tx: string): string = tx.strip().toLowerAscii()
+proc isLowerHex64(h: string): bool = h.len == 64 and h.allCharsInSet({'0'..'9', 'a'..'f'})
+
+proc canonicalRefRefusal*(chain, reference: string): string =
+  ## Why `reference` is not the one spelling of a transaction reference on `chain`'s rail ("" =
+  ## it is), exo-3b3.14: an EVM transaction hash is 0x + 64 lowercase hex; a Bitcoin or Monero
+  ## txid is 64 lowercase hex — several comma-joined for a Monero part that arrived in more
+  ## than one transfer. A reference is reported, confirmed and deduplicated only in its one
+  ## spelling, so an RPC that reads other spellings of a hash as the same transaction cannot
+  ## make one payment settle two parts. Other rails (LEZ: a zone transaction, a note hash)
+  ## keep their own forms.
+  if chain.startsWith("eip155:"):
+    if not (reference.startsWith("0x") and isLowerHex64(reference[2 .. ^1])):
+      return "an Ethereum transaction hash is 0x and 64 lowercase hex digits, not '" & reference & "'"
+  elif chain.startsWith("bip122:"):
+    if not isLowerHex64(reference):
+      return "a Bitcoin txid is 64 lowercase hex digits, not '" & reference & "'"
+  elif chain.startsWith("monero:"):
+    for r in reference.split(','):
+      if not isLowerHex64(r): return "a Monero txid is 64 lowercase hex digits, not '" & r & "'"
+  ""
+
+proc normRef(tx: string): string =
+  ## The key one reference deduplicates under: lowercase, and a 32-byte hash without its 0x,
+  ## so every spelling of one hash is one key, whichever rail wrote it.
+  result = tx.strip().toLowerAscii()
+  if result.startsWith("0x") and isLowerHex64(result[2 .. ^1]): result = result[2 .. ^1]
 
 proc refsOf*(reference: string): seq[string] =
   ## The transfers one confirmation reference names: one, or several comma-joined, as a
@@ -142,6 +167,125 @@ proc confirmedRefs*(events: seq[Event], driverFor: DriverFor): HashSet[string] =
     for p in v.parts:
       if p.confirmed and p.tx.len > 0:
         for r in refsOf(p.tx): result.incl r
+
+proc reportedRefs(events: seq[Event], driverFor: DriverFor): Table[string, seq[tuple[key, payer: string]]] =
+  ## Every reference a part's counted report names — the payer's "settled" report, or the
+  ## counterparty's confirmation — mapped to the parts ("<intent>/<part>") naming it, each
+  ## with the party who pays that part (the driver's "settled" author).
+  for v in reduceIntentViews(events, driverFor):
+    if v.parts.len == 0: continue
+    let drv = driverFor(v.policy)
+    var effect: Effect
+    try: effect = effectFromJson(v.effectJson)
+    except CatchableError: continue
+    for p in v.parts:
+      if p.tx.len == 0: continue
+      let payer = drv.partAuthor(effect, p.part, "settled").toLowerAscii()
+      for r in refsOf(p.tx):
+        let k = v.id & "/" & p.part
+        if not result.mgetOrPut(r, @[]).anyIt(it.key == k): result[r].add (k, payer)
+
+proc otherPayer(refs: Table[string, seq[tuple[key, payer: string]]], r, key, payer: string): string =
+  ## A part (other than `key`) whose report names `r` and whose payer is not `payer`; "" = none.
+  for x in refs.getOrDefault(r):
+    if x.key != key and x.payer != payer: return x.key
+  ""
+
+proc contestedParts*(events: seq[Event], driverFor: DriverFor): Table[string, string] =
+  ## The unconfirmed parts ("<intent>/<part>") whose reported reference a part paid by
+  ## SOMEONE ELSE also reports, each with why (exo-3b3.14): one transaction settles one part,
+  ## so when two parties report the same one, neither part is confirmed on it — the creditor
+  ## may still mark either received by their own word. (One party naming their own payment
+  ## for two of their own parts is not contested: it confirms at most one of them.)
+  let refs = reportedRefs(events, driverFor)
+  for v in reduceIntentViews(events, driverFor):
+    if v.parts.len == 0: continue
+    let drv = driverFor(v.policy)
+    var effect: Effect
+    try: effect = effectFromJson(v.effectJson)
+    except CatchableError: continue
+    for p in v.parts:
+      if p.confirmed or p.tx.len == 0: continue
+      let k = v.id & "/" & p.part
+      let payer = drv.partAuthor(effect, p.part, "settled").toLowerAscii()
+      for r in refsOf(p.tx):
+        let other = otherPayer(refs, r, k, payer)
+        if other.len > 0:
+          result[k] = "the payment " & r & " is reported for two parts paid by different people (also " &
+                      other & "): neither is confirmed on it"
+          break
+
+# ── the ledger of references this keystore confirmed, across rooms (exo-3b3.14) ──────
+type RefLedger* = ref object
+  ## Every chain reference this member's client confirmed a part on, in any room, each with
+  ## where ("<room topic>|<intent>/<part>"). One payment settles one part across every room
+  ## this keystore is in: a reference confirmed in another room is refused here. Kept in a
+  ## small file beside the identity (the instance's persistence directory, as
+  ## joined_rooms.json is). A file that exists but cannot be read is `broken`: every
+  ## confirmation by reference is refused until it is fixed, never a silent fresh start.
+  path*: string
+  refs*: Table[string, string]
+  broken*: string
+
+proc openRefLedger*(path: string): RefLedger =
+  result = RefLedger(path: path)
+  if path.len == 0 or not fileExists(path): return
+  try:
+    let j = parseJson(readFile(path))
+    if j.kind != JObject or j{"refs"} == nil or j["refs"].kind != JObject:
+      result.broken = "it holds no refs object"
+      return
+    for k, v in j["refs"].pairs:
+      if v.kind != JString:
+        result.broken = "an entry is not text"
+        return
+      result.refs[k] = v.getStr()
+  except CatchableError as e:
+    result.broken = e.msg
+
+proc save(l: RefLedger) =
+  if l.path.len == 0: return
+  var o = newJObject()
+  for k, v in l.refs: o[k] = %v
+  createDir(parentDir(l.path))
+  let tmp = l.path & ".tmp"
+  writeFile(tmp, $(%*{"v": 1, "refs": o}))
+  moveFile(tmp, l.path)
+
+var gRefLedger: RefLedger
+proc setRefLedger*(l: RefLedger) = gRefLedger = l
+  ## The ledger confirmations consult and record into (nil = none: one room's log alone).
+proc refLedger*(): RefLedger = gRefLedger
+
+proc ledgerRefusal(l: RefLedger, refs: seq[string], here: string): string =
+  ## Why `refs` may not be confirmed for `here` ("" = they may).
+  if l == nil or refs.len == 0: return ""
+  if l.broken.len > 0:
+    return "the ledger of payments this client confirmed (" & l.path & ") could not be read: " & l.broken
+  let room = here.split('|')[0]
+  for r in refs:
+    let at = l.refs.getOrDefault(r, "")
+    if at.len > 0 and at != here and at.split('|')[0] != room:
+      return "that payment already settled a share in another room"
+  ""
+
+proc recordRefs(l: RefLedger, refs: seq[string], here: string) =
+  if l == nil or l.broken.len > 0 or refs.len == 0: return
+  var changed = false
+  for r in refs:
+    if r notin l.refs: (l.refs[r] = here; changed = true)
+  if changed:
+    try: l.save()
+    except CatchableError as e: l.broken = "it could not be written: " & e.msg
+
+proc recordRoom*(l: RefLedger, s: CoordinationSession, events: seq[Event], driverFor: DriverFor) =
+  ## Bring the ledger up to date with every reference this room's log shows confirmed —
+  ## confirmations made before the ledger existed, or on another of this member's devices.
+  if l == nil or l.broken.len > 0: return
+  for v in reduceIntentViews(events, driverFor):
+    for p in v.parts:
+      if p.confirmed and p.tx.len > 0:
+        l.recordRefs(refsOf(p.tx), s.topic & "|" & v.id & "/" & p.part)
 
 # ── paying my part ─────────────────────────────────────────────────────────────
 proc effectMemo(effectJson: string): string =
@@ -215,9 +359,12 @@ proc liveSettlePartComplete*(s: CoordinationSession, ks: Keystore, driverFor: Dr
   ## author-signed "settled" report, and the intent's state.
   let landed = seam.partLanded(pp.transfer, pp.tx)
   if not landed.ok: return "unconfirmed: " & landed.detail
+  let reference = seam.landedRef(pp.transfer, pp.tx)
+  # the report carries the reference in its rail's one spelling, or is not made (exo-3b3.14)
+  let bad = canonicalRefRefusal(pp.transfer.chain, reference)
+  if bad.len > 0: return "unconfirmed: " & bad
   s.poll()
-  s.publishAuthored(ks, partEvent(pp.intentId, pp.part, "settled", myIdentity(ks),
-                                  seam.landedRef(pp.transfer, pp.tx)))
+  s.publishAuthored(ks, partEvent(pp.intentId, pp.part, "settled", myIdentity(ks), reference))
   intentState(s.roomEvents(), driverFor, pp.intentId)
 
 proc liveSettlePart*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor, intentId: string,
@@ -253,19 +400,44 @@ proc liveConfirmPart*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor
   if partViewOf(v, part).p.confirmed: return "already-confirmed"
   var reference = ""                   # "" = received outside muster: my word, shown as such
   if tx.len > 0 or fromRead:
+    let t = drv.partTransfer(effect, part)
+    if not t.ok: return "refused: " & t.error
+    # a reference in its rail's one spelling, or none (exo-3b3.14)
+    if tx.len > 0:
+      let bad = canonicalRefRefusal(t.chain, tx)
+      if bad.len > 0: return "refused: " & bad
     let claimed = confirmedRefs(events, driverFor)
     if tx.len > 0 and refsOf(tx).anyIt(it in claimed):
       return "refused: that payment already settled another share"
-    let t = drv.partTransfer(effect, part)
-    if not t.ok: return "refused: " & t.error
+    # across rooms: never a reference this keystore confirmed in another room
+    let here = s.topic & "|" & intentId & "/" & part
+    gRefLedger.recordRoom(s, events, driverFor)
+    if tx.len > 0:
+      let other = ledgerRefusal(gRefLedger, refsOf(tx), here)
+      if other.len > 0: return "refused: " & other
+    # one reference identifies one part (exo-3b3.14): a reference another part's report also
+    # names confirms neither of them
+    let reported = reportedRefs(events, driverFor)
+    let payer = drv.partAuthor(effect, part, "settled").toLowerAscii()
+    proc elsewhere(refs: seq[string]): bool =
+      refs.anyIt(otherPayer(reported, it, intentId & "/" & part, payer).len > 0)
+    if tx.len > 0 and elsewhere(refsOf(tx)):
+      return "refused: that payment is reported for two parts paid by different people; neither is confirmed on it"
     seam.observe(events, driverFor)
     let got = seam.matchReceived(t, tx, claimed)
     if not got.ok: return "unconfirmed: " & got.detail
     # one reference settles one part: whatever the seam found, never one already claimed
     if got.reference.len == 0 or refsOf(got.reference).anyIt(it in claimed):
       return "refused: that payment already settled another share"
+    let badGot = canonicalRefRefusal(t.chain, got.reference)
+    if badGot.len > 0: return "refused: " & badGot
+    let otherGot = ledgerRefusal(gRefLedger, refsOf(got.reference), here)
+    if otherGot.len > 0: return "refused: " & otherGot
+    if elsewhere(refsOf(got.reference)):
+      return "refused: that payment is reported for two parts paid by different people; neither is confirmed on it"
     reference = got.reference
   s.publishAuthored(ks, partEvent(intentId, part, "confirmed", myIdentity(ks), reference))
+  gRefLedger.recordRefs(refsOf(reference), s.topic & "|" & intentId & "/" & part)
   intentState(s.roomEvents(), driverFor, intentId)
 
 proc liveConfirmParts*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor, seam: PartSeam): seq[string] =
@@ -344,7 +516,8 @@ proc find(l: FakeLedger, tx: string): int =
   -1
 
 method sendPart*(s: FakePartSeam, t: PartTransfer): tuple[ok: bool, tx, detail: string] =
-  let tx = "0xfake" & $(s.ledger.sent.len + 1)
+  # a hash in the one spelling an EVM chain's has (canonicalRefRefusal): 0x + 64 lowercase hex
+  let tx = "0x" & align(toHex(s.ledger.sent.len + 1).toLowerAscii().strip(chars = {'0'}, trailing = false), 64, '0')
   s.ledger.sent.add FakeTransfer(transfer: t, payer: s.payer, tx: tx)
   (true, tx, "")
 

@@ -53,7 +53,7 @@ proc res(s: CoordinationSession): DriverFor =
   let sess = s
   result = proc(policy: string): Driver =
     driverForPolicy(policy, reduceAccounts(sess.log.allEvents()), proc(k: string): Driver = liveDriverFor(k))
-discard frostCeremonyOpen(r.alice, "vault", "regtest", 2, 3)
+discard frostCeremonyOpen(r.alice, aliceKs, "vault", "regtest", 2, 3)
 pollAll()
 for (s, ks) in members: discard frostCeremonyJoin(s, ks, "vault")
 var outcomes: seq[string]
@@ -90,7 +90,7 @@ let policy = qualify("btc-frost", a.id)
 let id = liveProposeIntent(r.alice, aliceKs, res(r.alice), policy, effectJson, int64(Now), 1,
                            account = acct.address, ttlSec = Ttl)
 doAssert id.startsWith("0x"), id
-r.alice.publish(readEvent(id, "inputs", "bitcoind://scantxoutset", $parseJson(effectJson)["inputs"]))
+r.alice.publishRead(aliceKs, id, "inputs", "bitcoind://scantxoutset", $parseJson(effectJson)["inputs"])
 pollAll()
 for (s, ks, want) in [(r.alice, Keystore(aliceKs), "collecting"), (r.carol, Keystore(room3CarolKs), "collecting"),
                       (r.alice, Keystore(aliceKs), "collecting"), (r.carol, Keystore(room3CarolKs), "executable")]:

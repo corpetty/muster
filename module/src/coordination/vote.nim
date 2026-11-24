@@ -141,7 +141,12 @@ proc liveVoteComplete*(s: CoordinationSession, ks: Keystore, driverFor: DriverFo
       return "refused: the chain included your vote and does not show it (" & conf.detail &
              "): on LEZ v0.3 a refused transaction is included, and pays"
     return "unconfirmed: " & conf.detail
-  for e in pv.recorded: s.publish(e)
+  let me = block:
+    const d = "0123456789abcdef"
+    var h = "0x"
+    for b in ks.encIdentity().toBytes(): (h.add d[int(b shr 4)]; h.add d[int(b and 0x0F)])
+    h
+  for e in pv.recorded: s.publishAuthored(ks, e.withAuthor(me))   # the voter's own reads, signed (exo-ea8)
   if publishVote(s, ks, driverFor, pv.intentId, pv.effectJson, seam.receiptFor(drv, effect, pv.tx), pv.p).len == 0:
     return "rejected"
   intentState(s.roomEvents(), driverFor, pv.intentId)

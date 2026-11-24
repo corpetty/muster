@@ -12,6 +12,7 @@ import ../src/drivers/threshold
 import ../src/crypto/curve25519
 import ../src/log/log
 import ../src/coordination/intents
+import ./probes/attested
 
 proc seed(b: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = b)
 proc hex(sig: Ed25519Sig): string =
@@ -33,6 +34,9 @@ let m = canonicalize(drv, effectFromJson(addDriverJson))
 proc endorse(k: EncKeys): string = hex(edSign(k, m.bytes))
 # Published as the hosted path does: under the name its signer is identified by (exo-a5a).
 proc named(k: EncKeys): string = contributorOf(drv, addDriverJson, endorse(k))
+# The threshold driver is room-bound: each member's endorsement carries that member's
+# attestation over P, as the live path publishes it (exo-af5).
+proc att(ev: seq[Event]): seq[Event] = withAttestations(ev, foldDrv, id, signers = [a, b, c])
 
 # 1. The add-driver effect is schema-bound governance, not a payment (F-5).
 doAssert effectFromJson(addDriverJson).schemaId == "muster.effect.governance.add-driver.v1",
@@ -45,7 +49,7 @@ echo "1. add-driver is schema-bound governance OK"
 # 2. Before the room approves it, only the FOUNDING kinds are admitted.
 block:
   let ev = @[decl, proposeEvent(id, addDriverJson), contributeEvent(id, named(a), endorse(a))]
-  let kinds = roomDriverKinds(ev, foldDrv)
+  let kinds = roomDriverKinds(att(ev), foldDrv)
   doAssert "safe" in kinds and "threshold" in kinds, "the founding set is always present"
   doAssert "unanimous" notin kinds,
            "an un-approved (only-collecting) add-driver grants nothing"
@@ -56,9 +60,9 @@ block:
   let ev = @[decl, proposeEvent(id, addDriverJson),
              contributeEvent(id, named(a), endorse(a)),
              contributeEvent(id, named(b), endorse(b))]
-  doAssert intentState(ev, foldDrv, id) == "executable",
+  doAssert intentState(att(ev), foldDrv, id) == "executable",
            "two endorsements approve the governance proposal"
-  let kinds = roomDriverKinds(ev, foldDrv)
+  let kinds = roomDriverKinds(att(ev), foldDrv)
   doAssert "unanimous" in kinds,
            "an APPROVED add-driver admits its kind — the room's capabilities grew by proposal"
   # idempotent: folding again yields the same set, and the kind appears once.
@@ -75,11 +79,11 @@ block:
   let ev = @[decl, proposeEvent(id, addDriverJson),
              contributeEvent(id, named(a), endorse(a)),
              contributeEvent(id, "mallory", endorseMal())]
-  doAssert intentState(ev, foldDrv, id) == "collecting",
+  doAssert intentState(att(ev), foldDrv, id) == "collecting",
            "the proposal is folded, the member's endorsement counted"
-  doAssert intentState(ev, foldDrv, id) != "executable",
+  doAssert intentState(att(ev), foldDrv, id) != "executable",
            "a non-member cannot push the proposal to approved"
-  doAssert "unanimous" notin roomDriverKinds(ev, foldDrv),
+  doAssert "unanimous" notin roomDriverKinds(att(ev), foldDrv),
            "an unapproved proposal admits nothing — capability requires the group's agreement"
 echo "4. a non-member cannot grant a capability OK"
 

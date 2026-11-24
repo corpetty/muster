@@ -120,7 +120,8 @@ proc paysExactly(tx, to: string, sats: uint64): bool =
     if o{"scriptPubKey"}{"address"}.getStr() == to and uint64(round(o{"value"}.getFloat() * 1e8)) == sats: return true
 doAssert paysExactly(pp1.tx, pp1.transfer.to, parseBiggestUInt(pp1.transfer.amount).uint64)
 doAssert paysExactly(pp2.tx, pp2.transfer.to, parseBiggestUInt(pp2.transfer.amount).uint64)
-doAssert @[pp1.transfer.amount, pp2.transfer.amount].sorted() == @["100000", "400000"], "each net amount once"
+# each net amount once (about 400000 and 100000 sat: the shares are distinct, exo-3b3.14)
+doAssert @[pp1.transfer.amount, pp2.transfer.amount].sorted() == net.mapIt(it.amount).sorted(), "each net amount once"
 
 # ── 3. mined; reported; each recipient's own node confirms; everything final ──────
 mine()
@@ -141,8 +142,11 @@ discard settleCovered(r.bob, bobKs, splitFor, seamFor(bobKs))
 sync()
 for s in [r.alice, r.bob, r.carol]:
   doAssert intentState(s.roomEvents(), splitFor, dinner) == "final" and intentState(s.roomEvents(), splitFor, taxi) == "final"
-doAssert receivedAt(payA) - beforeA == 400_000 and receivedAt(payB) - beforeB == 100_000,
-         "Alice +400,000 and Bob +100,000 sat exactly"
+proc netTo(who: string): uint64 =
+  for t in net:
+    if t.to == who: return parseBiggestUInt(t.amount)
+doAssert receivedAt(payA) - beforeA == netTo(alice) and receivedAt(payB) - beforeB == netTo(bob),
+         "Alice about +400,000 and Bob about +100,000 sat, exactly their nets"
 echo "3. both confirmed from each recipient's own node; the settle-up and both splits final on all three OK"
 
 # ── 4. partGone: a payment is gone only once another transaction spent its coin ───────

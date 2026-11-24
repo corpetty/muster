@@ -23,6 +23,7 @@ ColumnLayout {
 
     // header: label · M of N  (· round R of N for multi-round)
     LogosText {
+        textFormat: Text.PlainText
         objectName: "cardHeader"
         Layout.fillWidth: true
         wrapMode: Text.WordWrap
@@ -53,21 +54,22 @@ ColumnLayout {
     // amount denom → to. A statement carries no destination — it is a group
     // endorsement, not a transfer.
     LogosText {
+        textFormat: Text.PlainText
         Layout.fillWidth: true
         wrapMode: Text.WordWrap
         visible: text.length > 0
         text: {
-            // a generic module action (P-D4): "call module.method(N args)" — the
-            // action lives in the effect, not the driver, so the card reads it off
-            // the effect the same way it reads a payment's amount → destination.
+            // a generic module action (P-D4): "call module.method(a, b)" with every
+            // argument as the module decoded it (exo-3b3.18, audit P4-06): the arguments
+            // are in the signed bytes, so the endorsement is to exactly this call.
             var act = String((cardRoot.card && cardRoot.card.action) || "");
             if (act.length > 0) {
                 var args = (cardRoot.card && cardRoot.card.actionArgs)
                          ? cardRoot.card.actionArgs : [];
-                var n = args.length;
-                return qsTr("call %1(%2)").arg(act)
-                    .arg(n === 0 ? "" : qsTr("%1 %2").arg(n)
-                         .arg(n === 1 ? qsTr("arg") : qsTr("args")));
+                var shown = [];
+                for (var i = 0; i < args.length; ++i)
+                    shown.push(typeof args[i] === "string" ? args[i] : JSON.stringify(args[i]));
+                return qsTr("call %1(%2)").arg(act).arg(shown.join(", "));
             }
             var stmt = String((cardRoot.card && cardRoot.card.statement) || "");
             if (stmt.length > 0)
@@ -92,6 +94,7 @@ ColumnLayout {
         spacing: 2
 
         LogosText {
+            textFormat: Text.PlainText
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
             text: cardRoot.settleUp
@@ -115,6 +118,7 @@ ColumnLayout {
         // across assets and chains (exo-a90.17): what it covers, and each rate — the
         // proposer's quote, named before anyone agrees, like a fiat bill's
         LogosText {
+            textFormat: Text.PlainText
             objectName: "cardSettleUpAcross"
             visible: !!(cardRoot.settleUp && cardRoot.settleUp.across)
             Layout.fillWidth: true
@@ -134,6 +138,7 @@ ColumnLayout {
         Repeater {
             model: (cardRoot.settleUp && cardRoot.settleUp.across) ? (cardRoot.settleUp.rates || []) : []
             delegate: LogosText {
+                textFormat: Text.PlainText
                 required property var modelData
                 objectName: "cardSettleUpRate"
                 Layout.fillWidth: true
@@ -153,6 +158,7 @@ ColumnLayout {
             }
         }
         LogosText {
+            textFormat: Text.PlainText
             visible: !!(cardRoot.settleUp && cardRoot.settleUp.across)
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
@@ -167,6 +173,7 @@ ColumnLayout {
                 Layout.fillWidth: true
                 spacing: Theme.spacing.small
                 LogosText {
+                    textFormat: Text.PlainText
                     Layout.preferredWidth: 220
                     elide: Text.ElideRight
                     text: (String(modelData.fromName || "") || String(modelData.from).slice(0, 10) + "…") + "  →  "
@@ -175,12 +182,14 @@ ColumnLayout {
                     font.pixelSize: MusterStyle.cardCaption
                 }
                 LogosText {
+                    textFormat: Text.PlainText
                     text: qsTr("%1 %2").arg(cardRoot.eth(modelData.amount)).arg(cardRoot.unit)
                     color: Theme.palette.textSecondary
                     font.family: MusterStyle.mono
                     font.pixelSize: MusterStyle.cardCaption
                 }
                 LogosText {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     text: modelData.confirmed ? qsTr("received ✓") : modelData.settled ? qsTr("paid — awaiting the recipient's read")
                           : modelData.unresolved ? qsTr("sent — not landed yet, still watched")
@@ -195,6 +204,7 @@ ColumnLayout {
         Repeater {
             model: cardRoot.settleUp ? (cardRoot.settleUp.transfers || []).filter(function (t) { return t.vouched; }) : []
             delegate: LogosText {
+                textFormat: Text.PlainText
                 required property var modelData
                 objectName: "cardSettleUpVouched"
                 Layout.fillWidth: true
@@ -213,6 +223,7 @@ ColumnLayout {
             }
         }
         LogosText {
+            textFormat: Text.PlainText
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
             text: cardRoot.settleUp && cardRoot.settleUp.across
@@ -224,6 +235,7 @@ ColumnLayout {
         // expired before anyone paid (exo-a90.16): it pays nothing more, and after a
         // day's grace — for a payment sent just before the expiry — it covers nothing
         LogosText {
+            textFormat: Text.PlainText
             objectName: "cardSettleUpExpired"
             visible: !!(cardRoot.settleUp && cardRoot.settleUp.expired)
             Layout.fillWidth: true
@@ -246,6 +258,7 @@ ColumnLayout {
         spacing: 2
 
         LogosText {
+            textFormat: Text.PlainText
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
             text: cardRoot.isRequest
@@ -272,6 +285,7 @@ ColumnLayout {
                 Layout.fillWidth: true
                 spacing: Theme.spacing.small
                 LogosText {
+                    textFormat: Text.PlainText
                     Layout.preferredWidth: 110
                     elide: Text.ElideRight
                     text: String(modelData.name || "").length > 0 ? String(modelData.name)
@@ -280,12 +294,14 @@ ColumnLayout {
                     font.pixelSize: MusterStyle.cardCaption
                 }
                 LogosText {
+                    textFormat: Text.PlainText
                     text: qsTr("%1 %2").arg(cardRoot.eth(modelData.amount)).arg(cardRoot.unit)
                     color: Theme.palette.textSecondary
                     font.family: MusterStyle.mono
                     font.pixelSize: MusterStyle.cardCaption
                 }
                 LogosText {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
                     // while Mark received is armed: what pressing it again does
@@ -333,6 +349,7 @@ ColumnLayout {
         }
 
         LogosText {
+            textFormat: Text.PlainText
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
             // a request's payTo stays on the face: it is what the payer checks
@@ -365,6 +382,7 @@ ColumnLayout {
         // a bill in fiat (exo-3a4): the quote everyone agreeing is trusting — named, sourced,
         // timed — so it is checked before anyone agrees, not after
         LogosText {
+            textFormat: Text.PlainText
             objectName: "cardSplitQuote"
             readonly property var q: (cardRoot.split && cardRoot.split.quote) ? cardRoot.split.quote : null
             Layout.fillWidth: true
@@ -389,6 +407,7 @@ ColumnLayout {
 
         // a split paid in a token: which token, by address — its symbol is its own claim
         LogosText {
+            textFormat: Text.PlainText
             objectName: "cardSplitToken"
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
@@ -402,6 +421,7 @@ ColumnLayout {
         // on someone's behalf (exo-770): who proposed it, and whether the creditor has
         // said payTo is theirs — nobody pays before they do
         LogosText {
+            textFormat: Text.PlainText
             objectName: "cardSplitOnBehalf"
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
@@ -422,6 +442,7 @@ ColumnLayout {
         }
         // the creditor's own client: a payTo it does not hold is never agreed to
         LogosText {
+            textFormat: Text.PlainText
             objectName: "cardSplitPayToNotMine"
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
@@ -433,6 +454,7 @@ ColumnLayout {
         }
 
         LogosText {
+            textFormat: Text.PlainText
             objectName: "cardMyShare"
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
@@ -459,6 +481,7 @@ ColumnLayout {
             property bool walletAsked: false   // Pay with Monero Wallet was pressed
 
             LogosText {
+                textFormat: Text.PlainText
                 objectName: "cardXmrPayLine"
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
@@ -494,6 +517,7 @@ ColumnLayout {
             }
             // the link itself, whole: what the code holds
             TextEdit {
+                textFormat: TextEdit.PlainText
                 objectName: "cardXmrUri"
                 visible: xmrPayBox.linkShown
                 Layout.fillWidth: true
@@ -523,7 +547,7 @@ ColumnLayout {
                         copied = true;
                         copiedReset.restart();
                     }
-                    TextEdit { id: clip; visible: false; width: 0; height: 0 }
+                    TextEdit { textFormat: TextEdit.PlainText; id: clip; visible: false; width: 0; height: 0 }
                     Timer { id: copiedReset; interval: 1500; onTriggered: copyLink.copied = false }
                 }
                 // the address alone, for a wallet that takes an address and an amount
@@ -563,6 +587,7 @@ ColumnLayout {
                 Item { Layout.fillWidth: true }
             }
             LogosText {
+                textFormat: Text.PlainText
                 objectName: "cardXmrPayWithWalletHint"
                 visible: xmrPayBox.linkShown && xmrPayBox.walletAsked
                 Layout.fillWidth: true
@@ -603,6 +628,7 @@ ColumnLayout {
                 }
             }
             LogosText {
+                textFormat: Text.PlainText
                 visible: xmrPayBox.linkShown
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
@@ -625,6 +651,7 @@ ColumnLayout {
             spacing: Theme.spacing.tiny
             readonly property var w: cardRoot.xmrWallet || ({})
             LogosText {
+                textFormat: Text.PlainText
                 objectName: "cardXmrWalletLine"
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
@@ -650,6 +677,7 @@ ColumnLayout {
                 onClicked: cardRoot.openMoneroWallet(String(xmrWalletBox.w.wallet || ""))
             }
             LogosText {
+                textFormat: Text.PlainText
                 objectName: "cardXmrPickWallet"
                 visible: xmrWalletBox.asks && xmrWalletBox.choices.length > 1
                 Layout.fillWidth: true
@@ -674,6 +702,7 @@ ColumnLayout {
                 }
             }
             LogosText {
+                textFormat: Text.PlainText
                 objectName: "cardXmrWalletNote"
                 visible: !xmrWalletBox.w.ready && cardRoot.moneroWalletNote.length > 0
                 Layout.fillWidth: true
@@ -690,6 +719,7 @@ ColumnLayout {
     // can rewrite its owners (the Bybit vector). Muster refuses to sign one unless
     // this client allowlists the target; the card says so rather than hiding it.
     LogosText {
+        textFormat: Text.PlainText
         Layout.fillWidth: true
         visible: cardRoot.detailsOpen && String((cardRoot.card && cardRoot.card.safeData) || "").length > 2
         text: {
@@ -703,6 +733,7 @@ ColumnLayout {
         wrapMode: Text.WrapAnywhere
     }
     LogosText {
+        textFormat: Text.PlainText
         objectName: "cardDelegatecall"
         Layout.fillWidth: true
         visible: cardRoot.card && Number(cardRoot.card.operation) === 1
@@ -723,6 +754,7 @@ ColumnLayout {
         visible: cardRoot.detailsOpen && !!(cardRoot.card && cardRoot.card.provenance)
                  && cardRoot.card.provenance.length > 0
         LogosText {
+            textFormat: Text.PlainText
             id: effectTrace
             text: qsTr("⌕ trace this")
             color: Theme.palette.textTertiary
@@ -738,6 +770,7 @@ ColumnLayout {
     // which rail the room is being asked to agree to
     // a LEZ rail in words; any other value is the driver's kind, said elsewhere already
     LogosText {
+        textFormat: Text.PlainText
         readonly property string railWords: {
             var r = String((cardRoot.card && cardRoot.card.rail) || "");
             return r === "public" ? qsTr("Public: both ends and the amount are visible on the zone")
@@ -788,6 +821,7 @@ ColumnLayout {
                 }
 
                 LogosText {
+                    textFormat: Text.PlainText
                     text: step.modelData.t
                     color: step.lit ? Theme.palette.textSecondary
                                     : Theme.palette.textTertiary
@@ -803,6 +837,7 @@ ColumnLayout {
     // A vote-locus approval and the Execute are members' own chain
     // transactions: sent at once, they count only once a block includes them.
     LogosText {
+        textFormat: Text.PlainText
         objectName: "cardChainPending"
         visible: cardRoot.kind === "intent-propose" && !!(cardRoot.card && cardRoot.card.chainPending)
         Layout.fillWidth: true
@@ -857,6 +892,7 @@ ColumnLayout {
                     name: slot.who ? (slot.who.mine ? qsTr("you") : String(slot.who.name || "")) : ""
                 }
                 LogosText {
+                    textFormat: Text.PlainText
                     anchors.centerIn: parent
                     visible: slot.filled && (slot.pasted || slot.who === null)
                     text: slot.who && slot.who.initials
@@ -871,6 +907,7 @@ ColumnLayout {
         Item { Layout.fillWidth: true }
 
         LogosText {
+            textFormat: Text.PlainText
             text: cardRoot.threshold > 0
                 ? qsTr("%1 of %2").arg(cardRoot.approvals).arg(cardRoot.threshold)
                 : ""
@@ -882,6 +919,7 @@ ColumnLayout {
 
     // Who approved, by name ("you" for this member) — the slots' initials, spelled out.
     LogosText {
+        textFormat: Text.PlainText
         objectName: "cardApproverNames"
         readonly property var named: (cardRoot.card && Array.isArray(cardRoot.card.approvers))
                                      ? cardRoot.card.approvers : []
@@ -909,6 +947,7 @@ ColumnLayout {
         readonly property string standing: String(cardRoot.charter ? cardRoot.charter.standing : "")
         readonly property bool never: ["out of rule", "stale", "superseded", "contested"].indexOf(standing) >= 0
         LogosText {
+            textFormat: Text.PlainText
             objectName: "cardCharterStanding"
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
@@ -930,6 +969,7 @@ ColumnLayout {
             font.pixelSize: MusterStyle.cardBody
         }
         LogosText {
+            textFormat: Text.PlainText
             objectName: "cardCharterElectorate"
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
@@ -947,6 +987,7 @@ ColumnLayout {
         spacing: 2
         readonly property var c: cardRoot.circle || ({})
         LogosText {
+            textFormat: Text.PlainText
             objectName: "cardCircleRound"
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
@@ -957,6 +998,7 @@ ColumnLayout {
             font.pixelSize: MusterStyle.cardBody
         }
         LogosText {
+            textFormat: Text.PlainText
             objectName: "cardCircleMissing"
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
@@ -978,6 +1020,7 @@ ColumnLayout {
         readonly property var c: cardRoot.lezConfig || ({})
         readonly property string who: String(c.memberName || "") || qsTr("an account no member shared (%1…)").arg(String(c.account || "").slice(0, 8))
         LogosText {
+            textFormat: Text.PlainText
             objectName: "cardLezConfigChange"
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
@@ -988,6 +1031,7 @@ ColumnLayout {
             font.pixelSize: MusterStyle.cardBody
         }
         LogosText {
+            textFormat: Text.PlainText
             objectName: "cardLezConfigRoom"
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
@@ -1020,6 +1064,7 @@ ColumnLayout {
             return frac.length > 0 ? whole + "." + frac : whole;
         }
         LogosText {
+            textFormat: Text.PlainText
             objectName: "cardMsigAction"
             Layout.fillWidth: true
             wrapMode: Text.WrapAnywhere
@@ -1044,6 +1089,7 @@ ColumnLayout {
             font.pixelSize: MusterStyle.cardBody
         }
         LogosText {
+            textFormat: Text.PlainText
             objectName: "cardMsigBinding"
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
@@ -1062,6 +1108,7 @@ ColumnLayout {
             font.pixelSize: MusterStyle.cardCaption
         }
         LogosText {
+            textFormat: Text.PlainText
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
             visible: !parent.m.error
@@ -1076,6 +1123,7 @@ ColumnLayout {
     // Committed vs unattested, in words — only when something was pasted in, so a
     // card whose approvals were all signed in muster stays quiet.
     LogosText {
+        textFormat: Text.PlainText
         objectName: "cardUnattested"
         visible: cardRoot.unattested > 0
         Layout.fillWidth: true
@@ -1098,6 +1146,7 @@ ColumnLayout {
         visible: cardRoot.detailsOpen && cardRoot.approvals > 0 && cardRoot.card
                  && cardRoot.card.provenance && cardRoot.card.provenance.length > 0
         LogosText {
+            textFormat: Text.PlainText
             id: approvalsTrace
             text: qsTr("⌕ trace the approvals")
             color: Theme.palette.textTertiary
@@ -1119,6 +1168,7 @@ ColumnLayout {
         Layout.topMargin: 2
         spacing: Theme.spacing.small
         LogosText {
+            textFormat: Text.PlainText
             id: proofLine
             objectName: "cardProofLine"
             readonly property int traced: (cardRoot.card && Array.isArray(cardRoot.card.provenance))
@@ -1147,6 +1197,7 @@ ColumnLayout {
     // caveat: a Safe's threshold IS enforced by its contract, a room threshold is
     // final in the room. Empty rows (an old module) → nothing claimed at all.
     LogosText {
+        textFormat: Text.PlainText
         Layout.fillWidth: true
         Layout.topMargin: 2
         wrapMode: Text.WordWrap
@@ -1165,6 +1216,7 @@ ColumnLayout {
         spacing: 2
         visible: cardRoot.detailsOpen && cardRoot.rows.length > 0
         LogosText {
+            textFormat: Text.PlainText
             objectName: "cardRowsToggle"
             text: (cardRoot.rowsOpen ? "▾ " : "▸ ") + qsTr("How this account works")
             color: Theme.palette.textSecondary
@@ -1183,6 +1235,7 @@ ColumnLayout {
                 Layout.fillWidth: true
                 spacing: 0
                 LogosText {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     text: String(modelData.label || "")
                           + (modelData.credibility ? "  ·  " + String(modelData.credibility) : "")
@@ -1192,6 +1245,7 @@ ColumnLayout {
                     font.pixelSize: MusterStyle.cardCaption
                 }
                 LogosText {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     text: String(modelData.text || "")
                           + (modelData.party ? "  (" + qsTr("relies on / seen by: %1").arg(String(modelData.party)) + ")" : "")
@@ -1240,6 +1294,7 @@ ColumnLayout {
                 spacing: Theme.spacing.small
 
                 LogosText {
+                    textFormat: Text.PlainText
                     objectName: "verifyHeader"
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
@@ -1250,6 +1305,7 @@ ColumnLayout {
                 }
 
                 LogosText {
+                    textFormat: Text.PlainText
                     text: cardRoot.verifyOpen ? "−" : "+"
                     color: Theme.palette.success
                     font.pixelSize: MusterStyle.cardCaption
@@ -1272,6 +1328,7 @@ ColumnLayout {
                     spacing: Theme.spacing.small
 
                     LogosText {
+                        textFormat: Text.PlainText
                         Layout.preferredWidth: 66
                         Layout.alignment: Qt.AlignTop
                         text: modelData.k
@@ -1330,6 +1387,7 @@ ColumnLayout {
                 spacing: Theme.spacing.small
 
                 LogosText {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
                     text: qsTr("How do I know this? — where each of its %1 inputs came from")
@@ -1341,6 +1399,7 @@ ColumnLayout {
                 }
 
                 LogosText {
+                    textFormat: Text.PlainText
                     text: cardRoot.provOpen ? "−" : "+"
                     color: Theme.palette.textSecondary
                     font.pixelSize: MusterStyle.cardCaption
@@ -1349,6 +1408,7 @@ ColumnLayout {
 
             // Collapsed glance: who is behind this decision (names where known).
             LogosText {
+                textFormat: Text.PlainText
                 readonly property string who:
                     cardRoot.provWho(cardRoot.card ? cardRoot.card.provenance : [])
                 visible: !cardRoot.provOpen && who.length > 0
@@ -1361,6 +1421,7 @@ ColumnLayout {
 
             // intro — only when open.
             LogosText {
+                textFormat: Text.PlainText
                 visible: cardRoot.provOpen
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
@@ -1403,6 +1464,7 @@ ColumnLayout {
                         spacing: 1
 
                         LogosText {
+                            textFormat: Text.PlainText
                             Layout.fillWidth: true
                             wrapMode: Text.WordWrap
                             // WHAT this input is, and its concrete content — the
@@ -1422,6 +1484,7 @@ ColumnLayout {
                         }
 
                         LogosText {
+                            textFormat: Text.PlainText
                             Layout.fillWidth: true
                             Layout.leftMargin: Theme.spacing.small
                             wrapMode: Text.WrapAnywhere

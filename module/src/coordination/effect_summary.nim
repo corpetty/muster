@@ -21,6 +21,7 @@ type
     unit*: string   ## wei | sat | token units | ""
     to*: string     ## the payee or target, in full; "" when none
     text*: string   ## one plain line: what the room is asked to do
+    args*: seq[string] ## a module action's arguments, each as its JSON text, in order (exo-3b3.18)
 
 proc short(s: string): string =
   if s.len > 12: s[0 ..< 6] & "…" & s[^4 .. ^1] else: s
@@ -71,15 +72,20 @@ proc nativeTransferV03(shards: JsonNode, data: string): tuple[ok: bool, amount, 
     except ValueError: return
   (true, $a, shards[1]{"account"}.getStr())
 
-proc argCount(args: JsonNode): int =
-  if args.isNil: return 0
-  if args.kind == JArray: return args.len
+proc argList(args: JsonNode): (seq[string], bool) =
+  ## A module action's arguments, each as its JSON text, and whether they decoded: an array,
+  ## or an array carried as its JSON text (the propose path's shape). Anything else is shown
+  ## as it is, never dropped.
+  if args.isNil: return (@[], true)
+  var a = args
   if args.kind == JString:
-    try:
-      let a = parseJson(args.getStr())
-      if a.kind == JArray: return a.len
-    except CatchableError: discard
-  0
+    try: a = parseJson(args.getStr())
+    except CatchableError: return (@[args.getStr()], false)
+  if a.kind == JArray:
+    var xs: seq[string]
+    for x in a: xs.add $x
+    return (xs, true)
+  (@[$args], false)
 
 proc btcSummary(j: JsonNode): EffectSummary =
   ## The payment is every output that does not pay back to the account being spent
@@ -139,10 +145,14 @@ proc effectSummary*(effectJson: string, label: proc (who: string): string = nil,
     return EffectSummary(kind: "charter", text: (if j{"prev"}.getStr().len == 0: "found the charter: “"
                                                 else: "amend the charter: “") & name & "”")
   of "invoke":
+    # the exact call the room endorses, every argument shown (exo-3b3.18, audit P4-06): the
+    # arguments are in the signed bytes, so the card names them too
     let call = j{"module"}.getStr() & "." & j{"method"}.getStr()
-    let n = argCount(j{"args"})
-    return EffectSummary(kind: "action", to: call,
-                         text: "an action: " & call & " (" & $n & (if n == 1: " arg)" else: " args)"))
+    let (args, decoded) = argList(j{"args"})
+    return EffectSummary(kind: "action", to: call, args: args,
+                         text: "an action: " & call &
+                               (if decoded: "(" & args.join(", ") & ")"
+                                else: " with arguments that do not decode: " & args.join(", ")))
   of "lez-msig-spend":
     # a spend under a lez-msig's spending limit (exo-0d3.12): read from its exact bytes
     var sp: msigbytes.MsigSpend

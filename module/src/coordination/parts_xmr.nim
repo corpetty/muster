@@ -23,7 +23,7 @@
 ## never failed, and nothing is published. The chain itself shows no payer, payee or
 ## amount; the link between a transfer and the room lives only in the room.
 
-import std/[algorithm, sets, strutils, tables]
+import std/[algorithm, sets, strutils, tables, times]
 import ../log/log
 import ../drivers/driver
 import ../intents/materialization   # PartTransfer
@@ -67,7 +67,7 @@ proc atomic(s: string): tuple[ok: bool, n: uint64] =
   try: (true, parseBiggestUInt(s).uint64) except ValueError: (false, 0'u64)
 
 proc matchXmrPayment*(t: PartTransfer, status: WalletStatus, info: ReceiveInfo, hist: History,
-                      claimed: HashSet[string], alone = false): XmrMatch =
+                      claimed: HashSet[string], alone = false, nowUnix = epochTime()): XmrMatch =
   ## The decision, pure: whether the creditor's own reads show `t` received. Every rule in
   ## the module comment, in order; the first that fails says why. `alone`: no other part in
   ## the room is paid at `t.to`, so every transfer there is this part's, and they may add up.
@@ -106,6 +106,12 @@ proc matchXmrPayment*(t: PartTransfer, status: WalletStatus, info: ReceiveInfo, 
     if r.txid.toLowerAscii() in claimed:
       if nearest.len == 0: nearest = "the transfer " & r.txid[0 ..< 12] & "… already settled another part"
       continue
+    # a time-locked transfer is not received until it unlocks (exo-3b3.14): seen, held pending
+    let lock = r.lockedAt(nowUnix)
+    if lock.len > 0:
+      # not counted as seen at a depth: no "n of 10" for a transfer that is not spendable
+      if not seen: nearest = "a transfer of exactly the share arrived (" & r.txid[0 ..< 12] & "…), but it is " & lock
+      continue
     if r.pending or r.confirmations < need:
       # what the row says, held below depth (a pending row is 0 deep); the deepest seen wins
       let c = (if r.pending: 0'i64 else: min(max(0'i64, r.confirmations), need - 1))
@@ -125,6 +131,7 @@ proc matchXmrPayment*(t: PartTransfer, status: WalletStatus, info: ReceiveInfo, 
     var txids: seq[string]
     var least = need
     var overflow = false
+    var locked = ""
     for r in hist.rows:
       if r.direction != "in" or r.failed: continue
       if r.account != 0 or r.subaddrIndex != @[idx]: continue
@@ -132,11 +139,15 @@ proc matchXmrPayment*(t: PartTransfer, status: WalletStatus, info: ReceiveInfo, 
       let a = atomic(r.amount)
       if not a.ok: continue
       if total > high(uint64) - a.n: (overflow = true; break)
+      if r.lockedAt(nowUnix).len > 0: locked = r.lockedAt(nowUnix)   # the sum is not received yet
       total += a.n
       if r.txid.toLowerAscii() notin txids: txids.add r.txid.toLowerAscii()
       least = min(least, (if r.pending: 0'i64 else: max(0'i64, r.confirmations)))
     if txids.len > 0 and not overflow: received = $total
     if share.ok and not overflow and txids.len > 1 and total == share.n:
+      if locked.len > 0:
+        return XmrMatch(verdict: xvPending, received: received,
+                        detail: $txids.len & " transfers came to exactly the share, but one is " & locked)
       if least >= need:
         txids.sort()
         return XmrMatch(verdict: xvConfirmed, reference: txids.join(","), received: received)

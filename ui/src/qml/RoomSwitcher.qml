@@ -77,6 +77,7 @@ Popup {
                 }
             }
             LogosText {
+                textFormat: Text.PlainText
                 visible: switcher.rooms.length === 0
                 Layout.margins: Theme.spacing.medium
                 text: (switcher.app.conversations || []).length === 0 ? qsTr("No rooms yet.") : qsTr("No room by that name.")

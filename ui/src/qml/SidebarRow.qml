@@ -74,6 +74,7 @@ Rectangle {
                 border.width: 2
                 border.color: Theme.palette.backgroundTertiary
                 LogosText {
+                    textFormat: Text.PlainText
                     id: railCount
                     visible: row.count > 0
                     anchors.centerIn: parent
@@ -89,6 +90,7 @@ Rectangle {
             Layout.fillWidth: true
             spacing: 0
             LogosText {
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 text: row.label
                 elide: Text.ElideRight
@@ -97,6 +99,7 @@ Rectangle {
                 font.weight: row.needs || row.unread ? Theme.typography.weightBold : Theme.typography.weightMedium
             }
             LogosText {
+                textFormat: Text.PlainText
                 visible: row.detail.length > 0
                 Layout.fillWidth: true
                 text: row.detail
@@ -112,6 +115,7 @@ Rectangle {
             radius: 10
             color: MusterStyle.needs
             LogosText {
+                textFormat: Text.PlainText
                 id: countLabel
                 anchors.centerIn: parent
                 text: String(row.count)

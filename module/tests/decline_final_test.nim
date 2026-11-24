@@ -21,6 +21,7 @@ import ../src/crypto/keystore
 import ../src/crypto/binding
 import ../src/log/log
 import ../src/coordination/intents
+import ./probes/attested
 
 proc seed(b: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = b)
 proc hx(b: openArray[byte]): string =
@@ -42,8 +43,11 @@ proc approval(k: EncKeys): Event =
 proc decline(k: EncKeys): Event = declineEvent(sid, hx(k.identity().toBytes()))
 let prop = @[policyDeclEvent(sid, "threshold"), proposeEvent(sid, stmtJson)]
 
+# Folded as the live path leaves it: the threshold driver is room-bound, so every approval
+# carries its signer's attestation over P (exo-af5).
+proc att(ev: seq[Event]): seq[Event] = withAttestations(ev, thrFor, sid, signers = [a, b, c])
 proc view(ev: seq[Event]): IntentView =
-  for v in reduceIntentViews(ev, thrFor):
+  for v in reduceIntentViews(att(ev), thrFor):
     if v.id == sid: return v
   doAssert false, "not folded"
 proc both(ev: seq[Event], check: proc(v: IntentView)) =
@@ -65,7 +69,7 @@ both(prop & @[decline(b), decline(c)], proc(v: IntentView) =
   doAssert v.state == "declined", "two of three declined: 2 of 3 is out of reach, not " & v.state)
 both(prop & @[approval(a), decline(b), decline(c)], proc(v: IntentView) =
   doAssert v.state == "declined", "one approval, two declines: declined, not " & v.state)
-doAssert intentState(prop & @[decline(b), decline(c), approval(a), approval(b)], thrFor, sid) == "declined",
+doAssert intentState(att(prop & @[decline(b), decline(c), approval(a), approval(b)]), thrFor, sid) == "declined",
   "a declined proposal stays declined: a decliner's later approval changes nothing"
 echo "2. declined once two of three signers declined; one decline leaves it open OK"
 

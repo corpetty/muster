@@ -34,6 +34,7 @@ Rectangle {
             tone: pinned.live && pinned.live.needsYou ? "needs" : "waiting"
         }
         LogosText {
+            textFormat: Text.PlainText
             objectName: "roomPinnedText"
             Layout.fillWidth: true
             elide: Text.ElideRight

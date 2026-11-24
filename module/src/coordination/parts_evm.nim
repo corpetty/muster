@@ -28,10 +28,42 @@ type EvmPartSeam* = ref object of PartSeam
   ks*: Keystore
   frm*: Account             ## the account this member pays from
   spent: seq[string]        ## the last payment's nonce, "nonce:<n>" (lastSpends)
-  noteIntent, notePart, noteMemo: string   ## what the next payment pays for (notePayment)
+  confirmations*: int       ## how deep a payment's block must be before it is received (exo-3b3.15)
+  noteIntent, notePart: string   ## what the next payment pays for (notePayment)
 
-proc newEvmPartSeam*(chain, url: string, adapter: EvmAdapter, ks: Keystore, frm: Account): EvmPartSeam =
-  EvmPartSeam(chain: chain, url: url, adapter: adapter, ks: ks, frm: frm)
+const
+  EvmDefaultConfirmations* = 12
+    ## The depth an EVM share is confirmed at unless the setting says otherwise: a block a
+    ## reorg can still drop is not yet money received.
+  EvmDevChain* = "eip155:31337"
+    ## anvil's chain (infra/anvil/devnet.sh, scripts/try-infra.sh): one block is final there,
+    ## since nothing else mines on it.
+
+proc evmConfirmationsFor*(chain, setting: string): int =
+  ## The depth for `chain`: the setting evm-confirmations when it names one (a whole number of
+  ## blocks, 1 or more), else 1 on the local dev chain and EvmDefaultConfirmations elsewhere.
+  let v = setting.strip()
+  if v.len > 0 and v.len <= 6 and v.allCharsInSet(Digits):
+    let n = parseInt(v)
+    if n >= 1: return n
+  if chain == EvmDevChain: 1 else: EvmDefaultConfirmations
+
+proc newEvmPartSeam*(chain, url: string, adapter: EvmAdapter, ks: Keystore, frm: Account,
+                     confirmations = 0): EvmPartSeam =
+  ## `confirmations` 0 = the chain's default (evmConfirmationsFor with no setting).
+  EvmPartSeam(chain: chain, url: url, adapter: adapter, ks: ks, frm: frm,
+              confirmations: (if confirmations >= 1: confirmations else: evmConfirmationsFor(chain, "")))
+
+proc depthRefusal(s: EvmPartSeam, tx: string, blockNumber: uint64): string =
+  ## Why the payment `tx` in `blockNumber` is not yet deep enough on this member's read ("" =
+  ## it is): its block and every one after it, counted to the endpoint's newest block.
+  if blockNumber == 0: return tx & " is not in a block yet"
+  let head = rpcBlockNumber(s.url)
+  let need = max(1, s.confirmations)
+  let depth = (if head >= blockNumber: head - blockNumber + 1 else: 0'u64)
+  if depth < uint64(need):
+    return tx & " has " & $depth & " of " & $need & " confirmations on " & s.chain
+  ""
 
 proc rpcChainCaip2*(url: string): tuple[ok: bool, chain, detail: string] =
   ## The CAIP-2 chain the EVM RPC at `url` actually serves — what a split settles on when
@@ -53,8 +85,15 @@ proc refuse(s: EvmPartSeam, t: PartTransfer): string =
     return "could not reach your RPC: " & e.msg
   ""
 
+const PayPurpose* = "Pay my share of a split agreed in a Muster room"
+  ## What the person approving a payment in the platform's Signer reads: muster's own words
+  ## only. A split's memo is a peer's text, and spliced in it could read as an assurance from
+  ## muster ("dinner', 0.001 ETH to Alice (checked by Muster)") — so it never is (exo-e6d,
+  ## P4-07). The legs themselves are checked against the agreed payment (legsMismatch).
+
 method notePayment*(s: EvmPartSeam, intentId, part, memo: string) =
-  (s.noteIntent, s.notePart, s.noteMemo) = (intentId, part, memo)
+  ## The memo is not kept: the purpose never carries a peer's text (PayPurpose).
+  (s.noteIntent, s.notePart) = (intentId, part)
 
 proc chainNumber(chain: string): int =
   try: parseInt(chain["eip155:".len .. ^1]) except ValueError: 0
@@ -66,12 +105,11 @@ proc sendThroughPlatform(s: EvmPartSeam, t: PartTransfer): tuple[ok: bool, tx, d
   var call: TxCall
   try: call = callFor(t)
   except TxSenderError as e: return (false, "", e.msg)
-  let purpose = "Pay my share" & (if s.noteMemo.len > 0: " of '" & s.noteMemo & "'" else: "") &
-                ", agreed in a Muster room"
+  let purpose = PayPurpose
   let req = requestJson(chainNumber(s.chain), s.frm.id, call, purpose,
                         %*{"muster": {"intent": s.noteIntent, "part": s.notePart}})
   let prepared = senderCall("prepare", %*[$req])
-  let mismatch = legsMismatch(prepared, call)
+  let mismatch = legsMismatch(prepared, call, chainNumber(s.chain), s.frm.id)
   if mismatch.len > 0: return (false, "", mismatch)
   let sent = senderCall("send", %*[$req])
   if sent == nil: return (false, "", "tx_sender_module did not answer send")
@@ -183,6 +221,8 @@ method checkReceived*(s: EvmPartSeam, t: PartTransfer, tx: string): tuple[ok: bo
       if r.status != 1: return (false, tx & " failed on " & s.chain)
       let why = matchTokenPayment(tokenTransfers(r.logs), t.asset[6 .. ^1], t.to, t.amount)
       if why.len > 0: return (false, tx & ": " & why)
+      let deep = s.depthRefusal(tx, rpcTransferOf(s.url, tx).blockNumber)
+      if deep.len > 0: return (false, deep)
       return (true, "")
     let r = rpcTransferOf(s.url, tx)
     if not r.found: return (false, "your RPC knows no transaction " & tx & " on " & s.chain)
@@ -190,6 +230,8 @@ method checkReceived*(s: EvmPartSeam, t: PartTransfer, tx: string): tuple[ok: bo
     if r.status != 1: return (false, tx & " failed on " & s.chain)
     if r.toHex.toLowerAscii() != t.to.toLowerAscii(): return (false, tx & " pays " & r.toHex & ", not " & t.to)
     if r.valueDec != t.amount: return (false, tx & " pays the amount " & r.valueDec & " wei; the share is " & t.amount)
+    let deep = s.depthRefusal(tx, r.blockNumber)
+    if deep.len > 0: return (false, deep)
     (true, "")
   except CatchableError as e:
     (false, "could not read " & tx & ": " & e.msg)

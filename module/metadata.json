@@ -1,7 +1,7 @@
 {
   "name": "muster_module",
   "display_name": "Muster Module",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Muster's core: people agree on a transaction inside an end-to-end encrypted room, then each part settles on its own chain. It keeps the room's log and keys, re-derives what it signs, and asks the platform's wallets to sign and send.",
   "author": "Muster",
   "type": "core",
@@ -71,8 +71,8 @@
         {
           "owner": "corpetty",
           "repo": "logos-nim-sdk",
-          "rev": "6077eb70a8709dccf3d60601121dbf66e794b89c",
-          "hash": "sha256-AM6cgcPq+BygBw4RE5pwjt4Et8idEukMVy/IWba78Tw=",
+          "rev": "e57bbefe53b18849e6040e5e78ed45e330327037",
+          "hash": "sha256-LPZ1KZbejB1YwFMYqBMiKntqzfvUXN87RAlYezpNlA4=",
           "subdir": "src",
           "_note": "logos_sdk (the Nim SDK) — github.com/corpetty/logos-nim-sdk. Provides logos_sdk/{ffi,bytes,api} on the import path at build time. Bump rev+hash when the SDK runtime (src/logos_sdk/*) changes; tools/regen.sh reads this same rev to build the matching generator."
         },

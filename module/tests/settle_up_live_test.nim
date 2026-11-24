@@ -101,7 +101,8 @@ for _ in 0 ..< 2:
   doAssert liveSettlePartComplete(r.carol, room3CarolKs, splitFor, carolSeam, pp) in ["submitted", "settling", "final"]
 let (third, _) = liveSettlePartSend(r.carol, room3CarolKs, splitFor, su, carolSeam, Now)
 doAssert third == "already-settled", third
-doAssert ledger.sent.mapIt(it.transfer.amount).sorted() == @["100", "400"], $ledger.sent.mapIt(it.transfer.amount)
+# exactly the net transfers (about 400 and 100: the shares are distinct, exo-3b3.14)
+doAssert ledger.sent.mapIt(it.transfer.amount).sorted() == net.mapIt(it.amount).sorted(), $ledger.sent.mapIt(it.transfer.amount)
 sync()
 doAssert liveConfirmParts(r.alice, aliceKs, splitFor, newFakePartSeam(ledger, "alice")).len == 1
 doAssert liveConfirmParts(r.bob, bobKs, splitFor, newFakePartSeam(ledger, "bob")).len == 1

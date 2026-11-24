@@ -27,6 +27,27 @@ Item {
 
     Component.onCompleted: if (book.backend) book.backend.loadContacts()
 
+    // An alias another contact already has, in any case: the module refuses it
+    // (contact_add / contact_set_alias, exo-3b3.18), so the form says so before Add.
+    function aliasTaken(alias, exceptId) {
+        var a = String(alias || "").trim().toLowerCase();
+        if (a.length === 0) return "";
+        var cs = book.contacts || [];
+        for (var i = 0; i < cs.length; i++) {
+            var c = cs[i];
+            if (String(c.identity || "") !== String(exceptId || "")
+                    && String(c.alias || "").toLowerCase() === a)
+                return String(c.alias);
+        }
+        return "";
+    }
+    // Latin letters mixed with Cyrillic or Greek ones: "Аlice" with a Cyrillic А reads as
+    // "Alice". The module flags stored aliases the same way (mixedScript).
+    function mixesScripts(s) {
+        var t = String(s || "");
+        return /[A-Za-z\u00C0-\u024F]/.test(t) && /[\u0370-\u03FF\u0400-\u052F]/.test(t);
+    }
+
     function shortId(id) {
         var s = String(id || "");
         return s.length > 12 ? s.substring(0, 10) + "…" : s;
@@ -71,12 +92,14 @@ Item {
                     spacing: Theme.spacing.small
 
                     LogosText {
+                        textFormat: Text.PlainText
                         text: qsTr("Add someone")
                         color: Theme.palette.textTertiary
                         font.pixelSize: MusterStyle.caption
                         font.weight: Theme.typography.weightBold
                     }
                     LogosText {
+                        textFormat: Text.PlainText
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
                         text: qsTr("Paste the contact link they shared with you and give them a name.")
@@ -108,6 +131,7 @@ Item {
                             objectName: "contactAddButton"
                             text: qsTr("Add")
                             enabled: MusterStyle.parseContact(newIdField.text) !== null && newAliasField.text.trim().length > 0
+                                     && book.aliasTaken(newAliasField.text, "") === ""
                             onClicked: {
                                 var c = MusterStyle.parseContact(newIdField.text);
                                 if (book.backend && c)
@@ -117,11 +141,33 @@ Item {
                             }
                         }
                     }
+                    LogosText {
+                        textFormat: Text.PlainText
+                        objectName: "contactAliasTaken"
+                        visible: book.aliasTaken(newAliasField.text, "") !== ""
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: qsTr("Another contact is already named %1. Give this one a name you can tell apart.")
+                                .arg(book.aliasTaken(newAliasField.text, ""))
+                        color: MusterStyle.warning
+                        font.pixelSize: MusterStyle.caption
+                    }
+                    LogosText {
+                        textFormat: Text.PlainText
+                        objectName: "contactAliasMixed"
+                        visible: book.mixesScripts(newAliasField.text)
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: qsTr("This name mixes Latin letters with Cyrillic or Greek ones, which can look like another name. A contact link suggests the name its sender chose; check it.")
+                        color: MusterStyle.warning
+                        font.pixelSize: MusterStyle.caption
+                    }
                 }
             }
 
             // ── the book ──────────────────────────────────────────────────────
             LogosText {
+                textFormat: Text.PlainText
                 visible: (book.contacts || []).length === 0
                 Layout.fillWidth: true
                 text: qsTr("No contacts yet. Add someone above, or name people from a room's members.")
@@ -166,9 +212,15 @@ Item {
                                 Connections {
                                     target: aliasEdit.textInput
                                     function onEditingFinished() {
-                                        if (book.backend && aliasEdit.text.trim() !== String(row.modelData.alias || ""))
-                                            book.backend.setContactAlias(String(row.modelData.identity || ""),
-                                                                         aliasEdit.text.trim());
+                                        var stored = String(row.modelData.alias || "");
+                                        if (!book.backend || aliasEdit.text.trim() === stored) return;
+                                        // a name another contact has is refused by the module too
+                                        if (book.aliasTaken(aliasEdit.text, row.modelData.identity) !== "") {
+                                            aliasEdit.text = stored;
+                                            return;
+                                        }
+                                        book.backend.setContactAlias(String(row.modelData.identity || ""),
+                                                                     aliasEdit.text.trim());
                                     }
                                 }
                             }
@@ -181,6 +233,16 @@ Item {
                             }
                         }
                         LogosText {
+                            textFormat: Text.PlainText
+                            visible: row.modelData.mixedScript === true
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            text: qsTr("This name mixes Latin letters with Cyrillic or Greek ones: it may look like another contact's.")
+                            color: MusterStyle.warning
+                            font.pixelSize: MusterStyle.caption
+                        }
+                        LogosText {
+                            textFormat: Text.PlainText
                             Layout.fillWidth: true
                             text: book.shortId(row.modelData.identity)
                             color: Theme.palette.textTertiary

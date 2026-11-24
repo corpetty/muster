@@ -34,6 +34,7 @@ import ../src/bitcoin/tx
 import ../src/lez/multisig
 import ../src/coordination/accounts
 import ../src/coordination/intents
+import ./probes/attested
 
 proc seed(b: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = b)
 proc hx(b: openArray[byte]): string =
@@ -78,8 +79,19 @@ proc foldCounted(events: seq[Event], dfor: DriverFor, id: string): HashSet[strin
 proc whoOf(keys: HashSet[string]): HashSet[string] =
   for k in keys: result.incl k.rsplit('/', 1)[0]
 
-proc check(label: string, events: seq[Event], dfor: DriverFor, id: string,
+# Every surface below reads the log as the live path leaves it (exo-af5): under a room-bound
+# driver (threshold, room FROST, the stub) an approval counts only with its signer's
+# attestation over P, so each Ed25519 contributor in `attEd` — mallory included, who can
+# attest her own signature as well as anyone — gets one beside each contribution under her
+# name. Chain-bound families (Safe, btc FROST, the LEZ vote, evm.split) count unattested
+# approvals as before.
+var attEd: seq[EncKeys]
+proc att(events: seq[Event], dfor: DriverFor, id: string): seq[Event] =
+  withAttestations(events, dfor, id, signers = attEd)
+
+proc check(label: string, events0: seq[Event], dfor: DriverFor, id: string,
            wantApprovals, wantRound: int) =
+  let events = att(events0, dfor, id)
   let counted = foldCounted(events, dfor, id)
   let who = whoOf(counted)
   let it = reduceIntents(events, dfor)[id]
@@ -128,6 +140,7 @@ let a = encFromSeed(seed(1))
 let b = encFromSeed(seed(2))
 let c = encFromSeed(seed(3))
 let mallory = encFromSeed(seed(9))            # holds the epoch key; on no roster
+attEd = @[a, b, c, mallory]
 
 # ── 1. a room threshold, k=2 of {a, b} ────────────────────────────────────────────
 block:
@@ -274,12 +287,15 @@ block:
   let jb = encFromSeed(seed(23))
   let you = encFromSeed(seed(24))
   let outsider = encFromSeed(seed(29))    # in the room, not at dinner
+  attEd.add @[devon, ana, jb, you, outsider]
   const Chain = "eip155:31337"
   let drv = newSplitDriver(EvmSplitFamily, Chain, @[devon, ana, jb, you, outsider].mapIt(idOf(it)))
   let dFor: DriverFor = proc(kind: string): Driver = drv
   let ej = splitEffectJson(Chain, "ETH", "1200000000000000000", idOf(devon),
     "0x70997970c51812dc3a010c7d01b50e0d17dc79c8",
-    @[ana, jb, you].mapIt(SplitShare(who: idOf(it), amount: "300000000000000000")), "Dinner")
+    # every share distinct (exo-3b3.14): a split with two equal shares is refused
+    @[(ana, "300000000000000000"), (jb, "299999999999999999"), (you, "299999999999999998")]
+      .mapIt(SplitShare(who: idOf(it[0]), amount: it[1])), "Dinner")
   let policy = "evm-split@" & Chain
   let id = intentIdFor(ej, policy)
   let m = canonicalize(drv, effectFromJson(ej))
@@ -301,11 +317,11 @@ block:
 # another member: A/1 + A/2 closed a 2-of-3 round, A/3 + A/4 the next. A contribution
 # counts only toward its own round, and every surface agrees.
 proc foldState(events: seq[Event], dfor: DriverFor, id: string): (string, int, int) =
-  let it = reduceIntents(events, dfor)[id]
+  let it = reduceIntents(att(events, dfor, id), dfor)[id]
   ($it.state, it.collection.round, it.collection.acceptedThisRound)
 
 proc viewOf(events: seq[Event], dfor: DriverFor, id: string): IntentView =
-  for v in reduceIntentViews(events, dfor):
+  for v in reduceIntentViews(att(events, dfor, id), dfor):
     if v.id == id: return v
 
 block:
@@ -340,9 +356,9 @@ block:
     "room FROST: a and b in both rounds is executable, got " & $foldState(withB, frFor, id)
   check("room FROST: a early in round 2, and under rounds 3 and 4", withB, frFor, id,
         wantApprovals = 2, wantRound = 2)
-  for g in approvalGrades(withB, frFor, id):
+  for g in approvalGrades(att(withB, frFor, id), frFor, id):
     doAssert g.round in 1 .. 2, "room FROST: a grade for round " & $g.round & " of a 2-round driver"
-  for e in reduceActivity(withB, frFor):
+  for e in reduceActivity(att(withB, frFor, id), frFor):
     doAssert "round 3" notin e.detail and "round 4" notin e.detail,
       "room FROST: the activity feed narrates a round the driver does not run: " & e.detail
   echo "7b. room FROST: an early round-2 key counts once round 1 closes; rounds 3 and 4 never do OK"
@@ -412,8 +428,9 @@ proc junkFirst(id, who: string, real: Event, round = 1): Event =
     if eventId(result) < eventId(real): return
   doAssert false, "no junk sorts first"
 
-proc citesReal(label: string, events: seq[Event], dfor: DriverFor, id, who: string, real, junk: Event) =
+proc citesReal(label: string, events0: seq[Event], dfor: DriverFor, id, who: string, real, junk: Event) =
   ## Every surface that names <who>'s approval cites the event the fold counted.
+  let events = att(events0, dfor, id)
   var realPos, junkPos = -1
   for i, e in canonicalOrder(events):
     if eventId(e) == eventId(real): realPos = i
@@ -515,9 +532,12 @@ block:
   let dFor: DriverFor = proc(kind: string): Driver = drv
   const stmtJson = """{"effect":"statement","text":"two rounds, this time"}"""
   let id = intentIdFor(stmtJson, "stub")
+  # a room stub: its contributors are real keys, so their approvals carry attestations
+  # (exo-af5; "ed:aa" and "ed:bb" before, which no key could attest)
+  let (na, nb) = ("ed:" & hx(a.identity().ed), "ed:" & hx(b.identity().ed))
   let ev = @[policyDeclEvent(id, "stub"), proposeEvent(id, stmtJson),
-             contributeEvent(id, "ed:aa", "0x01", round = 1), contributeEvent(id, "ed:bb", "0x02", round = 1),
-             contributeEvent(id, "ed:aa", "0x01", round = 2)]
+             contributeEvent(id, na, "0x01", round = 1), contributeEvent(id, nb, "0x02", round = 1),
+             contributeEvent(id, na, "0x01", round = 2)]
   doAssert foldState(ev, dFor, id) == ("collecting", 2, 1),
     "the fold runs the proposal's two rounds: " & $foldState(ev, dFor, id)
   check("a proposal whose own policy has two rounds", ev, dFor, id, wantApprovals = 2, wantRound = 1)

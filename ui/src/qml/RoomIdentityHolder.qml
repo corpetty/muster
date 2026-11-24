@@ -63,6 +63,7 @@ ColumnLayout {
     }
 
     LogosText {
+        textFormat: Text.PlainText
         Layout.topMargin: Theme.spacing.small
         text: qsTr("Your room identity")
         color: Theme.palette.textTertiary
@@ -70,6 +71,7 @@ ColumnLayout {
         font.weight: Theme.typography.weightBold
     }
     LogosText {
+        textFormat: Text.PlainText
         objectName: "identityHolderWhere"
         Layout.fillWidth: true
         wrapMode: Text.WordWrap
@@ -79,6 +81,7 @@ ColumnLayout {
         font.pixelSize: Theme.typography.secondaryText
     }
     LogosText {
+        textFormat: Text.PlainText
         objectName: "identityHolderKey"
         Layout.fillWidth: true
         visible: holder.advanced && holder.onPlatform
@@ -91,6 +94,7 @@ ColumnLayout {
 
     // ── locked: muster's unlock ran out ──
     LogosText {
+        textFormat: Text.PlainText
         objectName: "identityHolderLocked"
         Layout.fillWidth: true
         visible: holder.onPlatform && holder.st.locked === true && !holder.waiting
@@ -116,6 +120,7 @@ ColumnLayout {
         onClicked: if (holder.backend) holder.backend.identityPlatformRequest()
     }
     LogosText {
+        textFormat: Text.PlainText
         Layout.fillWidth: true
         visible: holder.advanced && !holder.onPlatform && holder.st.changeable !== undefined
         wrapMode: Text.WordWrap
@@ -132,6 +137,7 @@ ColumnLayout {
         visible: holder.waiting
         spacing: Theme.spacing.small
         LogosText {
+            textFormat: Text.PlainText
             objectName: "identityHolderWaiting"
             text: holder.st.kind === "unlock" ? qsTr("Waiting for you to unlock it in the keys app…")
                                               : qsTr("Waiting for you to approve it in the keys app…")
@@ -146,6 +152,7 @@ ColumnLayout {
         }
     }
     LogosText {
+        textFormat: Text.PlainText
         objectName: "identityHolderNote"
         Layout.fillWidth: true
         visible: text.length > 0

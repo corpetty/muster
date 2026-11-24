@@ -47,7 +47,7 @@ alice.publish(proposeEvent(idBefore, effectBefore))
 
 # bob is admitted over the handshake (re-key forward, an admit entry under the new epoch)
 bob.requestJoin(bobKs.joinRequestFor(topic, high(uint64)))
-alice.admit(bobKs.encIdentity())
+alice.admitAs(aliceKs, bobKs.encIdentity())
 
 # epoch 1: both act; a message with a forged author never reaches a map
 let effectAfter = """{"to":"0xafter","value":2}"""

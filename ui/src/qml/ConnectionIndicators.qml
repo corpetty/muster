@@ -94,6 +94,7 @@ Item {
         spacing: Theme.spacing.small
 
         LogosText {
+            textFormat: Text.PlainText
             text: qsTr("Connections")
             color: Theme.palette.text
             font.family: Theme.typography.publicSans
@@ -124,6 +125,7 @@ Item {
                     spacing: 0
 
                     LogosText {
+                        textFormat: Text.PlainText
                         Layout.fillWidth: true
                         text: modelData.name
                         color: Theme.palette.text
@@ -131,6 +133,7 @@ Item {
                         font.weight: Theme.typography.weightMedium
                     }
                     LogosText {
+                        textFormat: Text.PlainText
                         Layout.fillWidth: true
                         text: modelData.detail
                         color: Theme.palette.textTertiary
@@ -139,6 +142,7 @@ Item {
                         wrapMode: Text.WrapAnywhere
                     }
                     LogosText {
+                        textFormat: Text.PlainText
                         Layout.fillWidth: true
                         text: modelData.why
                         color: Theme.palette.textSecondary
@@ -146,6 +150,7 @@ Item {
                         wrapMode: Text.WordWrap
                     }
                     LogosText {
+                        textFormat: Text.PlainText
                         Layout.fillWidth: true
                         visible: modelData.remedy.length > 0
                         text: modelData.remedy
@@ -159,6 +164,7 @@ Item {
 
         // the education line: nothing outside the room until a proposal needs it
         LogosText {
+            textFormat: Text.PlainText
             Layout.fillWidth: true
             visible: conn.baselineOnly
             text: qsTr("Nothing outside the room yet. A proposal brings in what it needs, such as an Ethereum node for a Safe payment.")

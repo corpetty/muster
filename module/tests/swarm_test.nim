@@ -6,7 +6,7 @@
 ## member shares it again (invariant 7). Two in-process members over LocalTransport.
 ## Needs libsecp256k1 + libsodium (see tests/README.md).
 
-import std/[json, strutils, algorithm, random]
+import std/[json, strutils, algorithm, random, os]
 import ../src/log/log
 import ../src/transport/transport
 import ../src/crypto/epoch_crypto
@@ -161,6 +161,49 @@ block:
   let f = only(reduceSwarm(@[signAuthored(aliceKs, topic, e)]))
   doAssert f.name == ".bashrc"
 echo "7. names carry no path OK"
+
+block:
+  # P4-10 (exo-3b3.18): a name carries no Unicode format control: U+202E would show
+  # "invoice\u202Efdp.exe" as "invoiceexe.pdf"; the zero-width and isolate marks are dropped too.
+  doAssert safeFileName("invoice\u202Efdp.exe") == "invoicefdp.exe", safeFileName("invoice\u202Efdp.exe")
+  for c in ["\u200B", "\u200C", "\u200D", "\u200E", "\u200F", "\u202A", "\u202B", "\u202C",
+            "\u202D", "\u202E", "\u2066", "\u2067", "\u2068", "\u2069", "\uFEFF", "\u061C"]:
+    doAssert safeFileName("a" & c & "b.txt") == "ab.txt", (c).escape
+  doAssert safeFileName("\u202E") == "file", "a name of controls alone reads file"
+  doAssert safeFileName("café — résumé.pdf") == "café — résumé.pdf", "other non-ASCII is kept"
+echo "7b. names carry no format controls OK"
+
+block:
+  # P4-01 (exo-3b3.17): what fileshare_share refuses, whoever asks: a hidden component under the
+  # home folder, anything in Muster's own data folder, anything but a regular file, the
+  # kernel's own trees.
+  let home = getTempDir() / ("muster-share-refusal-" & $getCurrentProcessId())
+  let data = home / "muster-data"
+  removeDir(home)
+  createDir(home / ".ssh")
+  createDir(home / "docs" / ".git")
+  createDir(data)
+  writeFile(home / ".ssh" / "id_ed25519", "k")
+  writeFile(home / "docs" / ".git" / "config", "c")
+  writeFile(home / "docs" / "invoice.pdf", "p")
+  writeFile(home / "docs" / ".hidden.pdf", "h")
+  writeFile(data / "identity.mks", "secret")
+  createSymlink(home / ".ssh" / "id_ed25519", home / "docs" / "looks-fine.pdf")
+  createSymlink(data / "identity.mks", home / "docs" / "notes.txt")
+  doAssert shareRefusal(home / "docs" / "invoice.pdf", home, @[data]) == ""
+  doAssert shareRefusal(home / ".ssh" / "id_ed25519", home, @[data]).len > 0, "a hidden folder"
+  doAssert shareRefusal(home / "docs" / ".git" / "config", home, @[data]).len > 0, "a hidden folder deeper"
+  doAssert shareRefusal(home / "docs" / ".hidden.pdf", home, @[data]).len > 0, "a hidden file"
+  doAssert shareRefusal(data / "identity.mks", home, @[data]).len > 0, "Muster's own folder"
+  doAssert shareRefusal(home / "docs" / "looks-fine.pdf", home, @[data]).len > 0, "a link into a hidden folder"
+  doAssert shareRefusal(home / "docs" / "notes.txt", home, @[data]).len > 0, "a link into Muster's folder"
+  doAssert shareRefusal(home / "docs", home, @[data]).len > 0, "a folder"
+  doAssert shareRefusal(home / "docs" / "nope.pdf", home, @[data]).len > 0, "a missing file"
+  doAssert shareRefusal("docs/invoice.pdf", home, @[data]).len > 0, "a relative path"
+  doAssert shareRefusal("/dev/null", home, @[data]).len > 0, "a device"
+  doAssert shareRefusal("/proc/self/environ", home, @[data]).len > 0, "the kernel's trees"
+  removeDir(home)
+echo "7c. fileshare refuses hidden, Muster's own and non-regular paths OK"
 
 # 8. What the room learns, said where the room says it: the flow names the file and its key
 #    to the members at a share and the storage address at a seed; the room map credits each

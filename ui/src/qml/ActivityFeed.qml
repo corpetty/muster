@@ -53,11 +53,13 @@ Item {
 
             // Chevron marks the collapse state; the whole row is the hit target.
             LogosText {
+                textFormat: Text.PlainText
                 text: feed.collapsed ? "▸" : "▾"
                 color: Theme.palette.textTertiary
                 font.pixelSize: MusterStyle.caption
             }
             LogosText {
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 text: qsTr("Room history")
                 color: Theme.palette.text
@@ -67,6 +69,7 @@ Item {
                 elide: Text.ElideRight
             }
             LogosText {
+                textFormat: Text.PlainText
                 text: qsTr("%1").arg(feed.list.length)
                 color: Theme.palette.textTertiary
                 font.family: MusterStyle.mono
@@ -80,6 +83,7 @@ Item {
         }
 
         LogosText {
+            textFormat: Text.PlainText
             visible: !feed.collapsed
             Layout.fillWidth: true
             text: qsTr("How this room got here, step by step, from the record every member keeps.")
@@ -90,6 +94,7 @@ Item {
 
         // ── empty state ─────────────────────────────────────────────────────
         LogosText {
+            textFormat: Text.PlainText
             visible: !feed.collapsed && feed.list.length === 0
             Layout.fillWidth: true
             Layout.topMargin: Theme.spacing.small
@@ -149,6 +154,7 @@ Item {
                             spacing: 0
 
                             LogosText {
+                                textFormat: Text.PlainText
                                 Layout.fillWidth: true
                                 text: String((modelData && modelData.title) || "")
                                 color: Theme.palette.text
@@ -157,6 +163,7 @@ Item {
                                 wrapMode: Text.WordWrap
                             }
                             LogosText {
+                                textFormat: Text.PlainText
                                 Layout.fillWidth: true
                                 visible: String((modelData && modelData.detail) || "").length > 0
                                 text: String((modelData && modelData.detail) || "")

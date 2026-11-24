@@ -51,6 +51,7 @@ ColumnLayout {
     // a schedule the room cannot run from a pot (no account named, one not shown the room,
     // not a LEZ v0.3 multisig, not native LEZ): say why, rather than show nothing
     LogosText {
+        textFormat: Text.PlainText
         objectName: "circleNotRunning"
         visible: !rc.running && rc.view.error === "no-circle"
         Layout.fillWidth: true
@@ -65,6 +66,7 @@ ColumnLayout {
         text: rc.view.complete ? qsTr("Rounds: the cycle is complete") : qsTr("Rounds: round %1 is due").arg(rc.view.current)
     }
     LogosText {
+        textFormat: Text.PlainText
         visible: rc.running
         Layout.fillWidth: true
         wrapMode: Text.WordWrap
@@ -83,6 +85,7 @@ ColumnLayout {
             Layout.fillWidth: true
             spacing: 2
             LogosText {
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 color: rowRound.due ? Theme.palette.text : Theme.palette.textSecondary
@@ -92,6 +95,7 @@ ColumnLayout {
                       .arg(modelData.settled ? qsTr(" · paid out") : "")
             }
             LogosText {
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 visible: !modelData.settled
@@ -123,6 +127,7 @@ ColumnLayout {
     // ── the pot's members (exo-267.6): a change is a proposal of the multisig itself ──
     SectionHeader { Layout.fillWidth: true; visible: rc.running; text: qsTr("The pot's members") }
     LogosText {
+        textFormat: Text.PlainText
         visible: rc.running
         Layout.fillWidth: true
         wrapMode: Text.WordWrap
@@ -142,6 +147,7 @@ ColumnLayout {
             RowLayout {
                 Layout.fillWidth: true
                 LogosText {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     elide: Text.ElideRight
                     color: Theme.palette.text
@@ -157,6 +163,7 @@ ColumnLayout {
                 }
             }
             LogosText {
+                textFormat: Text.PlainText
                 visible: memberRow.confirming
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
@@ -217,6 +224,7 @@ ColumnLayout {
     }
 
     LogosText {
+        textFormat: Text.PlainText
         visible: rc.running && (rc.view.myAccounts || []).length === 0 && !rc.view.complete
         Layout.fillWidth: true
         wrapMode: Text.WordWrap

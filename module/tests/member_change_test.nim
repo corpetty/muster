@@ -139,7 +139,7 @@ block:
            "only the proposer's client re-keys, so the room forks no epoch"
   for (who, _) in removalsDue(evs(), dA, r.topic, r.alice.members().mapIt(encHexOf(it)), ids[0]):
     doAssert who == ids[2]
-    r.alice.expel(kss[2].encIdentity())
+    r.alice.expelAs(aliceKs, kss[2].encIdentity())
   pollAll()
   doAssert r.alice.epoch() == before + 1 and r.bob.epoch() == before + 1
   doAssert ids[2] notin r.alice.members().mapIt(encHexOf(it)) and

@@ -71,5 +71,36 @@ block:
            "an unknown address keeps its 0x and both ends"
   echo "5. one name per member, whichever form a driver used: alias / you / one short id OK"
 
+
+block:
+  # P4-09 (exo-3b3.18): a second "Alice" is refused, whatever its case or hidden marks; an alias
+  # mixing Latin with Cyrillic or Greek letters is kept but flagged, for the UI to show.
+  removeFile(path)
+  let b = newContactBook(path)
+  const alice = "11" & repeat("00", 63)
+  const other = "22" & repeat("00", 63)
+  doAssert b.add(alice, "Alice") == ""
+  doAssert b.add(other, "alice").len > 0, "a duplicate alias, other case, is refused"
+  doAssert b.aliasOf(other) == "", "and nothing was stored for it"
+  doAssert b.add(other, " ALICE\u200B").len > 0, "padding and a zero-width mark do not make it new"
+  doAssert b.setAlias(other, "Alice").len > 0, "a rename to a taken alias is refused"
+  doAssert b.setAlias(alice, "alice") == "", "a contact may change the case of its own alias"
+  doAssert b.aliasOf(alice) == "alice"
+  doAssert b.add(other, "Bob\u202E") == "" and b.aliasOf(other) == "Bob", "format controls are stripped"
+  doAssert b.add(other, "") == "", "an empty alias (an admit seeding a contact) is never a duplicate"
+  # look-alikes: Latin "A" vs Cyrillic "А" (U+0410)
+  const third = "33" & repeat("00", 63)
+  doAssert b.add(third, "\u0410lice") == "", "a mixed-script alias is not a duplicate of Alice"
+  var flagged, plain = false
+  for c in b.asJson():
+    if c["identity"].getStr() == third: flagged = c["mixedScript"].getBool()
+    if c["identity"].getStr() == alice: plain = not c["mixedScript"].getBool()
+  doAssert flagged, "Cyrillic mixed into a Latin alias is flagged"
+  doAssert plain, "a Latin alias is not"
+  doAssert mixesScripts("Αlice"), "Greek capital alpha with Latin"
+  doAssert not mixesScripts("Алиса"), "Cyrillic alone is not mixed"
+  doAssert not mixesScripts("Zoë 2"), "Latin with diacritics and digits is not mixed"
+  echo "6. duplicate aliases refused, look-alikes flagged, controls stripped OK"
+
 removeFile(path)
 echo "contacts_test: all OK"

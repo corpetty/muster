@@ -16,6 +16,7 @@
 ## Pure Nim (os, sets, sha256) — headless-testable; the hosted module wires the path in.
 
 import std/[os, sets]
+import ../security/private_files
 import ../hashing/sha256
 
 const
@@ -63,8 +64,7 @@ proc record*(j: RoomJournal, frame: seq[byte]): bool =
   j.seen.incl key
   j.frames.add frame
   try:
-    createDir(parentDir(j.path))
-    let f = open(j.path, fmAppend)
+    let f = openPrivateAppend(j.path)
     defer: f.close()
     let n = frame.len
     var rec = newString(4 + n)

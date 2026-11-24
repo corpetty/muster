@@ -550,6 +550,7 @@ Item {
                 onClicked: root.sidebarOpen = true
             }
             LogosText {
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 elide: Text.ElideRight
                 text: root.view === "room" ? (roomSurface.opening ? (root.titleOf(roomSurface.openingTopic) || root.shortRoom(roomSurface.openingTopic))
@@ -861,12 +862,14 @@ Item {
                     Layout.fillWidth: true
                     spacing: 2
                     LogosText {
+                        textFormat: Text.PlainText
                         text: qsTr("Wallet")
                         color: Theme.palette.text
                         font.pixelSize: MusterStyle.title
                         font.weight: Theme.typography.weightBold
                     }
                     LogosText {
+                        textFormat: Text.PlainText
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
                         text: qsTr("What you hold on the chains you set up, each balance saying whether your own client checked it.")
@@ -1159,6 +1162,7 @@ Item {
             anchors.centerIn: parent
             spacing: Theme.spacing.small
             LogosText {
+                textFormat: Text.PlainText
                 text: root.signerNote
                 color: Theme.palette.textSecondary
                 font.pixelSize: MusterStyle.caption

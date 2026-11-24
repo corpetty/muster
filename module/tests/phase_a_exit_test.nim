@@ -53,8 +53,8 @@ proc runRoom(topic: string, acct: RoomAccount, n: int): (Room, string) =
   let eff = effectFor("safe", n, "\"sources\":{\"value\":\"read\",\"nonce\":\"read\"}")
   let id = liveProposeIntent(r.alice, aliceKs, resolverOf(r.alice), policy, eff, int64(Now), 1,
                              account = acct.address, ttlSec = Ttl)
-  r.alice.publish(readEvent(id, "value", "rpc://probe", $n))
-  r.alice.publish(readEvent(id, "nonce", "rpc://probe", "0"))
+  r.alice.publishRead(aliceKs, id, "value", "rpc://probe", $n)
+  r.alice.publishRead(aliceKs, id, "nonce", "rpc://probe", "0")
   doAssert liveContribute(r.alice, aliceKs, resolverOf(r.alice), id, "", "", bindCtx(), Now) == "collecting"
   r.bob.poll()
   doAssert liveContribute(r.bob, bobKs, resolverOf(r.bob), id, "", "", bindCtx(), Now) == "executable"

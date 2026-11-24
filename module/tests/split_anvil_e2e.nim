@@ -11,7 +11,7 @@
 ## address; the creditor's balance rises by exactly the shares; a reported transaction
 ## that pays someone else is never confirmed; the split is final on all three members.
 
-import std/[os, strutils]
+import std/[os, strutils, sequtils]
 import stint
 import ../src/log/log
 import ../src/drivers/driver
@@ -58,9 +58,10 @@ except WalletError as e: quit("no EVM node at " & url & " (" & e.msg & ") — st
 
 var r = newRoom3("/muster/1/split-anvil/proto")
 let payTo = addrOf(aliceKs)
-const Share = "300000000000000000"          # 0.3 ETH
-let effect = splitEffectJson(Chain, "ETH", "900000000000000000", alice, payTo,
-                             evenShares("900000000000000000", alice, @[bob, carol]), "Dinner at Tasca")
+const Share = "300000000000000000"          # 0.3 ETH: about each share — they differ by a wei (exo-3b3.14)
+let shares = evenShares("900000000000000000", alice, @[bob, carol])
+proc shareOf(ks: Keystore): string = shares.filterIt(it.who == idHex(ks))[0].amount
+let effect = splitEffectJson(Chain, "ETH", "900000000000000000", alice, payTo, shares, "Dinner at Tasca")
 let id = liveProposeIntent(r.alice, aliceKs, splitFor, Policy, effect, int64(Now), 1,
                            account = Chain & ":" & payTo, ttlSec = Ttl)
 doAssert id.startsWith("0x"), id
@@ -76,7 +77,7 @@ proc pay(s: CoordinationSession, ks: Keystore): string =
   doAssert outcome == "", outcome
   let got = rpcTransferOf(url, pp.tx)
   doAssert got.found and got.fromHex.toLowerAscii() == addrOf(ks) and got.toHex.toLowerAscii() == payTo and
-           got.valueDec == Share, "the wallet signed exactly the agreed share, from the payer, to payTo: " & $got
+           got.valueDec == shareOf(ks), "the wallet signed exactly the agreed share, from the payer, to payTo: " & $got
   for _ in 0 ..< 50:
     let st = liveSettlePartComplete(s, ks, splitFor, seam, pp)
     if not st.startsWith("unconfirmed"): return pp.tx
@@ -110,7 +111,8 @@ for s in [r.alice, r.bob, r.carol]:
 for s in [r.alice, r.bob, r.carol]:
   doAssert intentState(s.roomEvents(), splitFor, id) == "final", "final on every member"
 let after = u256(rpcBalance(url, payTo, "latest"))
-doAssert after - before == u256(Share) * 2.u256, "Alice received exactly the two shares: " & $(after - before)
+doAssert after - before == u256(shareOf(bobKs)) + u256(shareOf(room3CarolKs)),
+         "Alice received exactly the two shares: " & $(after - before)
 echo "5. Alice's client confirms both from her RPC; +0.6 ETH; final on all three members OK"
 
 echo "split_anvil_e2e: all OK"

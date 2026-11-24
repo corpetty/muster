@@ -17,6 +17,7 @@ import ../src/dcbor/dcbor
 import ../src/intents/materialization
 import ../src/drivers/driver
 import ../src/drivers/manifest   # fieldText
+import ../src/drivers/profile
 import ../src/log/log
 import ../src/coordination/intents
 
@@ -63,6 +64,16 @@ method partAuthor(d: PartsDriver, e: Effect, part, step: string): string =
   of "settled": part
   of "confirmed": s.to
   else: ""
+
+# Its family: an each-locus family whose chain binds each party's signature itself, as
+# evm.split's does (binding explicit). Since exo-af5 a driver with no declared profile is
+# taken as room-bound, where a contribution counts only with an attestation over P; this
+# test's "signature" is the contributor's name, so it declares the chain-bound shape it
+# always stood for — what it proves is the parts seam, not attestation.
+method profile(d: PartsDriver): FamilyProfile =
+  FamilyProfile(declared: true, family: "test.parts", settlement: "test",
+    locus: loEach, scheme: scOwnTransaction, commits: cmContent, binding: bdExplicit,
+    rounds: 1, k: 1, bypassesKnown: true)
 
 let drv = PartsDriver()
 let dfor: DriverFor = proc(kind: string): Driver = drv
@@ -208,8 +219,10 @@ block:
 
 # ── 8. a driver without parts is untouched: submit / final still settle it ───────
 block:
+  # a single-submitter chain family (an external-finality stub: its chain binds the
+  # signature, so the name-keyed contribution counts unattested, exo-af5)
   let plain: DriverFor = proc(kind: string): Driver =
-    newStubDriver(rounds = 1, threshold = 1, verifyResult = true)
+    newStubDriver(rounds = 1, threshold = 1, finality = finExternal, verifyResult = true)
   let ej = """{"to":"0xabc","value":1}"""
   let pid = intentIdFor(ej)
   let evs = @[proposeEvent(pid, ej), contributeEvent(pid, "x", "01"), submitEvent(pid), finalEvent(pid)]

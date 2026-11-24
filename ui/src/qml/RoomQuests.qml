@@ -49,6 +49,7 @@ ColumnLayout {
     }
 
     LogosText {
+        textFormat: Text.PlainText
         Layout.fillWidth: true
         wrapMode: Text.WordWrap
         color: Theme.palette.textSecondary
@@ -119,6 +120,7 @@ ColumnLayout {
             }
         }
         LogosText {
+            textFormat: Text.PlainText
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
             color: Theme.palette.textSecondary
@@ -152,6 +154,7 @@ ColumnLayout {
     // ── the room's quests ────────────────────────────────────────────────────
     SectionHeader { Layout.fillWidth: true; text: qsTr("This room's quests"); count: String(qv.quests.length) }
     LogosText {
+        textFormat: Text.PlainText
         visible: qv.quests.length === 0
         color: Theme.palette.textSecondary
         font.pixelSize: MusterStyle.caption
@@ -185,6 +188,7 @@ ColumnLayout {
             spacing: Theme.spacing.small
 
             LogosText {
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 color: Theme.palette.text
@@ -194,6 +198,7 @@ ColumnLayout {
                                                : qsTr("A quest whose terms this room does not hold")
             }
             LogosText {
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 color: Theme.palette.textSecondary
@@ -249,6 +254,7 @@ ColumnLayout {
     // ── what the chain shows ─────────────────────────────────────────────────
     SectionHeader { Layout.fillWidth: true; text: qsTr("Who sees what") }
     LogosText {
+        textFormat: Text.PlainText
         Layout.fillWidth: true
         wrapMode: Text.WordWrap
         color: Theme.palette.textSecondary

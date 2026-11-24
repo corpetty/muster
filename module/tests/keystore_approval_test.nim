@@ -106,10 +106,26 @@ block:
   doAssert safeApprover("auto", true, acct, own, testChain = false) == own,
     "auto on a mainnet: the module's own key until the typed attestation (exo-149.6)"
   doAssert safeApprover("auto", false, acct, own, testChain = true) == own, "auto, not attested: own key"
-  doAssert safeApprover("interim", false, acct, own, testChain = false) == acct.toLowerAscii(),
-    "interim: the keystore account on any chain"
+  doAssert safeApprover("interim", false, acct, own, testChain = true) == acct.toLowerAscii(),
+    "interim: the keystore account on a test chain"
+  # exo-3b3.18 (audit P4-08): interim's attestation reaches the signer as a raw digest, so on a
+  # mainnet it is the module's own key, as auto's is, never the person's keystore account
+  doAssert safeApprover("interim", false, acct, own, testChain = false) == own,
+    "interim on a mainnet: the module's own key"
   doAssert safeApprover("off", true, acct, own, testChain = true) == own
   doAssert safeApprover("auto", true, "", own, testChain = true) == own, "no account selected: own key"
   echo "5. a Safe approval is the keystore account's exactly where contribute routes it there OK"
+
+# ── 6. no raw-digest attestation request on a mainnet (exo-3b3.18, audit P4-08) ──
+block noDigestOnMainnet:
+  var r = newRoom("/muster/1/ks-approval-6/proto")
+  let id = r.propose("safe", effectFor("safe", 46))
+  let mainnet = proc(chainId: int): bool = false
+  doAssert planKeystoreApproval(r.alice, liveDriverFor, id, alice, Now, mainnet).refusal == "attestation-digest-on-mainnet",
+    "a keystore approval whose attestation is a raw digest is never asked for on a chain that holds value"
+  doAssert planKeystoreApproval(r.alice, liveDriverFor, id, alice, Now).refusal == "",
+    "the room's anvil chain is a test chain by the default rule"
+  doAssert not knownTestChain(1) and not knownTestChain(10) and knownTestChain(31337) and knownTestChain(11155111)
+  echo "6. no raw-digest attestation request on a mainnet OK"
 
 echo "keystore_approval_test: all passed"

@@ -36,6 +36,7 @@ Rectangle {
     Accessible.name: text
 
     LogosText {
+        textFormat: Text.PlainText
         id: label
         anchors.centerIn: parent
         text: pill.text

@@ -13,7 +13,7 @@
 ##     forks an epoch (CoordinationSession.expel).
 ## Pure functions of the event set (invariant 4).
 
-import std/[json, strutils, sequtils]
+import std/[json, strutils, sequtils, tables, algorithm]
 import ../log/log
 import ../drivers/driver
 import ../drivers/lez_multisig
@@ -66,3 +66,24 @@ proc removalsDue*(events: seq[Event], driverFor: DriverFor, room: string, holder
     if not ok or r["change"].getStr() != "remove": continue
     let who = r["member"].getStr()
     if who.len > 0 and who in held and (who, v.id) notin result: result.add (who, v.id)
+
+proc executedRemovals*(events: seq[Event], driverFor: DriverFor, room: string): seq[string] =
+  ## Every room member (identity hex) a LEZ multisig removal the chain executed took out,
+  ## and no later executed add brought back — whoever proposed it (exo-a16). Every
+  ## member's client reads the same set from the same log: no grant naming one is taken,
+  ## and any member still holding one in its roster re-keys them out.
+  var finalAt = initTable[string, int]()
+  for i, e in canonicalOrder(events):
+    let p = e.key.split('/')
+    if p.len >= 3 and p[0] == "intent" and p[2] == "final" and p[1] notin finalAt: finalAt[p[1]] = i
+  var changes: seq[tuple[at: int, remove: bool, who: string]]
+  for v in reduceIntentViews(events, driverFor):
+    if v.state != "final" or v.effectJson.len == 0 or v.id notin finalAt: continue
+    let (ok, r) = configReadingOf(events, v.effectJson, room)
+    if not ok or r["change"].getStr() notin ["add", "remove"]: continue
+    let who = r["member"].getStr()
+    if who.len > 0: changes.add (at: finalAt[v.id], remove: r["change"].getStr() == "remove", who: who.toLowerAscii())
+  changes.sort(proc(a, b: auto): int = cmp(a.at, b.at))
+  for c in changes:
+    if c.remove and c.who notin result: result.add c.who
+    elif not c.remove: result = result.filterIt(it != c.who)

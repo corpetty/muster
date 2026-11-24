@@ -591,6 +591,10 @@ Rectangle {
         if (p.confirmed) return String(p.tx || "").indexOf("note:") === 0 ? qsTr("✓ received — a private note of exactly this share")
                               : String(p.tx || "").length > 0 ? qsTr("✓ received")
                               : p.settledUp ? qsTr("✓ paid through a settle-up") : qsTr("✓ received outside muster");
+        // the same payment reported for another part too: neither is confirmed on it (exo-3b3.14)
+        if (p.settled && String(p.contested || "").length > 0)
+            return cardRoot.iAmCreditor ? qsTr("says they paid — but that payment is reported for another share too, so it confirms neither; mark it received only if you know it is theirs")
+                                        : qsTr("says they paid — but that payment is reported for another share too, so it confirms neither");
         if (p.settled) return cardRoot.iAmCreditor ? qsTr("paid — not seen by your wallet yet")
                                                    : qsTr("paid — waiting for %1 to see it").arg(cardRoot.creditorName);
         if (p.unresolved) return qsTr("sent — not landed yet; Muster keeps watching and won't send it twice");
@@ -822,6 +826,7 @@ Rectangle {
                 }
             }
             LogosText {
+                textFormat: Text.PlainText
                 objectName: "cardHeading"
                 Layout.fillWidth: true
                 elide: Text.ElideRight
@@ -856,6 +861,7 @@ Rectangle {
         // Deliberately thin: an approval is a fact in the thread, not a thing
         // to act on. It earns a line so the record reads in order, no more.
         LogosText {
+            textFormat: Text.PlainText
             visible: cardRoot.kind === "intent-approve"
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
@@ -880,6 +886,7 @@ Rectangle {
         // (the full disclosure — the store node included, FS-9), how we agree. All
         // from coordinate_readiness; unknown and undeclared are shown as such.
         LogosText {
+            textFormat: Text.PlainText
             objectName: "cardDeclined"
             visible: cardRoot.kind === "intent-propose" && cardRoot.schemaKnown && cardRoot.declines > 0
             Layout.fillWidth: true
@@ -910,12 +917,14 @@ Rectangle {
             readonly property var m: cardRoot.xmrMsig || ({})
             readonly property int signerCount: (m.signers || []).length
             LogosText {
+                textFormat: Text.PlainText
                 text: qsTr("Monero multisig")
                 color: Theme.palette.textSecondary
                 font.pixelSize: MusterStyle.cardCaption
                 font.weight: Theme.typography.weightMedium
             }
             LogosText {
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 // until the first M have approved, nobody is a signer yet: say who will be
@@ -928,6 +937,7 @@ Rectangle {
                 font.pixelSize: MusterStyle.cardCaption
             }
             LogosText {
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 visible: parent.signerCount > 0
                 text: qsTr("Synced: %1 of %2").arg((parent.m.synced || []).length).arg(parent.signerCount)
@@ -935,6 +945,7 @@ Rectangle {
                 font.pixelSize: MusterStyle.cardCaption
             }
             LogosText {
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 visible: parent.signerCount > 0
                 text: qsTr("Signed: %1 of %2").arg((parent.m.signed || []).length).arg(parent.signerCount)
@@ -942,6 +953,7 @@ Rectangle {
                 font.pixelSize: MusterStyle.cardCaption
             }
             LogosText {
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 visible: String(parent.m.txids || "").length > 0
                 text: qsTr("Submitted: %1…").arg(String(parent.m.txids || "").slice(0, 12))
@@ -950,6 +962,7 @@ Rectangle {
                 font.pixelSize: MusterStyle.cardCaption
             }
             LogosText {
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 visible: String(parent.m.last || "").length > 0
@@ -958,6 +971,7 @@ Rectangle {
                 font.pixelSize: MusterStyle.cardCaption
             }
             LogosText {
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 text: qsTr("Each signer's own wallet signs only if what it shows is this spend.")
@@ -965,6 +979,7 @@ Rectangle {
                 font.pixelSize: MusterStyle.cardCaption
             }
             LogosText {
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 text: qsTr("A Monero transaction has no expiry: a set a signer signed could still be completed outside the room after this proposal expires.")
@@ -978,6 +993,7 @@ Rectangle {
         // is unpaid and not already being settled — offer to renew those shares: a settle-up
         // of this split, which everyone they name agrees to again, under a fresh expiry.
         LogosText {
+            textFormat: Text.PlainText
             objectName: "cardSplitExpired"
             visible: cardRoot.kind === "intent-propose" && cardRoot.isSplit && cardRoot.splitExpired
             Layout.fillWidth: true
@@ -995,6 +1011,7 @@ Rectangle {
         }
 
         LogosText {
+            textFormat: Text.PlainText
             objectName: "cardSplitNote"
             visible: cardRoot.isSplit && cardRoot.splitNote.length > 0
             Layout.fillWidth: true
@@ -1126,6 +1143,7 @@ Rectangle {
         }
 
         LogosText {
+            textFormat: Text.PlainText
             objectName: "cardAuditStatus"
             visible: cardRoot.auditStatus.length > 0
             Layout.fillWidth: true

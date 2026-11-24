@@ -96,7 +96,8 @@ block:
   doAssert p3 == "paying", "both in flight: " & p3
   doAssert ledger.sent.len == before + 2
   let paid = ledger.sent[before .. ^1].mapIt(it.transfer.amount).sorted()
-  doAssert paid == @["200", "300"], "each part once: " & $paid
+  # each net transfer once (the shares it nets are distinct, exo-3b3.14: read, never assumed)
+  doAssert paid == netTransfers(open).mapIt(it.amount).sorted(), "each part once: " & $paid
   ledger.mine()
   for pp in [pp1, pp2]:
     doAssert liveSettlePartComplete(r.carol, room3CarolKs, splitFor, seam, pp) in ["submitted", "settling", "final"]

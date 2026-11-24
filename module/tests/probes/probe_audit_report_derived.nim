@@ -1,7 +1,8 @@
 ## derived-exo-403 s7: the readable report is a pure function of the canonical file
 ## and carries its digest; rendering is deterministic, every rendered fact comes from
 ## the file (perturbing a rendered field changes the report), it shows each approval's
-## grade — pasted ones as unattested — and it is never authoritative.
+## grade — pasted ones as unattested on the Safe, rejected under the threshold (exo-af5) —
+## and it is never authoritative.
 ##
 ## Trials: randomized rooms through the hosted path. Per trial: render twice (equal);
 ## the report contains the file's digest and each approval's grade word; perturbing

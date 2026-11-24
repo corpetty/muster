@@ -386,6 +386,26 @@
       "status": "none",
       "credibility": "exposed",
       "party": "modules loaded in the same Basecamp as Muster"
+    },
+    {
+      "step": "open-room",
+      "kind": "gap",
+      "title": "The identity file is sealed under a passphrase built into Muster",
+      "body": "Muster keeps your room identity and its own signing key in one file, identity.mks, in its folder in your profile. Nothing in a Basecamp install sets a passphrase for it, so it is sealed under a constant anyone can read in Muster's source. What protects it is the file's permissions: it is created readable by your account alone, from its first byte, and replaced whole. Any program running as your account, a backup or sync tool that copies the profile, or anyone holding the disk can open it, then read every room you are in and sign as you there.",
+      "fix": "seal the file under a secret the person's keystore_module holds (a secret leg through signer_manager_module, as the platform room identity already uses for a founder's room key), or under a passphrase the person sets, and re-seal an existing file the first time it is opened; until then MUSTER_KEY_PASSPHRASE sets a passphrase by hand",
+      "status": "none",
+      "credibility": "exposed",
+      "party": "any program running as your account, and anyone who copies your profile folder (a backup or sync tool, a lost or stolen disk)"
+    },
+    {
+      "step": "open-room",
+      "kind": "gap",
+      "title": "Any module loaded beside Muster can act as you in your rooms",
+      "body": "Muster's module answers every caller: Basecamp does not tell a Nim module who called it, and no Basecamp release turns on its access policy. So a module installed for something else, in the same Basecamp, can read your rooms' messages, admit an identity of its own to a room, post, agree or decline as you, sign with the keys Muster holds, share a file from your disk into a room, and change Muster's settings. What you see is the result, after the fact. Payments from your own Ethereum accounts still go through the Signer, which asks you. Muster refuses to share a hidden file, its own files or anything but a regular file.",
+      "fix": "Basecamp telling a Nim module who called it, so Muster serves only muster_ui; or Basecamp launching with --access-policy enforce and a policy naming each app's UI-to-module edge (infra/access-policy.json names Muster's, docs/basecamp-access-policy.md)",
+      "status": "none",
+      "credibility": "exposed",
+      "party": "modules loaded in the same Basecamp as Muster"
     }
   ]
 }

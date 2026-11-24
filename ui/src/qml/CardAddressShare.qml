@@ -16,6 +16,7 @@ ColumnLayout {
     spacing: Theme.spacing.tiny
 
     LogosText {
+        textFormat: Text.PlainText
         Layout.fillWidth: true
         wrapMode: Text.WordWrap
         text: cardRoot.card && cardRoot.card.asset
@@ -31,6 +32,7 @@ ColumnLayout {
     // getting this wrong is the exact lie a labelled address must not
     // tell, so an absent form reads as the safer "shielded".
     LogosText {
+        textFormat: Text.PlainText
         objectName: "cardShareForm"
         Layout.fillWidth: true
         wrapMode: Text.WrapAnywhere
@@ -64,6 +66,7 @@ ColumnLayout {
     // destination is readable before choosing how to pay. "Zone" is the
     // LEZ's word; on Ethereum or Bitcoin it is the chain (exo-4d4).
     LogosText {
+        textFormat: Text.PlainText
         objectName: "cardShareReadable"
         Layout.fillWidth: true
         visible: cardRoot.card && cardRoot.card.form !== undefined

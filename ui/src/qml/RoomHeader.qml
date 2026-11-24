@@ -64,6 +64,7 @@ ColumnLayout {
 
         // ── the name, or its rename field ────────────────────────────────
         LogosText {
+            textFormat: Text.PlainText
             id: titleText
             objectName: "roomTitleText"
             visible: !renameRow.visible
@@ -137,6 +138,7 @@ ColumnLayout {
                     }
                 }
                 LogosText {
+                    textFormat: Text.PlainText
                     objectName: "roomMembersLabel"
                     text: String(header.room.members.length)
                     color: Theme.palette.textSecondary
@@ -175,6 +177,7 @@ ColumnLayout {
                          : header.connLevel === "warn" ? MusterStyle.warning : Theme.palette.textMuted
                 }
                 LogosText {
+                    textFormat: Text.PlainText
                     id: connWord
                     text: header.connLevel === "ok" ? qsTr("live") : header.connLevel === "down" ? qsTr("down")
                         : header.connLevel === "warn" ? qsTr("degraded") : qsTr("checking…")
@@ -218,6 +221,7 @@ ColumnLayout {
                     spacing: Theme.spacing.small
                     // ── invite someone by name or link (exo-899): they arrive a member ──
                     LogosText {
+                        textFormat: Text.PlainText
                         text: qsTr("Invite someone")
                         color: Theme.palette.text
                         font.pixelSize: MusterStyle.body
@@ -260,6 +264,7 @@ ColumnLayout {
                         }
                     }
                     LogosText {
+                        textFormat: Text.PlainText
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
                         text: qsTr("They get it on their Home and join as a member: they read from then on, never what came before.")
@@ -268,12 +273,14 @@ ColumnLayout {
                     }
                     Rectangle { Layout.fillWidth: true; Layout.topMargin: Theme.spacing.small; implicitHeight: 1; color: Theme.palette.borderSubtle }
                     LogosText {
+                        textFormat: Text.PlainText
                         text: qsTr("Room code")
                         color: Theme.palette.text
                         font.pixelSize: MusterStyle.body
                         font.weight: Theme.typography.weightBold
                     }
                     LogosText {
+                        textFormat: Text.PlainText
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
                         // exo-dcc.25: whoever joins with the code asks to join; a person you
@@ -294,6 +301,7 @@ ColumnLayout {
                             border.color: Theme.palette.borderSubtle
                             // In full: the random tail is the part that names the room
                             TextEdit {
+                                textFormat: TextEdit.PlainText
                                 id: roomCode
                                 objectName: "roomTopicText"
                                 anchors.fill: parent
@@ -394,12 +402,14 @@ ColumnLayout {
         contentItem: ColumnLayout {
             spacing: Theme.spacing.medium
             LogosText {
+                textFormat: Text.PlainText
                 text: qsTr("Leave this room?")
                 color: Theme.palette.text
                 font.pixelSize: MusterStyle.subtitle
                 font.weight: Theme.typography.weightBold
             }
             LogosText {
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 text: qsTr("It stops showing here, and this device stops following it. "

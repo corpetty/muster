@@ -19,10 +19,13 @@
 ##   attest  : "intent/<id>/attest/<contributor>/<round>"  value = attestation signature hex
 ##
 ## Grading: an approval is COMMITTED when an attestation for it verifies against the P
-## this code re-derives; UNATTESTED when it was pasted (no attestation at all — the
-## signer acted outside muster, so nothing muster can show was committed); and
-## REJECTED when attestations exist but none verifies (forged, mismatched, from another
-## intent or room) — a rejected approval does not count. Only attestations that belong to
+## this code re-derives (P binds the room, so this is the approver's word in THIS room);
+## UNATTESTED when none does but the chain binds the signature itself — a Safe's EIP-712
+## domain, a Bitcoin sighash, a program counting votes — so a signer outside muster
+## counts, and a failing attestation (junk anyone could add) voids nothing (exo-83c); and
+## REJECTED otherwise: a driver no chain checks counts only an approval attested in this
+## room, so a signature copied from another room, where the same effect and policy give
+## the same bytes, counts for nothing here (exo-af5). A rejected approval does not count. Only attestations that belong to
 ## the intent's record count here (exo-093): one that links anything but copies of its own
 ## approval inside the record is no attestation of this intent.
 
@@ -33,6 +36,7 @@ import ../hashing/keccak256
 import ../crypto/secp256k1
 import ../crypto/curve25519
 import ../drivers/driver
+import ../drivers/profile
 import ../intents/materialization
 import ../intents/signing_payload
 import ../intents/provenance
@@ -45,8 +49,8 @@ export provenance.SignedInput, signing_payload.SigningContext
 type
   AttestGrade* = enum
     agCommitted = "committed"     ## a verifying attestation over the re-derived P
-    agUnattested = "unattested"   ## pasted: signed outside muster, no attestation
-    agRejected = "rejected"       ## attestation(s) present, none verifies — not counted
+    agUnattested = "unattested"   ## no verifying attestation, but the chain binds the signature: counted
+    agRejected = "rejected"       ## no verifying attestation, and nothing else binds it to this room: not counted
 
   ApprovalGrade* = object
     who*: string
@@ -75,19 +79,33 @@ proc bytesOf(s: string): seq[byte] = (for c in s: result.add byte(c))
 # ── events ────────────────────────────────────────────────────────────────────
 
 proc contextEvent*(intentId: string, ctx: SigningContext,
-                   parents: seq[EventId] = @[]): Event =
+                   parents: seq[EventId] = @[], author = ""): Event =
   ## Declared by the proposer alongside the propose. The slot is always the intent
   ## id (not carried: it is derived), so only environment/account/expiry travel.
+  ## Author-bearing (exo-ea8): it names the proposer, who signs it, and only a context
+  ## a proposer of the intent signed is the intent's context.
   Event(parents: parents, key: "intent/" & intentId & "/context",
         value: $(%*{"environment": ctx.environment, "account": ctx.account,
-                    "expiry": $ctx.expiry}))
+                    "expiry": $ctx.expiry, "author": author}))
 
 proc readEvent*(intentId, field, source, value: string,
-                parents: seq[EventId] = @[]): Event =
+                parents: seq[EventId] = @[], author = ""): Event =
   ## Records an external read that reached the effect (e.g. the Safe's live nonce
   ## from the proposer's RPC), so it has a log position its provenance can cite.
+  ## Author-bearing (exo-ea8): signed by the member who read it.
   Event(parents: parents, key: "intent/" & intentId & "/read/" & field,
-        value: $(%*{"source": source, "value": value}))
+        value: $(%*{"source": source, "value": value, "author": author}))
+
+proc withAuthor*(e: Event, author: string): Event =
+  ## `e` (a JSON-object value) naming `author`, for a read or context made before the
+  ## author was known.
+  result = e
+  try:
+    let j = parseJson(e.value)
+    if j.kind == JObject:
+      j["author"] = %author
+      result.value = $j
+  except CatchableError: discard
 
 proc attestEvent*(intentId, who: string, round: int, sigHex: string,
                   parents: seq[EventId] = @[]): Event =
@@ -96,20 +114,45 @@ proc attestEvent*(intentId, who: string, round: int, sigHex: string,
 
 # ── the context (invariant 2) ─────────────────────────────────────────────────
 
-proc intentContext*(events: seq[Event], intentId: string): SigningContext =
-  ## The context this intent's attestations bind to, from its declared context event.
-  ## If more than one was published (two proposers of the same effect+policy), the
-  ## first in canonical order wins — deterministic on every member. No declaration →
-  ## the placeholder, which nothing attests under.
+proc bareHex(s: string): string =
+  result = s.toLowerAscii()
+  if result.startsWith("0x"): result = result[2 .. ^1]
+
+proc proposersOf*(events: seq[Event], intentId: string): HashSet[string] =
+  ## Who proposed the intent, from the signed proposer claims (exo-770), as bare hex.
+  ## The events are the room's authentic view (roomEvents), where an unsigned claim is gone.
+  for e in events:
+    let p = e.key.split('/')
+    if p.len >= 4 and p[0] == "intent" and p[1] == intentId and p[2] == "proposer":
+      result.incl bareHex(p[3])
+
+proc authorField(e: Event): string =
+  try:
+    let j = parseJson(e.value)
+    if j.kind == JObject: return bareHex(j{"author"}.getStr())
+  except CatchableError: discard
+
+proc contextOf(events: seq[Event], intentId: string): tuple[found: bool, e: Event] =
+  ## The intent's context event: the first in canonical order that a proposer of the
+  ## intent signed (exo-ea8). Two proposers of the same effect and policy are both named
+  ## members, so either's is accountable; anyone else's is no context of this intent.
+  let proposers = proposersOf(events, intentId)
   for e in canonicalOrder(events):
-    if e.key != "intent/" & intentId & "/context": continue
-    try:
-      let j = parseJson(e.value)
-      return SigningContext(environment: j{"environment"}.getStr(),
-                            account: j{"account"}.getStr(), slot: intentId,
-                            expiry: parseBiggestUInt(j{"expiry"}.getStr()).uint64)
-    except CatchableError: return PlaceholderContext
-  PlaceholderContext
+    if e.key == "intent/" & intentId & "/context" and authorField(e) in proposers:
+      return (true, e)
+
+proc intentContext*(events: seq[Event], intentId: string): SigningContext =
+  ## The context this intent's attestations bind to: its proposer's declared context
+  ## event (contextOf). The events are the room's authentic view. No declaration →
+  ## the placeholder, which nothing attests under.
+  let (found, e) = contextOf(events, intentId)
+  if not found: return PlaceholderContext
+  try:
+    let j = parseJson(e.value)
+    SigningContext(environment: j{"environment"}.getStr(),
+                   account: j{"account"}.getStr(), slot: intentId,
+                   expiry: parseBiggestUInt(j{"expiry"}.getStr()).uint64)
+  except CatchableError: PlaceholderContext
 
 proc isPlaceholder*(ctx: SigningContext): bool =
   ctx.environment.len == 0 or ctx.account.len == 0 or ctx.account == "coordinated" or
@@ -146,12 +189,19 @@ proc intentInputs*(events: seq[Event], driverFor: DriverFor,
                              accountable: true, valueBytes: bytesOf(e.value))
       break
   if result.len == 0: return   # not proposed here: no inputs, nothing to sign
+  let ctxEv = contextOf(events, intentId)
+  let proposers = proposersOf(events, intentId)
   for i, e in ordered:
     let p = e.key.split('/')
     if p.len < 3 or p[0] != "intent" or p[1] != intentId: continue
     case p[2]
-    of "policy", "context":
-      if p[2] == "policy" and not proposal.isProposalEvent(intentId, e): continue
+    of "policy":
+      if not proposal.isProposalEvent(intentId, e): continue
+      result.add SignedInput(class: icPeerMessage, logPos: i, logRef: eventId(e),
+                             accountable: true, valueBytes: bytesOf(e.value))
+    of "context":
+      # only the context the intent binds to (contextOf): a rival one is no input (exo-ea8)
+      if not (ctxEv.found and eventId(e) == eventId(ctxEv.e)): continue
       result.add SignedInput(class: icPeerMessage, logPos: i, logRef: eventId(e),
                              accountable: true, valueBytes: bytesOf(e.value))
     else: discard
@@ -167,7 +217,8 @@ proc intentInputs*(events: seq[Event], driverFor: DriverFor,
     for i, e in ordered:
       let p = e.key.split('/')
       if p.len < 4 or p[0] != "intent" or p[1] != intentId: continue
-      if sources[field].getStr() == "read" and p[2] == "read" and p[3] == field:
+      if sources[field].getStr() == "read" and p[2] == "read" and p[3] == field and
+         authorField(e) in proposers:      # a read the proposer recorded (exo-ea8)
         var v = ""
         try: v = parseJson(e.value){"value"}.getStr()
         except CatchableError: discard
@@ -305,6 +356,16 @@ proc lineageIds*(events: seq[Event], driverFor: DriverFor, intentId: string): Ha
   for e in events: byId[eventId(e)] = e
   var queue: seq[EventId]
   for i in intentInputs(events, driverFor, intentId): queue.add i.logRef
+  # the signed proposer claim behind the context (exo-ea8): what makes it the intent's, so
+  # a file verified alone finds the same context the room did
+  let (hasCtx, ctxE) = contextOf(events, intentId)
+  if hasCtx:
+    let author = authorField(ctxE)
+    for e in events:
+      let p = e.key.split('/')
+      if p.len >= 4 and p[0] == "intent" and p[1] == intentId and p[2] == "proposer" and
+         bareHex(p[3]) == author:
+        queue.add eventId(e)
   while queue.len > 0:
     let id = queue.pop()
     if id in result or id notin byId: continue
@@ -377,6 +438,19 @@ proc admittedAttestations*(events: seq[Event], driverFor: DriverFor, intentId: s
 
 # ── grading every approval ────────────────────────────────────────────────────
 
+proc chainBindsSignatures*(d: Driver): bool =
+  ## Whether the chain binds an approval's signature to its environment and account on its
+  ## own (the profile's binding explicit or implicit, or a vote the program counts), so a
+  ## signature made outside muster, with no attestation, still means one thing only.
+  let p = d.profile()
+  p.declared and (p.binding in {bdExplicit, bdImplicit} or p.locus == loVote)
+
+proc gradeFor*(attested, chainBound: bool): AttestGrade =
+  ## The one rule the fold and every surface grade by (exo-83c, exo-af5).
+  if attested: agCommitted
+  elif chainBound: agUnattested
+  else: agRejected
+
 proc approvalGrades*(events: seq[Event], driverFor: DriverFor,
                      intentId: string): seq[ApprovalGrade] =
   ## One grade per (contributor, round) approval on this intent, in canonical order.
@@ -400,7 +474,7 @@ proc approvalGrades*(events: seq[Event], driverFor: DriverFor,
       atts.add a
       if verifyAttestation(c.who, p0, a.value): ok = true
     result.add ApprovalGrade(who: c.who, round: c.round, sig: c.e, attests: atts,
-      grade: (if ok: agCommitted elif atts.len > 0: agRejected else: agUnattested))
+      grade: gradeFor(ok, chainBindsSignatures(rec.drv)))
   # exo-e42: and the fold's round rule. The fold counts a contribution only toward its own
   # round, which it reaches once every earlier round has `threshold` approvals (a rejected
   # one closes nothing there either). So a key under a round the collection has not
