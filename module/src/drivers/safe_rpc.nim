@@ -99,17 +99,22 @@ proc getBalance*(url: string, a: Address): string =
   ## The native balance as the node's hex quantity; raises when it answers none.
   rpc(url, "eth_getBalance", %*[toHex0x(a), "latest"]).hexResult("eth_getBalance")
 
-proc hexToU64(h: string): uint64 =
-  ## Parse a 0x-prefixed big-endian hex word as uint64. Leading zeros (a 32-byte
-  ## word carrying a small value) contribute nothing, so a demo-range nonce is exact.
+proc hexToU64*(h: string): uint64 =
+  ## Parse a 0x-prefixed (or bare) big-endian hex quantity as uint64, strictly (exo-3b3.15,
+  ## P5-09): leading zeros (a 32-byte word carrying a small value) contribute nothing, but a
+  ## value above 2^64 − 1 raises ValueError rather than wrapping, and so do an empty
+  ## quantity and any character that is not a hex digit (never read as 0).
   var s = h
   if s.len >= 2 and s[0] == '0' and (s[1] in {'x', 'X'}): s = s[2 .. ^1]
+  if s.len == 0: raise newException(ValueError, "not a quantity: " & h)
   for c in s:
     let d = case c
       of '0'..'9': int(c) - int('0')
       of 'a'..'f': int(c) - int('a') + 10
       of 'A'..'F': int(c) - int('A') + 10
-      else: 0
+      else: raise newException(ValueError, "not a hex quantity: " & h)
+    if result > (high(uint64) shr 4):
+      raise newException(ValueError, "a quantity above 2^64: " & h)
     result = result * 16 + uint64(d)
 
 proc safeNonce*(url: string, safe: Address): uint64 =
@@ -124,24 +129,49 @@ proc safeNonce*(url: string, safe: Address): uint64 =
   let r = rpc(url, "eth_call", %*[{"to": toHex0x(safe), "data": toHex0x(data)}, "latest"])
   let h = r.hexResult("nonce()")
   if h.len <= 2: raise newException(RpcError, "nonce() returned no data: is " & toHex0x(safe) & " a Safe?")
-  hexToU64(h)
+  try: hexToU64(h)
+  except ValueError as e: raise newException(RpcError, "nonce(): " & e.msg)
+
+proc wordInt(w: string, limit: int): int =
+  ## A 32-byte ABI word as a count or an offset, or -1 when it is not hex or exceeds
+  ## `limit` (exo-cd3: an RPC's answer must never index past the payload or overflow).
+  result = 0
+  for c in w:
+    let d = case c
+      of '0'..'9': int(c) - int('0')
+      of 'a'..'f': int(c) - int('a') + 10
+      of 'A'..'F': int(c) - int('A') + 10
+      else: return -1
+    if result > (limit - d) div 16: return -1
+    result = result * 16 + d
+
+proc addrAt(s: string, base: int): Address =
+  ## The right-aligned address in the word at `base`; raises on a non-hex digit.
+  for j in 0 ..< 20:
+    let o = base + 24 + j * 2
+    var b = 0
+    for c in s[o ..< o + 2]:
+      let d = case c
+        of '0'..'9': int(c) - int('0')
+        of 'a'..'f': int(c) - int('a') + 10
+        of 'A'..'F': int(c) - int('A') + 10
+        else: raise newException(RpcError, "an address word that is not hex")
+      b = b * 16 + d
+    result[j] = byte(b)
 
 proc decodeAddressArray*(hex: string): seq[Address] =
   ## Decode an ABI `address[]` return: [offset:32][len:32][word:32]*len, each word a
-  ## right-aligned 20-byte address. Returns @[] for an empty/short/odd payload.
+  ## right-aligned 20-byte address. Returns @[] for an empty/short/odd payload; a length
+  ## past the payload reads only what is there, and a non-hex word raises (exo-cd3).
   var s = hex
   if s.len >= 2 and s[0] == '0' and (s[1] in {'x', 'X'}): s = s[2 .. ^1]
   if s.len < 128: return @[]                     # need at least offset + length words
-  let n = int(hexToU64(s[64 ..< 128]))           # the length word (word #2)
+  let n = wordInt(s[64 ..< 128], s.len)          # the length word (word #2)
+  if n < 0: raise newException(RpcError, "an address[] length that is not a count")
   for i in 0 ..< n:
     let base = 128 + i * 64                        # word #(3+i)
     if base + 64 > s.len: break
-    let word = s[base ..< base + 64]
-    var a: Address
-    for j in 0 ..< 20:                             # last 20 bytes of the 32-byte word
-      let off = 24 + j * 2
-      a[j] = byte(hexToU64(word[off ..< off + 2]))
-    result.add a
+    result.add addrAt(s, base)
 
 proc getOwners*(url: string, safe: Address): tuple[known: bool, owners: seq[Address], detail: string] =
   ## The Safe's owner set, read from the chain via `eth_call getOwners()` (F-10:
@@ -169,21 +199,21 @@ const GuardSlot* = "0x4a204f620c8c5ccdca3fd54d003badd85ba500436a431f0cbda4f558c9
 
 proc decodeModulesPage*(hex: string): seq[Address] =
   ## Decode getModulesPaginated's (address[] array, address next): [offset][next]
-  ## [len][item]* — the array is at the offset the first word names.
+  ## [len][item]* — the array is at the offset the first word names. An offset or length
+  ## past the payload reads nothing past it (exo-cd3).
   var s = hex
   if s.len >= 2 and s[0] == '0' and (s[1] in {'x', 'X'}): s = s[2 .. ^1]
   if s.len < 192: return @[]
-  let off = int(hexToU64(s[0 ..< 64])) * 2          # byte offset → hex chars
+  let offBytes = wordInt(s[0 ..< 64], s.len)
+  if offBytes < 0: raise newException(RpcError, "a modules page offset that is not one")
+  let off = offBytes * 2                          # byte offset → hex chars
   if off + 64 > s.len: return @[]
-  let n = int(hexToU64(s[off ..< off + 64]))
+  let n = wordInt(s[off ..< off + 64], s.len)
+  if n < 0: raise newException(RpcError, "a modules page length that is not a count")
   for i in 0 ..< n:
     let base = off + 64 + i * 64
     if base + 64 > s.len: break
-    var a: Address
-    for j in 0 ..< 20:
-      let o = base + 24 + j * 2
-      a[j] = byte(hexToU64(s[o ..< o + 2]))
-    result.add a
+    result.add addrAt(s, base)
 
 proc guardFromSlot*(word: string): string =
   ## The guard address from the guard storage slot's word; "" when none is set.

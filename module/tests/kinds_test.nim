@@ -25,6 +25,7 @@ import ../src/drivers/registry
 import ../src/drivers/kinds
 import ../src/crypto/curve25519
 import ./probes/live_room
+import ./probes/attested
 
 const RegistryPath = currentSourcePath().parentDir() / ".." / ".." / "contracts" / "families" / "registry.json"
 let reg = parseJson(readFile(RegistryPath))
@@ -114,8 +115,12 @@ block:
     let eff = """{"effect":"add-driver","kind":"""" & kind & """"}"""
     let id = intentIdFor(eff, "threshold")
     let (s1, s2) = (sign(1, id, eff), sign(2, id, eff))   # each under its signer's name (exo-a5a)
-    let ev = @[policyDeclEvent(id, "threshold"), proposeEvent(id, eff), contributeEvent(id, contributorOf(thr, eff, s1), s1),
-               contributeEvent(id, contributorOf(thr, eff, s2), s2)]
+    # the threshold driver is room-bound: each endorsement carries its signer's attestation
+    # over P, as the live path publishes it (exo-af5)
+    let ev = withAttestations(@[policyDeclEvent(id, "threshold"), proposeEvent(id, eff),
+               contributeEvent(id, contributorOf(thr, eff, s1), s1),
+               contributeEvent(id, contributorOf(thr, eff, s2), s2)],
+               foldDrv, id, signers = [encFromSeed(seed(1)), encFromSeed(seed(2))])
     doAssert intentState(ev, foldDrv, id) == "executable"
     doAssert (kind in roomDriverKinds(ev, foldDrv)) == admitted,
       kind & (if admitted: " must be admitted" else: " is not a kind this client has — admitting it is a guess")
@@ -144,8 +149,8 @@ block:
   let eff = effectFor("safe", 1, "\"sources\":{\"value\":\"read\",\"nonce\":\"read\"}")
   let asSafe = liveProposeIntent(r.alice, aliceKs, resolver, "safe", eff, int64(Now), 1,
                                  account = SafeAddr, ttlSec = Ttl)
-  r.alice.publish(readEvent(asSafe, "value", "rpc://probe", "1"))
-  r.alice.publish(readEvent(asSafe, "nonce", "rpc://probe", "0"))
+  r.alice.publishRead(aliceKs, asSafe, "value", "rpc://probe", "1")
+  r.alice.publishRead(aliceKs, asSafe, "nonce", "rpc://probe", "0")
   let st = liveContribute(r.alice, aliceKs, resolver, asSafe, "", "", bindCtx(), Now)
   doAssert st in ["collecting", "proposed"], "a Safe owner's in-app approval under the known kind: " & st
   let sigs = r.alice.log.allEvents().filterIt(it.key.startsWith("intent/" & asSafe & "/sig/"))

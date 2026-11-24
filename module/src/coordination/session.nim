@@ -37,7 +37,8 @@ type
     sealedIn*: Table[string, int] ## event id → the earliest epoch whose key opened (or sealed) it here; log + keys, never position (exo-dde)
     authorChecked*: Table[string, bool]  ## exo-f76: event id → its author signature verifies (authorship.nim). A pure function of (topic, event), so safe to cache
     afterChecked*: Table[string, bool]   ## C5: (event id, afterSig, after) → the author signed that `after` (authorship.afterVerified); pure, so safe to cache
-    journal: proc(frame: seq[byte]) {.gcsafe.}  ## exo-dcc.14: every frame seen or sent, for the member's own copy (room_journal.nim)
+    journal: proc(frame: seq[byte]) {.gcsafe.}  ## exo-dcc.14: every frame accepted or sent, for the member's own copy (room_journal.nim)
+    inbox: bool                  ## an inbox topic: only invites are taken here (exo-5b5)
 
 # Every frame on the topic carries a 1-byte kind, so the membership handshake
 # shares the topic with data without either misreading the other.
@@ -56,6 +57,10 @@ const
   FrameBeaconRequest = 0x05'u8 ## body = a random 16-byte nonce: a would-be joiner has no join key to seal its request to yet
   MaxBeacons = 8               ## join keys a would-be joiner keeps (and seals each request to)
   BeaconMinInterval = 2.0      ## seconds between answers to beacon requests, per session, for an unchanged key
+  BeaconNonceBytes = 16        ## a beacon request's nonce, exactly
+  MaxAnswered = 4096           ## beacon-request nonces remembered (then forgotten wholesale)
+  MaxInvites = 256             ## invite frames held for the module to open
+  MaxPending = 64              ## join requests waiting for a member's decision
 
 proc toBytes(s: string): seq[byte] = (for c in s: result.add byte(c))
 proc toStr(b: openArray[byte]): string = (for x in b: result.add char(x))
@@ -107,17 +112,21 @@ proc ingestEnvelope(s: CoordinationSession, env: IncomingMessage) =
   ## later-epoch envelope we hold no key for, F-16), a control frame not addressed
   ## to us, or malformed bytes — is swallowed: the frame simply isn't ours to act on.
   if env.payload.len == 0: return
-  if s.journal != nil: s.journal(env.payload)   # the member's own copy keeps what is room state
   let kind = env.payload[0]
   let body = env.payload[1 .. ^1]
+  if s.inbox and kind != FrameInvite: return     # an inbox is a drop box, nothing else (exo-5b5)
   try:
     case kind
     of FrameData:
+      # the sender signed it, for this room and the epoch whose key opened it, and was a
+      # member of that epoch (EpochCrypto.openedEpoch raises otherwise, exo-3b3)
       let (ep, plain) = s.crypto.openedEpoch(body)
       let ev = decodeEvent(plain)
       s.log.ingest(ev)
       let id = eventId(ev)
       if ep >= 0 and (id notin s.sealedIn or ep < s.sealedIn[id]): s.sealedIn[id] = ep
+      # the member's own copy keeps what was accepted, never what merely arrived (exo-5b5)
+      if s.journal != nil: s.journal(env.payload)
     of FrameJoinRequest:
       # sealed to a join key; only a member opens it. A request for another room, expired,
       # or not signed by the identity it names is dropped here: nobody asks in another's name
@@ -126,17 +135,24 @@ proc ingestEnvelope(s: CoordinationSession, env: IncomingMessage) =
       let m = r.enc
       if m notin s.crypto.members() and not s.pending.anyIt(it.enc == m):
         s.pending.add r
+        if s.pending.len > MaxPending: s.pending.delete(0)
     of FrameControl:
-      discard s.crypto.ingestControl(body)     # a grant; ours to open or not
+      # a grant; ours to open or not, and taken only if signed by a member it may come
+      # from (EpochCrypto.ingestControl, exo-3b3) — journaled only then
+      if s.crypto.ingestControl(body) and s.journal != nil: s.journal(env.payload)
     of FrameInvite:
-      s.invites.add body                       # opaque here; the module sealOpens it with its keystore
+      if body notin s.invites:
+        s.invites.add body                     # opaque here; the module sealOpens it with its keystore
+        if s.invites.len > MaxInvites: s.invites.delete(0)
     of FrameBeacon:
       if body.len == 32 and not s.crypto.ownsBeacon(body):
         s.beacons = s.beacons.filterIt(it != body) & @[body]
         if s.beacons.len > MaxBeacons: s.beacons = s.beacons[^MaxBeacons .. ^1]
     of FrameBeaconRequest:
+      if body.len != BeaconNonceBytes: return
       let nonce = toStr(body)
       if nonce notin s.answered:
+        if s.answered.len >= MaxAnswered: s.answered.clear()
         s.answered.incl nonce
         s.announceBeacon()
     else: discard
@@ -146,6 +162,7 @@ proc ingestEnvelope(s: CoordinationSession, env: IncomingMessage) =
 proc newCoordinationSession*(transport: Transport, crypto: ConversationCrypto,
                              topic: string): CoordinationSession =
   result = CoordinationSession(transport: transport, crypto: crypto, topic: topic)
+  crypto.bindRoom(topic)
   let self = result
   transport.subscribe(topic, proc (m: IncomingMessage) {.gcsafe.} =
     {.cast(gcsafe).}:                 # crypto.open uses secp's global context
@@ -159,8 +176,34 @@ proc setJournal*(s: CoordinationSession, journal: proc(frame: seq[byte]) {.gcsaf
 proc replay*(s: CoordinationSession, frames: seq[seq[byte]]) =
   ## Rebuild from the member's own copy (exo-dcc.14): each frame through the same ingest a
   ## frame from the network takes — grants first (room_journal.replayOrder), so every
-  ## epoch's data opens. Idempotent: the log dedups.
-  for f in frames: s.ingestEnvelope(IncomingMessage(contentTopic: s.topic, payload: f))
+  ## epoch's data opens. Idempotent: the log dedups. Each frame was accepted when it
+  ## arrived (only accepted frames are kept), so the checks that depend on WHEN it arrives
+  ## — the removal grace, a first grant being expected — are not asked again; its
+  ## signatures are.
+  s.crypto.setReplaying(true)
+  try:
+    for f in frames: s.ingestEnvelope(IncomingMessage(contentTopic: s.topic, payload: f))
+  finally:
+    s.crypto.setReplaying(false)
+
+proc markInbox*(s: CoordinationSession) =
+  ## This session is an identity's inbox (exo-5b5): it takes invites and nothing else — no
+  ## grant, so nobody can give it a key and make it answer beacon requests (a presence
+  ## signal), no data, no join requests.
+  s.inbox = true
+  s.crypto.refuseGrants()
+
+proc expectInviteFrom*(s: CoordinationSession, inviter: Member) =
+  ## We were invited here by `inviter`: their grant is the one to take (exo-3b3).
+  s.crypto.expectGrant(@[inviter])
+
+proc expectAnyGrant*(s: CoordinationSession) =
+  ## We re-entered a room we joined before and hold no copy of it: take the grant the
+  ## store still holds, from whichever member admitted us (as before the copy existed).
+  s.crypto.expectGrant()
+
+proc crypto*(s: CoordinationSession): ConversationCrypto = s.crypto
+  ## The room's crypto seam (tests reach the keys a member holds through it).
 
 proc topic*(s: CoordinationSession): string = s.topic
   ## The room's content topic — what an author signature binds to (authorship.nim).
@@ -208,6 +251,7 @@ proc requestJoin*(s: CoordinationSession, request: JoinRequest): bool {.discarda
   ## With no join key seen yet we pull the store's retained frames, and if there is
   ## still none, ask the room to announce one; a synchronous transport answers inside
   ## that publish, an asynchronous one by the next retry. False: nothing was sent yet.
+  s.crypto.expectGrant()             # we asked: the member who admits us may hand us a key
   if s.beacons.len == 0:
     s.catchUp()
   if s.beacons.len == 0:
@@ -219,6 +263,8 @@ proc requestJoin*(s: CoordinationSession, request: JoinRequest): bool {.discarda
   true
 
 proc members*(s: CoordinationSession): seq[Member] = s.crypto.members()
+proc membersAt*(s: CoordinationSession, epoch: int): seq[Member] = s.crypto.membersAt(epoch)
+  ## Who held the key of `epoch` (as this member knows it): who may author an event sealed in it.
 proc epoch*(s: CoordinationSession): int = s.crypto.epoch()
 proc securityLevel*(s: CoordinationSession): SecurityLevel = s.crypto.securityLevel()
   ## The CONFIDENTIALITY level the room's crypto seam provides (null ladder, exo-1ec.5) —
@@ -248,7 +294,11 @@ proc pendingRequests*(s: CoordinationSession): seq[JoinRequest] =
 
 proc pendingJoins*(s: CoordinationSession): seq[Member] = s.pendingRequests().mapIt(it.enc)
 
-proc admit*(s: CoordinationSession, joiner: Member) =
+type EventSigner* = proc(e: Event): Event {.closure.}
+  ## Signs an author-bearing event as this member (authorship.signAuthored), handed in by
+  ## the caller so the session needs no keystore: authorship.admitAs / expelAs.
+
+proc admit*(s: CoordinationSession, joiner: Member, sign: EventSigner = nil) =
   ## Admit a joiner (an existing member's decision): re-key forward and publish the
   ## grants so every member of the new epoch — the joiner included — gets its key.
   ## The joiner receives only this epoch's key, never earlier ones (F-16).
@@ -259,12 +309,14 @@ proc admit*(s: CoordinationSession, joiner: Member) =
   # Record the transition IN the log (exo-275 / M4): sealed under the NEW epoch, so
   # the joiner reads its own admission and nothing before it (F-16), and every
   # member's history + provenance fold shows the re-key from the same log.
-  s.publish(membershipEvent(s.crypto.epoch(), hexOf(toBytes(joiner))))
+  let me = hexOf(toBytes(s.crypto.identity()))
+  let ev = membershipEvent(s.crypto.epoch(), hexOf(toBytes(joiner)), author = me)
+  s.publish(if sign != nil: sign(ev) else: ev)
   # The new epoch has a new join key; announce it so the next asker seals to a key
   # every current member (the new one included) can open.
   s.announceBeacon()
 
-proc expel*(s: CoordinationSession, member: Member) =
+proc expel*(s: CoordinationSession, member: Member, sign: EventSigner = nil) =
   ## Remove a member from the room's encryption (exo-267.6), a member's decision under the
   ## room's rule: re-key forward without them and publish the grants to everyone who
   ## remains. The removal is recorded IN the log under the new epoch, so every remaining
@@ -274,10 +326,12 @@ proc expel*(s: CoordinationSession, member: Member) =
   for frame in s.crypto.expel(member):
     if s.journal != nil: s.journal(@[FrameControl] & frame)
     discard s.transport.publish(s.topic, @[FrameControl] & frame)
-  s.publish(removalEvent(s.crypto.epoch(), hexOf(toBytes(member))))
+  let me = hexOf(toBytes(s.crypto.identity()))
+  let ev = removalEvent(s.crypto.epoch(), hexOf(toBytes(member)), author = me)
+  s.publish(if sign != nil: sign(ev) else: ev)
   s.announceBeacon()
 
-proc admitInvited*(s: CoordinationSession, invitee: Member): bool =
+proc admitInvited*(s: CoordinationSession, invitee: Member, sign: EventSigner = nil): bool =
   ## Admit someone this member invites by name (exo-dcc.29): the invite IS the member's
   ## decision, and the identity is the one the member holds for them, so there is no
   ## request to wait for and nothing to verify. The grant waits in the store, so the
@@ -287,7 +341,7 @@ proc admitInvited*(s: CoordinationSession, invitee: Member): bool =
   let members = s.crypto.members()
   if invitee in members: return true
   if s.crypto.identity() notin members: return false
-  s.admit(invitee)
+  s.admit(invitee, sign)
   true
 
 proc leave*(s: CoordinationSession) =

@@ -11,6 +11,7 @@ import ../../src/intents/materialization
 import ../../src/intents/disclosure
 import ../../src/drivers/driver
 import ../../src/drivers/manifest
+import ../../src/drivers/profile
 import ../../src/log/log
 import ../../src/coordination/intents
 
@@ -48,6 +49,15 @@ method partAuthor*(d: PartsDriver, e: Effect, part, step: string): string =
   of "settled": part
   of "confirmed": s.to
   else: ""
+method profile*(d: PartsDriver): FamilyProfile =
+  ## An each-locus family whose chain binds each party's signature itself, as evm.split's
+  ## does (binding explicit). Since exo-af5 a driver with no declared profile is taken as
+  ## room-bound, where a contribution counts only with an attestation over P; this
+  ## driver's "signature" is the contributor's name, so it declares the chain-bound shape
+  ## it always stood for — what its tests prove is the parts seam, not attestation.
+  FamilyProfile(declared: true, family: "test.parts", settlement: "test",
+    locus: loEach, scheme: scOwnTransaction, commits: cmContent, binding: bdExplicit,
+    rounds: 1, k: 1, bypassesKnown: true)
 method manifest*(d: PartsDriver, e: Effect): ActionManifest =
   ActionManifest(declared: true, agreement: d.describeFor(e),
     discloses: @[row("payer", obChainObserver), row("amount", obChainObserver), row("signed-tx", obRpcProvider)])

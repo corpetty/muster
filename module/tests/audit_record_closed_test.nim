@@ -16,7 +16,9 @@
 ##   1. a forged attestation on a committed approval, parented on a room message: the
 ##      approval stays committed, and the file verifies;
 ##   2. the same on a pasted approval: it is no attestation of this intent, so the approval
-##      stays counted (unattested), and the file verifies;
+##      keeps its grade — counted unattested where the chain binds the signature (the Safe),
+##      rejected under the room threshold, which counts nothing unattested (exo-af5) — and
+##      the file verifies;
 ##   3. a forged attestation parented on junk under another name: the same;
 ##   4. a valid copy of Alice's signature parented on a room message and sorted first,
 ##      before Bob approves: Bob's approval links a copy inside the record, the views cite
@@ -53,18 +55,23 @@ proc verifies(label: string, r: Room, id: string, approvals: int) =
 proc forgedAttestationOn(label: string, policy: string, pasted: bool, parentOf: proc (r: var Room, id: string): EventId) =
   var r = newRoom("/muster/1/093-" & label & "-" & policy & "/proto")
   let id = r.propose(policy, effectFor(policy, 900 + label.len))
-  if pasted: doAssert r.pasteAs("alice", policy, id) == "collecting"
+  # exo-af5: a pasted approval counts unattested only where the chain binds its signature
+  # (the Safe); under the room threshold it counts for nothing, forged attestation or not
+  let pastedCounts = policy == "safe"
+  let aliceCounts = not pasted or pastedCounts
+  if pasted: doAssert r.pasteAs("alice", policy, id) == (if pastedCounts: "collecting" else: "proposed")
   else: doAssert r.approveAs("alice", id) == "collecting"
-  doAssert r.approveAs("bob", id) == "executable"
+  let afterBob = (if aliceCounts: "executable" else: "collecting")
+  doAssert r.approveAs("bob", id) == afterBob
   let who = r.nameOf(id, "alice")
   doAssert who.len > 0, label & ": Alice's approval"
   let parent = parentOf(r, id)
   let forged = attestEvent(id, who, 1, "0x" & "cd".repeat(65), parents = @[parent])
   r.bob.publish(forged)
   let evs = r.events()
-  doAssert intentState(evs, liveDriverFor, id) == "executable",
-    policy & " " & label & ": a forged attestation outside the record took Alice's approval out of the count"
-  let want = (if pasted: agUnattested else: agCommitted)
+  doAssert intentState(evs, liveDriverFor, id) == afterBob,
+    policy & " " & label & ": a forged attestation outside the record changed Alice's approval's count"
+  let want = (if not pasted: agCommitted elif pastedCounts: agUnattested else: agRejected)
   doAssert gradeOf(approvalGrades(evs, liveDriverFor, id), who, 1) == want,
     policy & " " & label & ": Alice's approval is graded " & $gradeOf(approvalGrades(evs, liveDriverFor, id), who, 1)
   for p in logProvenance(evs, liveDriverFor):
@@ -78,7 +85,7 @@ for policy in ["threshold", "safe"]:
   forgedAttestationOn("msg-committed", policy, pasted = false, onMessage)
   echo "1. ", policy, ": a forged attestation parented on a room message leaves a committed approval committed; the audit verifies OK"
   forgedAttestationOn("msg-pasted", policy, pasted = true, onMessage)
-  echo "2. ", policy, ": the same on a pasted approval — no attestation of this intent; still counted, the audit verifies OK"
+  echo "2. ", policy, ": the same on a pasted approval — no attestation of this intent; its grade unchanged, the audit verifies OK"
 
   # ── 3. a forged attestation parented on junk under another name ─────────────────
   let onJunk = proc (r: var Room, id: string): EventId =

@@ -29,17 +29,25 @@ import ../src/crypto/secp256k1
 import ../src/log/log
 import ../src/coordination/intents
 import ../src/coordination/attest
+import ./probes/attested
 
 proc seed(b: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = b)
 proc hx(b: openArray[byte]): string =
   const d = "0123456789abcdef"
   for x in b: (result.add d[int(x shr 4)]; result.add d[int(x and 0x0F)])
 
+# Every fold below sees the log as the live path leaves it (exo-af5): under a room-bound
+# driver each member's contribution carries that member's attestation over P (added by
+# `att` for the roster keys a, b, c, d — whatever name the contribution was published
+# under). Chain-bound drivers (the Safe) still count unattested signatures.
+var attKeys: seq[EncKeys]
+proc att(events: seq[Event], dfor: DriverFor, id: string): seq[Event] =
+  withAttestations(events, dfor, id, signers = attKeys)
 proc approvers(events: seq[Event], dfor: DriverFor, id: string): int =
-  for v in reduceIntentViews(events, dfor):
+  for v in reduceIntentViews(att(events, dfor, id), dfor):
     if v.id == id: return v.approvals
 proc graded(events: seq[Event], dfor: DriverFor, id: string): seq[string] =
-  for g in approvalGrades(events, dfor, id):
+  for g in approvalGrades(att(events, dfor, id), dfor, id):
     if g.grade != agRejected: result.add g.who
   result.sort()
 
@@ -49,6 +57,9 @@ let b = encFromSeed(seed(2))
 let c = encFromSeed(seed(3))
 let thr = newThresholdDriver(@[a.identity().ed, b.identity().ed, c.identity().ed], k = 2)
 let thrFor: DriverFor = proc(kind: string): Driver = thr
+attKeys = @[a, b, c]
+proc state(events: seq[Event], dfor: DriverFor, id: string): string =
+  intentState(att(events, dfor, id), dfor, id)
 
 const stmtJson = """{"effect":"statement","text":"we agree"}"""
 let sid = intentIdFor(stmtJson, "threshold")
@@ -63,15 +74,15 @@ let prop = @[policyDeclEvent(sid, "threshold"), proposeEvent(sid, stmtJson)]
 # 1. The honest path: two members, each under their own name → executable.
 block:
   let ev = prop & @[contributeEvent(sid, nameA, sigA), contributeEvent(sid, nameB, sigB)]
-  doAssert intentState(ev, thrFor, sid) == "executable"
+  doAssert state(ev, thrFor, sid) == "executable"
   doAssert approvers(ev, thrFor, sid) == 2 and graded(ev, thrFor, sid) == @[nameA, nameB].sorted()
   echo "1. two distinct signers under their own names -> executable OK"
 
 # 2. THE BUG: A's one signature under A's name AND B's name → still ONE signer.
 block:
   let ev = prop & @[contributeEvent(sid, nameA, sigA), contributeEvent(sid, nameB, sigA)]
-  doAssert intentState(ev, thrFor, sid) == "collecting",
-           "one signer's signature under two names must not complete a 2-of-3 (got " & intentState(ev, thrFor, sid) & ")"
+  doAssert state(ev, thrFor, sid) == "collecting",
+           "one signer's signature under two names must not complete a 2-of-3 (got " & state(ev, thrFor, sid) & ")"
   doAssert approvers(ev, thrFor, sid) == 1, "the card counts one approver, not two"
   doAssert graded(ev, thrFor, sid) == @[nameA], "only A approved"
   echo "2. one signature published under two names counts once -> collecting OK"
@@ -79,7 +90,7 @@ block:
 # 3. A contribution under a made-up name (not an identity at all) is nobody's approval.
 block:
   let ev = prop & @[contributeEvent(sid, "somebody", sigA), contributeEvent(sid, "somebody-else", sigA)]
-  doAssert intentState(ev, thrFor, sid) == "proposed", "misnamed contributions count for no one"
+  doAssert state(ev, thrFor, sid) == "proposed", "misnamed contributions count for no one"
   doAssert approvers(ev, thrFor, sid) == 0
   echo "3. a signature under a name that is not its signer's counts for no one OK"
 
@@ -88,7 +99,7 @@ block:
   let forged = contributeEvent(sid, nameB, sigA)   # A's signature, published as "B"
   for order in [prop & @[forged, contributeEvent(sid, nameA, sigA), contributeEvent(sid, nameB, sigB)],
                 prop & @[contributeEvent(sid, nameB, sigB), forged, contributeEvent(sid, nameA, sigA)]]:
-    doAssert intentState(order, thrFor, sid) == "executable", "B's genuine approval still counts"
+    doAssert state(order, thrFor, sid) == "executable", "B's genuine approval still counts"
     doAssert approvers(order, thrFor, sid) == 2 and graded(order, thrFor, sid) == @[nameA, nameB].sorted()
   echo "4. a forged contribution under B's name never blocks B's own OK"
 
@@ -101,7 +112,7 @@ block:
   let ev = @[policyDeclEvent(gid, "threshold"), proposeEvent(gid, addJson),
              contributeEvent(gid, contributorOf(thr, addJson, ga), ga),
              contributeEvent(gid, contributorOf(thr, addJson, hx(edSign(b, gm.bytes))), ga)]
-  doAssert "unanimous" notin roomDriverKinds(ev, thrFor), "one signer cannot grow the room's capabilities"
+  doAssert "unanimous" notin roomDriverKinds(att(ev, thrFor, gid), thrFor), "one signer cannot grow the room's capabilities"
   echo "5. add-driver: one signer under two names admits nothing OK"
 
 # 6. A chain driver (Safe, secp256k1 owners): the same rule holds.
@@ -136,16 +147,19 @@ block:
                     contributeEvent(sid, nameB, sigB)]
   var shuffled = ev.reversed()
   shuffled.add ev[3]
-  doAssert intentState(ev, thrFor, sid) == intentState(shuffled, thrFor, sid)
+  doAssert state(ev, thrFor, sid) == state(shuffled, thrFor, sid)
   doAssert approvers(ev, thrFor, sid) == approvers(shuffled, thrFor, sid)
   echo "7. reorder + duplicate -> identical verdict (inv 4) OK"
 
 # 8. A driver that cannot identify a signer (the stub) is taken at the key's name, as before.
+#    The stub is a room family, so the names are keys that attest (exo-af5): an opaque
+#    label like "alice" has no key to attest with and counts for no one now.
 block:
   let stub = newStubDriver(rounds = 1, threshold = 2, verifyResult = true)
   let stubFor: DriverFor = proc(kind: string): Driver = stub
-  let ev = prop & @[contributeEvent(sid, "alice", "aa"), contributeEvent(sid, "bob", "bb")]
-  doAssert intentState(ev, stubFor, sid) == "executable", "an identity-blind driver keeps name-keyed counting"
+  let ev = prop & @[contributeEvent(sid, "ed:" & hx(a.identity().ed), "aa"),
+                    contributeEvent(sid, "ed:" & hx(b.identity().ed), "bb")]
+  doAssert state(ev, stubFor, sid) == "executable", "an identity-blind driver keeps name-keyed counting"
   echo "8. an identity-blind driver keeps its name-keyed behaviour OK"
 
 echo "distinct_signer_test: all OK"

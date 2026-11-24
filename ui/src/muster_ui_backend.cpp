@@ -1470,16 +1470,12 @@ void MusterUiBackend::onContextReady()
                     shared = true;
                     shareAddress(shareOn);
                 }
+                // An Ethereum address goes through coordinate_share_address too: the module
+                // refuses an address-share posted as chat (exo-3b3.18).
                 if (!shared && !shareOn.isEmpty()
                     && membersJson().contains("\"self\":false")) {
-                    const QString addr = QJsonDocument::fromJson(settingsJson().toUtf8()).object()
-                                             .value("identity").toObject().value("address").toString();
-                    if (!addr.isEmpty()) {
-                        shared = true;
-                        postMessage(QString::fromUtf8(QJsonDocument(QJsonObject{
-                            {"kind", "address-share"}, {"asset", "ETH"}, {"address", addr}, {"form", 1}})
-                            .toJson(QJsonDocument::Compact)));
-                    }
+                    shared = true;
+                    shareAddress(shareOn.startsWith("eip155:") ? shareOn : QString());
                 }
                 // Founder-only: admit the first pending asker (one admitter keeps a
                 // single shared epoch), then propose one intent so the other side's

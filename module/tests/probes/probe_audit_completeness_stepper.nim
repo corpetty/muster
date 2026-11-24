@@ -9,7 +9,8 @@
 ## directions:
 ##   - every approval in alice's log is in the file, with the grade the fold gives it;
 ##   - every provenance ref resolves to a lineage entry;
-##   - every lineage entry is provenance-named or an ancestor of one — no room
+##   - every lineage entry is provenance-named or an ancestor of one, or the signed
+##     proposer claim that makes the named context the intent's (exo-ea8) — no room
 ##     messages, declines or other intents padded in.
 ## Build: see live_room.nim.
 
@@ -70,6 +71,9 @@ proc scenarioCorrect(sc: string): bool =
         if e.field("id").txt in ancestors:
           for p in e.field("parents").arrOf:
             if p.txt notin ancestors: (ancestors.incl p.txt; changed = true)
+    for e in f.field("lineage").arrOf:
+      # the proposer's claim behind the context: what makes it the intent's context (exo-ea8)
+      if e.field("key").txt.startsWith("intent/" & id & "/proposer/"): ancestors.incl e.field("id").txt
     for k in ids:
       if k notin ancestors: return false
     for k in f.lineageKeys():

@@ -132,7 +132,7 @@ proc submitThroughPlatform(a: EvmAdapter, tx: PreparedTx, pj: JsonNode, value: U
   let purpose = pj{"purpose"}.getStr("A transaction agreed in a Muster room")
   let req = requestJson(int(a.chainNum), tx.frm.id, call, purpose,
                         (if pj{"meta"} != nil: pj["meta"] else: newJObject()))
-  let mismatch = legsMismatch(senderCall("prepare", %*[$req]), call)
+  let mismatch = legsMismatch(senderCall("prepare", %*[$req]), call, int(a.chainNum), tx.frm.id)
   if mismatch.len > 0: raise newException(WalletError, mismatch)
   let sent = senderCall("send", %*[$req])
   if sent == nil: raise newException(WalletError, "tx_sender_module did not answer send")

@@ -44,6 +44,7 @@ Rectangle {
         spacing: Theme.spacing.medium
 
         LogosText {
+            textFormat: Text.PlainText
             Layout.alignment: Qt.AlignTop
             text: notice.tone === "error" ? "✕" : notice.tone === "warning" ? "!" : "i"
             color: notice.accent
@@ -54,6 +55,7 @@ Rectangle {
             Layout.fillWidth: true
             spacing: 2
             LogosText {
+                textFormat: Text.PlainText
                 visible: notice.title.length > 0
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
@@ -63,6 +65,7 @@ Rectangle {
                 font.weight: Theme.typography.weightBold
             }
             LogosText {
+                textFormat: Text.PlainText
                 visible: notice.text.length > 0
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap

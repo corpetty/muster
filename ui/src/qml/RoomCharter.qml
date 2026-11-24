@@ -68,6 +68,7 @@ ColumnLayout {
     }
 
     LogosText {
+        textFormat: Text.PlainText
         Layout.fillWidth: true
         wrapMode: Text.WordWrap
         color: Theme.palette.textSecondary
@@ -87,6 +88,7 @@ ColumnLayout {
     // ── the charter in force ─────────────────────────────────────────────────
     SectionHeader { Layout.fillWidth: true; text: cv.found ? qsTr("In force") : qsTr("No charter yet") }
     LogosText {
+        textFormat: Text.PlainText
         visible: !cv.found
         Layout.fillWidth: true
         wrapMode: Text.WordWrap
@@ -100,6 +102,7 @@ ColumnLayout {
         Layout.fillWidth: true
         spacing: Theme.spacing.small
         LogosText {
+            textFormat: Text.PlainText
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
             color: Theme.palette.text
@@ -108,6 +111,7 @@ ColumnLayout {
             text: String(cv.body.name || "")
         }
         LogosText {
+            textFormat: Text.PlainText
             visible: String(cv.body.purpose || "").length > 0
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
@@ -116,6 +120,7 @@ ColumnLayout {
             text: String(cv.body.purpose || "")
         }
         LogosText {
+            textFormat: Text.PlainText
             objectName: "charterMembers"
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
@@ -128,6 +133,7 @@ ColumnLayout {
         Repeater {
             model: Object.keys(cv.body.rules || {})
             delegate: LogosText {
+                textFormat: Text.PlainText
                 required property var modelData
                 Layout.fillWidth: true
                 wrapMode: Text.WrapAtWordBoundaryOrAnywhere   // words first; a long policy id still breaks
@@ -137,6 +143,7 @@ ColumnLayout {
             }
         }
         LogosText {
+            textFormat: Text.PlainText
             visible: cv.body.schedule !== undefined
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
@@ -149,6 +156,7 @@ ColumnLayout {
                   : ""
         }
         LogosText {
+            textFormat: Text.PlainText
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
             color: Theme.palette.textTertiary
@@ -184,6 +192,7 @@ ColumnLayout {
             Layout.fillWidth: true
             spacing: 2
             LogosText {
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 color: Theme.palette.text
@@ -191,6 +200,7 @@ ColumnLayout {
                 text: String((modelData.body && modelData.body.name) || qsTr("A charter"))
             }
             LogosText {
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 color: modelData.standing === "pending" ? Theme.palette.textSecondary : Theme.palette.warning
@@ -203,6 +213,7 @@ ColumnLayout {
     // ── write one ────────────────────────────────────────────────────────────
     SectionHeader { Layout.fillWidth: true; text: cv.found ? qsTr("Propose a change") : qsTr("Found the room's charter") }
     LogosText {
+        textFormat: Text.PlainText
         Layout.fillWidth: true
         wrapMode: Text.WordWrap
         color: Theme.palette.textSecondary

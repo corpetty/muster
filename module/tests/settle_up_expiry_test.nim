@@ -175,7 +175,12 @@ block:
     doAssert intentState(s.roomEvents(), splitFor, dinner) == "final", "dinner final on every member"
     doAssert intentState(s.roomEvents(), splitFor, taxi) == "final", "taxi final on every member"
   let paid = ledger.sent.mapIt(parseInt(it.transfer.amount))
-  doAssert paid.foldl(a + b) == 300 + 500, "Bob's 300 directly, then Carol's 500 net; nothing twice: " & $paid
+  # the shares are distinct (exo-3b3.14): read from the splits, never assumed
+  proc sh(total, creditor: string, debtors: seq[string], who: string): int =
+    parseInt(evenShares(total, creditor, debtors).filterIt(it.who == who)[0].amount)
+  let expect = sh("900", alice, @[bob, carol], bob) +                                   # Bob's dinner, directly
+               sh("900", alice, @[bob, carol], carol) + sh("600", bob, @[alice, carol], carol)   # Carol's, net
+  doAssert paid.foldl(a + b) == expect, "Bob's share directly, then Carol's net; nothing twice: " & $paid
   echo "4. a partly-paid settle-up finishes past its expiry; its covered shares are never paid twice OK"
 
 # ── 5. debts that cancel exactly: settled on agreement, nothing to release ───────

@@ -56,8 +56,10 @@ block:
   doAssert cc.securityLevel().mechanismOf(axConfidentiality).contains("ECIES")
   # the base (no crypto configured) is the null at the same seam.
   doAssert ConversationCrypto().securityLevel().rungOf(axConfidentiality) == rungNull
-  # it does not claim to authenticate or attest — those are other seams' axes.
-  doAssert cc.securityLevel().rungOf(axAuthentication) == rungNull
+  # every envelope is signed by its sender, a member of its epoch (exo-3b3); it does not
+  # attest provenance — that is the log's axis.
+  doAssert cc.securityLevel().rungOf(axAuthentication) == rungReal
+  doAssert cc.securityLevel().mechanismOf(axAuthentication).contains("signed")
   doAssert cc.securityLevel().rungOf(axProvenance) == rungNull
   echo "4. ConversationCrypto: the epoch layer is the confidentiality real, null base OK"
 
@@ -90,9 +92,12 @@ block:
   doAssert active.rungOf(axAuthentication) == rungReal, "auth from the named driver"
   doAssert active.rungOf(axConfidentiality) == rungReal, "confidentiality from the epoch layer"
   doAssert active.rungOf(axProvenance) == rungReal, "provenance from the log"
-  # without a driver, combine does not invent an authentication level.
-  doAssert combine(cc.securityLevel(), logProv).rungOf(axAuthentication) == rungNull,
-           "no driver → the auth null; combine invents nothing"
+  # without a driver, the authentication level is the epoch layer's own (exo-3b3: every
+  # envelope is signed by its sender), and combine invents nothing past it.
+  doAssert combine(cc.securityLevel(), logProv).rungOf(axAuthentication) == rungReal,
+           "no driver → the epoch layer's sender signatures; combine invents nothing"
+  doAssert combine(ConversationCrypto().securityLevel(), logProv).rungOf(axAuthentication) == rungNull,
+           "no driver and no crypto → the auth null"
   echo "7. combine: the active room level is the strongest per axis, one envelope OK"
 
 # ── 8. toJson: the shape the security_levels surface returns / the UI renders ──────

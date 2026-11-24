@@ -510,6 +510,11 @@ proc logos_module_dispatch(meth: cstring, argsJson: cstring): cstring {.exportc,
       # with it (e.g. describe(), so the UI blanks with no explanation). Return the
       # message as a structured error the caller can surface instead.
       %*{"error": e.msg}
+    except Defect as e:
+      # A Defect (an index or range check, an overflow) is a bug in the handler, not a
+      # refusal — but one call's bug must not take down the module and every other call
+      # with it. Report it as an error; with --panics:on there is nothing to catch.
+      %*{"error": "internal error: " & e.msg}
   if res == nil or res.isNil: return nil
   allocCString($res)
 

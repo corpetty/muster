@@ -10,6 +10,7 @@ import ../drivers/driver
 import ../drivers/invoke          # invokeDomain — the invoke effect's schema id
 import ../dcbor/dcbor
 import ../hashing/keccak256
+import ../hashing/hash_input      # the intent id is a domain-separated record (exo-c38)
 import ../crypto/binding         # a key binding's signer: who a decliner's addresses are (declineFold)
 import ../crypto/secp256k1
 import ../crypto/curve25519       # EncIdentity.toBytes
@@ -17,6 +18,38 @@ import ../crypto/curve25519       # EncIdentity.toBytes
 type DriverFor* = proc(kind: string): Driver
   ## Resolve a policy kind to its driver. Each intent folds under the driver of the
   ## policy it was proposed with — the intent is the policy boundary.
+
+proc uintField(j: JsonNode, k: string): CborValue =
+  ## A non-negative integer field as the signed form carries it (exo-ffc): a JSON integer
+  ## or a decimal / 0x-hex string that fits 64 bits. Anything else — negative, a float,
+  ## past 64 bits, not a number — is carried as the text it was, which no driver reads as
+  ## an amount and the Safe refuses, so a card can never show one value and sign another.
+  let v = j[k]
+  case v.kind
+  of JInt:
+    if v.getBiggestInt() >= 0: return cbUint(uint64(v.getBiggestInt()))
+    return cbText($v)
+  of JString:
+    let t = v.getStr()
+    var acc: uint64 = 0
+    var ok = t.len > 0
+    if t.len > 2 and t[0] == '0' and t[1] in {'x', 'X'}:
+      for c in t[2 .. ^1]:
+        let d = (case c
+                 of '0'..'9': uint64(ord(c) - ord('0'))
+                 of 'a'..'f': uint64(ord(c) - ord('a') + 10)
+                 of 'A'..'F': uint64(ord(c) - ord('A') + 10)
+                 else: (ok = false; 0'u64))
+        if not ok or acc > (high(uint64) - d) div 16: (ok = false; break)
+        acc = acc * 16 + d
+    else:
+      for c in t:
+        if c notin {'0'..'9'}: (ok = false; break)
+        let d = uint64(ord(c) - ord('0'))
+        if acc > (high(uint64) - d) div 10: (ok = false; break)
+        acc = acc * 10 + d
+    if ok: cbUint(acc) else: cbText(t)
+  else: cbText($v)
 
 proc effectFromJson*(effectJson: string): Effect =
   ## Build a typed effect from JSON. The `effect` field selects the schema (default
@@ -314,13 +347,13 @@ proc effectFromJson*(effectJson: string): Effect =
         for k in ["to", "data", "gasToken", "refundReceiver"]:
           if j.hasKey(k): fields.add (k, cbText(j[k].getStr()))
         for k in ["value", "nonce", "operation", "safeTxGas", "baseGas", "gasPrice"]:
-          if j.hasKey(k): fields.add (k, cbUint(uint64(j[k].getInt())))
+          if j.hasKey(k): fields.add (k, uintField(j, k))
         return Effect(schemaId: "muster.effect.safe-tx.v1", fields: fields)
       else:
         var fields: seq[(string, CborValue)]
         if j.hasKey("to"): fields.add ("to", cbText(j["to"].getStr()))
-        if j.hasKey("value"): fields.add ("value", cbUint(uint64(j["value"].getInt())))
-        if j.hasKey("nonce"): fields.add ("nonce", cbUint(uint64(j["nonce"].getInt())))
+        if j.hasKey("value"): fields.add ("value", uintField(j, "value"))
+        if j.hasKey("nonce"): fields.add ("nonce", uintField(j, "nonce"))
         return Effect(schemaId: "muster.effect.transfer.v1", fields: fields)
   except CatchableError: discard
   Effect(schemaId: "muster.effect.transfer.v1", fields: @[])
@@ -388,14 +421,13 @@ proc intentIdFor*(effectJson: string, policyKind = ""): string =
   ## A content-addressed intent id, so independent hosts derive the SAME id for the
   ## same (effect, policy) without a round-trip. The POLICY is part of the identity
   ## because an intent is a policy boundary: the same effect under two policies is two
-  ## distinct decisions, so it must be two intents (no collision). First 8 bytes of
-  ## keccak256(effect ++ "|" ++ policy). Re-proposing the same effect+policy folds once.
-  var b: seq[byte]
-  for c in effectJson: b.add byte(c)
-  if policyKind.len > 0:
-    b.add byte('|')
-    for c in policyKind: b.add byte(c)
-  bytesHex(keccak256(b)[0 ..< 8])
+  ## distinct decisions, so it must be two intents (no collision). A domain-separated
+  ## hash-input record of the two (invariant 5; exo-c38: it was keccak over their plain
+  ## concatenation, cut to 64 bits — a collision within reach), its first 16 bytes.
+  ## Re-proposing the same effect+policy folds once.
+  let d = digest(hashInput("muster.intent.id.v1",
+                           @[("effect", cbText(effectJson)), ("policy", cbText(policyKind))]))
+  bytesHex(d[0 ..< 16])
 
 # ── an intent's proposal: the pair its id is the content address of (exo-dbd) ──
 # Any epoch-key holder can publish an "intent/<id>/propose" or "/policy" under any id.

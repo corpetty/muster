@@ -26,6 +26,7 @@ ColumnLayout {
     spacing: Theme.spacing.small
 
     LogosText {
+        textFormat: Text.PlainText
         Layout.fillWidth: true
         wrapMode: Text.WordWrap
         text: qsTr("Give this to someone so they can invite you to a room. It names nothing else about you.")
@@ -48,6 +49,7 @@ ColumnLayout {
         border.width: 1
         border.color: Theme.palette.borderSubtle
         TextEdit {
+            textFormat: TextEdit.PlainText
             id: linkText
             objectName: "shareLinkText"
             anchors.fill: parent

@@ -80,7 +80,8 @@ proc decodeLink*(b: seq[byte]): LinkStatement =
     if off + n > b.len: raise newException(BindingError, "link frame truncated")
     result = b[off ..< off + n]; off += n
   proc str(): string =
-    let n = (int(b[off]) shl 8) or int(b[off + 1]); off += 2
+    let hdr = take(2)                  # bounds-checked: a truncated frame raises BindingError (exo-cd3)
+    let n = (int(hdr[0]) shl 8) or int(hdr[1])
     let raw = take(n)
     for x in raw: result.add char(x)
   result.enc = encIdentityFromBytes(take(64))

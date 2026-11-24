@@ -1,13 +1,15 @@
-## derived-exo-ef1 s6: a driver-valid signature with no attestation counts toward the
-## threshold but is graded unattested in the intent view, provenance, activity, and
-## card, never shown as committed; muster itself never produces an unattested approval.
+## derived-exo-ef1 s6: a driver-valid signature with no attestation is never shown as
+## committed; where the chain binds the signature (safe) it counts toward the threshold,
+## graded unattested in the intent view, provenance, activity, and card; where only the
+## room binds it (threshold) it counts for nothing (exo-af5: the same effect and policy in
+## another room give the same bytes). Muster itself never produces an unattested approval.
 ##
 ## STEPPER: state = (attested, pasted) approvals on one intent, attested + pasted <= 2
 ## (the threshold). Approvers are alice then bob: the first `attested` approve IN-APP,
 ## the next `pasted` hand in a signature made outside muster (their key signing the
 ## materialization directly — what a hardware wallet would produce). Each state's
 ## verdict, under every live policy:
-##   - the fold counts attested + pasted;
+##   - the fold counts attested + pasted (safe), attested only (threshold);
 ##   - every in-app approval has its attestation (muster never emits one without);
 ##   - every surface grades each approval exactly: the intent view's counts, the card
 ##     JSON, intentProvenance, logProvenance, and the activity feed.
@@ -53,6 +55,24 @@ proc mixCorrect(attested, pasted: int): bool =
         if w notin expectGrade: who = w
       expectGrade[who] = (if k < attested: "committed" else: "unattested")
     let evs = r.events()
+    let chainBound = chainBindsSignatures(liveDriverFor(policy))
+    if not chainBound:
+      # only the room binds the signature: a pasted approval counts for nothing, on any
+      # surface, and is never shown as committed or unattested
+      if countedApprovals(evs, id) != attested: return false
+      let grades = approvalGrades(evs, liveDriverFor, id)
+      for who, g in expectGrade:
+        let got = $gradeOf(grades, who, 1)
+        if g == "committed" and got != "committed": return false
+        if g == "unattested" and got in ["committed", "unattested"]: return false
+      var view: IntentView
+      for v in reduceIntentViews(evs, liveDriverFor):
+        if v.id == id: view = v
+      if view.committed != attested or view.unattested != 0: return false
+      for a in reduceActivity(evs, liveDriverFor):
+        if a.kind == "approve" and a.intentId == id and a.account in expectGrade and
+           expectGrade[a.account] == "unattested" and a.attestation in ["committed", "unattested"]: return false
+      continue
     # counted: both kinds count toward the threshold
     if countedApprovals(evs, id) != attested + pasted: return false
     # muster never emits an in-app approval without its attestation

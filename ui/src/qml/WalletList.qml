@@ -55,6 +55,7 @@ ColumnLayout {
                     Layout.fillWidth: true
                     spacing: Theme.spacing.small
                     LogosText {
+                        textFormat: Text.PlainText
                         text: String(card.modelData.name || "")
                         color: Theme.palette.text
                         font.pixelSize: MusterStyle.subtitle
@@ -78,6 +79,7 @@ ColumnLayout {
                     Item { Layout.fillWidth: true }
                 }
                 LogosText {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
                     text: String(card.modelData.wallet || "").length > 0
@@ -93,6 +95,7 @@ ColumnLayout {
                     Layout.fillWidth: true
                     spacing: Theme.spacing.small
                     LogosText {
+                        textFormat: Text.PlainText
                         objectName: "walletAddress_" + String(card.modelData.id || "")
                         Layout.fillWidth: true
                         elide: Text.ElideMiddle
@@ -130,12 +133,14 @@ ColumnLayout {
                         Layout.fillWidth: true
                         spacing: Theme.spacing.small
                         LogosText {
+                            textFormat: Text.PlainText
                             text: String(row.modelData.asset || "")
                             color: Theme.palette.text
                             font.pixelSize: MusterStyle.body
                             font.weight: Theme.typography.weightMedium
                         }
                         LogosText {
+                            textFormat: Text.PlainText
                             text: list.chainName(row.modelData.chain)
                             color: Theme.palette.textTertiary
                             font.pixelSize: MusterStyle.caption
@@ -158,6 +163,7 @@ ColumnLayout {
                         ColumnLayout {
                             spacing: 0
                             LogosText {
+                                textFormat: Text.PlainText
                                 Layout.alignment: Qt.AlignRight
                                 objectName: "walletBalance_" + String(card.modelData.id || "")
                                 text: row.modelData.error ? qsTr("unavailable")
@@ -171,6 +177,7 @@ ColumnLayout {
                                 LogosToolTip { visible: errHover.hovered && !!row.modelData.error; text: String(row.modelData.error || "") }
                             }
                             LogosText {
+                                textFormat: Text.PlainText
                                 Layout.alignment: Qt.AlignRight
                                 visible: String(row.modelData.unlocked || "").length > 0
                                          && String(row.modelData.unlocked) !== String(row.modelData.display)
@@ -182,6 +189,7 @@ ColumnLayout {
                     }
                 }
                 LogosText {
+                    textFormat: Text.PlainText
                     visible: !card.modelData.balances || card.modelData.balances.length === 0
                     text: qsTr("No balances to read yet.")
                     color: Theme.palette.textTertiary
@@ -199,6 +207,7 @@ ColumnLayout {
             spacing: Theme.spacing.small
             Loading { running: true }
             LogosText {
+                textFormat: Text.PlainText
                 text: qsTr("Checking your %1 wallet…").arg(String(modelData))
                 color: Theme.palette.textSecondary
                 font.pixelSize: MusterStyle.caption
@@ -208,6 +217,7 @@ ColumnLayout {
 
     // nothing connected (and nothing being checked): said once
     LogosText {
+        textFormat: Text.PlainText
         objectName: "walletNone"
         visible: list.wallets.length === 0 && list.checking.length === 0 && !list.loading
         Layout.fillWidth: true
@@ -236,12 +246,14 @@ ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 0
                     LogosText {
+                        textFormat: Text.PlainText
                         text: String(hint.modelData.name || "")
                         color: Theme.palette.text
                         font.pixelSize: MusterStyle.body
                         font.weight: Theme.typography.weightMedium
                     }
                     LogosText {
+                        textFormat: Text.PlainText
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
                         text: String(hint.modelData.how || "")
@@ -262,5 +274,5 @@ ColumnLayout {
         }
     }
 
-    TextEdit { id: addrClip; visible: false; width: 0; height: 0 }
+    TextEdit { textFormat: TextEdit.PlainText; id: addrClip; visible: false; width: 0; height: 0 }
 }

@@ -12,9 +12,14 @@
 ##   intent/<id>/decline/<who>            the card's Deny
 ##   intent/<id>/material/<req>/<who>     a material share
 ##   account/<caip10>/disclose/<who>      an account disclosure
+##   frost/<cid>/open                     a FROST ceremony's open: the value's "author" the opener (exo-3b3.13)
 ##   frost/<cid>/join/<who>               a FROST ceremony join
+##   frost/<cid>/pmsg1|pmsg2/<who>        <who>'s ChillDKG step message, its host key in the value (exo-3b3.13)
 ##   intent/<id>/part/<part>/<step>       a part report (exo-a90.2): the value's "author"
 ##   intent/<id>/proposer/<who>           who proposed the intent (exo-770)
+##   intent/<id>/context, /read/<field>   its signing context and recorded reads, the value's
+##                                        "author" — only a proposer's count (exo-ea8)
+##   membership/<e>/admit|remove/<who>    a re-key, the value's "author" the member who made it (exo-045)
 ##   lmsig/<ck>/key/<who>                 a member's lez-msig approval key (exo-0d3)
 ##   member/<who>/account/<id>[/retract]  an account of <who>'s own, disclosed or taken back (exo-1f9)
 ##   member/<who>/chat                    <who>'s chat address for this session (exo-7a5)
@@ -45,7 +50,9 @@
 ## and a float anywhere in it refuses (invariant 5).
 ##
 ## `authenticEvents` is the read path: it drops an author-bearing event whose
-## signature does not verify and passes every other event through untouched. The log
+## signature does not verify and passes every other event through untouched. A session's
+## `roomEvents` also drops one whose author was not a member of the epoch it was sealed
+## in (exo-3b3): a member cannot speak as an identity the room never admitted. The log
 ## itself keeps whatever it received — a forgery stays in the raw log, where a proof
 ## can still account for it — and state is reduce(authenticEvents(log)), still a pure
 ## function of log + room (invariant 4). Classification is by the key's kind segment,
@@ -137,6 +144,31 @@ proc authorOf*(e: Event): tuple[authored: bool, author: string] =
       if j.kind == JObject: author = j{"author"}.getStr()
     except CatchableError: discard
     return (true, author)
+  if p.len >= 3 and p[0] == "frost" and p[2] == "open":
+    # a FROST ceremony's open (exo-3b3.13): the opener is the value's "author", so a rival
+    # open names who made it, and an unsigned one is no open
+    var author = ""
+    try:
+      let j = parseJson(e.value)
+      if j.kind == JObject: author = j{"author"}.getStr()
+    except CatchableError: discard
+    return (true, author)
+  if p.len >= 3 and p[0] == "intent" and p[2] in ["context", "read"]:
+    # an intent's context and its recorded reads (exo-ea8): the value's "author"
+    var author = ""
+    try:
+      let j = parseJson(e.value)
+      if j.kind == JObject: author = j{"author"}.getStr()
+    except CatchableError: discard
+    return (true, author)
+  if p[0] == "membership":
+    # an admit or a removal (exo-045): the value's "author", the member who re-keyed
+    var author = ""
+    try:
+      let j = parseJson(e.value)
+      if j.kind == JObject: author = j{"author"}.getStr()
+    except CatchableError: discard
+    return (true, author)
   if p.len >= 3 and p[0] == "lmsig" and p[2] in ["gms", "note", "feenote", "chat"]:
     # a private lez-msig's sealed copies (exo-efa): the key names the member it is sealed
     # to, the value's "author" the member who sealed it
@@ -150,7 +182,7 @@ proc authorOf*(e: Event): tuple[authored: bool, author: string] =
     if p[0] == "intent" and p[2] == "decline": return (true, (if p.len >= 4: p[3] else: ""))
     if p[0] == "intent" and p[2] == "material": return (true, (if p.len >= 5: p[4] else: ""))
     if p[0] == "account" and p[2] == "disclose": return (true, (if p.len >= 4: p[3] else: ""))
-    if p[0] == "frost" and p[2] == "join": return (true, (if p.len >= 4: p[3] else: ""))
+    if p[0] == "frost" and p[2] in ["join", "pmsg1", "pmsg2"]: return (true, (if p.len >= 4: p[3] else: ""))
     if p[0] == "intent" and p[2] == "proposer": return (true, (if p.len >= 4: p[3] else: ""))
     if p[0] == "lmsig" and p[2] == "key": return (true, (if p.len >= 4: p[3] else: ""))
     if p[0] == "member" and p[2] == "account": return (true, p[1])
@@ -295,11 +327,22 @@ proc roomEvents*(s: CoordinationSession): seq[Event] =
   ## signature by event id, the `after` signature by id, signature and `after` — so a
   ## copy that reuses a genuine signature over another `after` is checked, never assumed.
   let room = s.topic
+  var rosters = initTable[int, seq[string]]()
+  proc memberOf(author: string, epoch: int): bool =
+    if epoch notin rosters:
+      var hs: seq[string]
+      for m in s.membersAt(epoch): hs.add hexOf(m.toBytes())
+      rosters[epoch] = hs
+    rosters[epoch].len == 0 or normHex(author) in rosters[epoch]
   authenticEventsWith(s.log.allVariants(),
     proc(e: Event): bool =
       let id = eventId(e)
       if id notin s.authorChecked: s.authorChecked[id] = authorVerified(room, e)
-      s.authorChecked[id],
+      if not s.authorChecked[id]: return false
+      # and the author was a member of the epoch it was sealed in (exo-3b3, FS-2): a
+      # signature by an identity the room never admitted names no one in it
+      if id in s.sealedIn and not memberOf(authorOf(e).author, s.sealedIn[id]): return false
+      true,
     proc(e: Event): bool =
       if e.after.len == 0: return false
       let k = eventId(e) & "|" & e.afterSig & "|" & e.after.join(",")
@@ -315,3 +358,14 @@ proc publishAuthored*(s: CoordinationSession, ks: Keystore, e: Event) =
     signed.after = s.heads()
     signed = signAfter(ks, s.topic, signed)
   s.publish(signed)
+
+proc admitAs*(s: CoordinationSession, ks: Keystore, joiner: EncIdentity) =
+  ## Admit `joiner` as this member: the re-key, and its membership record signed (exo-045).
+  s.admit(joiner, proc(e: Event): Event = signAuthored(ks, s.topic, e))
+
+proc expelAs*(s: CoordinationSession, ks: Keystore, member: EncIdentity) =
+  ## Remove `member` as this member: the re-key, and its removal record signed (exo-045).
+  s.expel(member, proc(e: Event): Event = signAuthored(ks, s.topic, e))
+
+proc admitInvitedAs*(s: CoordinationSession, ks: Keystore, invitee: EncIdentity): bool =
+  s.admitInvited(invitee, proc(e: Event): Event = signAuthored(ks, s.topic, e))

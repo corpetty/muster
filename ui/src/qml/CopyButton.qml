@@ -19,6 +19,6 @@ ActionButton {
         copied = true;
         reset.restart();
     }
-    TextEdit { id: clip; visible: false; width: 0; height: 0 }
+    TextEdit { textFormat: TextEdit.PlainText; id: clip; visible: false; width: 0; height: 0 }
     Timer { id: reset; interval: 1500; onTriggered: btn.copied = false }
 }

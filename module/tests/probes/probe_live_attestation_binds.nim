@@ -41,10 +41,10 @@ for policy in LivePolicies:
     let sourced = effectFor(policy, n, "\"sources\":{\"" & field & "\":\"read\"}")
     var ra = newRoom("/muster/1/ef1-binds-a-" & policy & "-" & $n & "/proto")
     let ida = ra.propose(policy, sourced)
-    ra.alice.publish(readEvent(ida, field, "rpc://node-a", valueText))
+    ra.alice.publishRead(aliceKs, ida, field, "rpc://node-a", valueText)
     var rb = newRoom("/muster/1/ef1-binds-a-" & policy & "-" & $n & "/proto")
     let idb = rb.propose(policy, sourced)
-    rb.alice.publish(readEvent(idb, field, "rpc://node-b", valueText))
+    rb.alice.publishRead(aliceKs, idb, field, "rpc://node-b", valueText)
     doAssert ida == idb, "same effect bytes -> same intent id"
     let pa = attestationPayload(ra.events(), liveDriverFor, ida)
     let pb = attestationPayload(rb.events(), liveDriverFor, idb)

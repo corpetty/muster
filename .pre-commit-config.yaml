@@ -96,6 +96,14 @@ repos:
     files: ^(contracts/claims/|ui/src/qml/ClaimsRegistry\.qml|ui/tools/gen-claims-qml\.py)$
 - repo: local
   hooks:
+  - id: qml-plain-text
+    name: Every QML text element renders plain text, never a peer's markup (exo-3b3.18)
+    entry: ui/tools/check-plain-text.py
+    language: system
+    pass_filenames: false
+    files: ^(ui/src/qml/.*\.qml|ui/tools/check-plain-text\.py)$
+- repo: local
+  hooks:
   - id: run-targets
     name: Run instructions resolve (make run / nix runner)
     entry: scripts/check-run-targets.py

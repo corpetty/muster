@@ -99,7 +99,7 @@ block:
   doAssert shares.allIt(it.amount in ["300000000", "299999999"]), $shares
   let good = splitEffectJson(Chain, "LEZ", Total, alice, payTo, shares, "Lisbon offsite")
   doAssert drv.signRefusal(effectFromJson(good)) == "", drv.signRefusal(effectFromJson(good))
-  let same = splitEffectJson(Chain, "LEZ", Total, alice, payTo, evenShares(Total, alice, @[bob, carol]), "x")
+  let same = splitEffectJson(Chain, "LEZ", Total, alice, payTo, evenShares(Total, alice, @[bob, carol], distinctAmounts = false), "x")
   doAssert "differ" in drv.signRefusal(effectFromJson(same)), "equal shares cannot be told apart by amount"
   let pub = splitEffectJson(Chain, "LEZ", Total, alice, public(aliceW, aliceKs).id, shares, "x")
   doAssert "payTo" in drv.signRefusal(effectFromJson(pub)), "the private split pays only a shielded key node"

@@ -35,6 +35,7 @@ Rectangle {
         spacing: 2
 
         LogosText {
+            textFormat: Text.PlainText
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
             text: qsTr("You sign with your account key, the one that signs Safe "
@@ -43,6 +44,7 @@ Rectangle {
             font.pixelSize: MusterStyle.caption
         }
         LogosText {
+            textFormat: Text.PlainText
             Layout.fillWidth: true
             text: qsTr("signing as %1")
                   .arg(String((room.roomAccount && room.roomAccount.actingAs) || "…"))
@@ -52,6 +54,7 @@ Rectangle {
             elide: Text.ElideMiddle
         }
         LogosText {
+            textFormat: Text.PlainText
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
             text: {

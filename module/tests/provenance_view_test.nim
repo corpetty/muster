@@ -6,6 +6,8 @@
 import std/strutils
 import ../src/coordination/intents
 import ../src/drivers/driver
+import ../src/crypto/curve25519
+import ./probes/attested
 
 # ── summarizeEffect: a human one-liner per effect kind ─────────────────────────
 block:
@@ -28,12 +30,26 @@ block:
 
 const effectJson = """{"to":"0x00000000000000000000000000000000DeaDBeef","value":42,"nonce":0}"""
 let id = intentIdFor(effectJson, "x")
-let events = @[
+# The approvers are Ed25519 keys and each approval carries its signer's attestation over P,
+# as the live path publishes it: the stub here is a room family, where an unattested
+# approval counts for nothing (exo-af5).
+proc seed(b: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = b)
+proc edName(k: EncKeys): string =
+  const d = "0123456789abcdef"
+  result = "ed:"
+  for x in k.identity().ed: (result.add d[int(x shr 4)]; result.add d[int(x and 0x0F)])
+let aliceK = encFromSeed(seed(1))
+let bobK = encFromSeed(seed(2))
+let alice = edName(aliceK)
+let bob = edName(bobK)
+let stubFor: DriverFor = proc(kind: string): Driver = newStubDriver()
+let events = withAttestations(@[
   policyDeclEvent(id, "x"),
   proposeEvent(id, effectJson),
-  contributeEvent(id, "alice", "aa", 1),
-  contributeEvent(id, "bob", "bb", 1),
-  contributeEvent(id, "alice", "aa", 1)]   # a duplicate — must fold once in the lineage
+  contributeEvent(id, alice, "aa", 1),
+  contributeEvent(id, bob, "bb", 1),
+  contributeEvent(id, alice, "aa", 1)],    # a duplicate — must fold once in the lineage
+  stubFor, id, signers = [aliceK, bobK])
 
 proc proposalOf(prov: seq[ProvItem]): ProvItem =
   for p in prov:
@@ -58,7 +74,9 @@ block:
 
   let apps = prov.approvalsOf()
   doAssert apps.len == 2 and apps[0].what == "an approval"
-  doAssert "alice" in apps.accounts() and "bob" in apps.accounts(), "the lineage names the signers"
+  doAssert alice in apps.accounts() and bob in apps.accounts(), "the lineage names the signers"
+  doAssert apps[0].attestation == "committed" and apps[1].attestation == "committed",
+    "each approval is attested in this room"
   doAssert apps[0].guarantee.contains("recovers to a configured member"),
            "an approval's guarantee explains the verification"
   echo "2. enriched, accounts named, duplicate folded OK"

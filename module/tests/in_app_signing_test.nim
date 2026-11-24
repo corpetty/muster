@@ -14,6 +14,7 @@ import ../src/drivers/threshold
 import ../src/drivers/frost
 import ../src/coordination/intents
 import ../src/crypto/curve25519
+import ./probes/attested
 
 proc seed(b: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = b)
 proc sigHex(sig: Ed25519Sig): string =
@@ -39,7 +40,8 @@ block:
   let foldDrv: DriverFor = proc(kind: string): Driver = drv
   let events = @[policyDeclEvent(id, "threshold"), proposeEvent(id, effectJson),
                  contributeEvent(id, who, mySig, round = 1)]
-  doAssert intentState(events, foldDrv, id) == "executable",
+  # in-app, as the live path does: my approval carries my attestation over P (exo-af5)
+  doAssert intentState(withAttestations(events, foldDrv, id, signers = [meKeys]), foldDrv, id) == "executable",
            "in-app approval by the sole member reaches executable — no pasted fixture"
   echo "1. threshold: my own edSign is a valid in-app contribution → executable OK"
 
@@ -54,7 +56,7 @@ block:
   let events = @[policyDeclEvent(id, "frost"), proposeEvent(id, effectJson),
                  contributeEvent(id, who, mySig, round = 1),
                  contributeEvent(id, who, mySig, round = 2)]
-  doAssert intentState(events, foldDrv, id) == "executable",
+  doAssert intentState(withAttestations(events, foldDrv, id, signers = [meKeys]), foldDrv, id) == "executable",
            "in-app FROST: I endorse both rounds with my own key → executable"
   echo "2. frost: my own edSign endorses both rounds in-app → executable OK"
 

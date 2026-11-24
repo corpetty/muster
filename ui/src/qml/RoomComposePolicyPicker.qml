@@ -21,6 +21,7 @@ RowLayout {
     spacing: Theme.spacing.small
 
     LogosText {
+        textFormat: Text.PlainText
         text: room.composeType === "payment" ? qsTr("Settles via")
             : room.composeType === "split" ? qsTr("Settles on")
             : qsTr("Endorse with")
@@ -69,6 +70,7 @@ RowLayout {
     }
 
     LogosText {
+        textFormat: Text.PlainText
         text: room.policy && room.policy.threshold !== undefined
               ? qsTr("%1 needed").arg(room.policy.threshold) : ""
         color: Theme.palette.textTertiary

@@ -131,8 +131,8 @@ block:
                               account = SafeB, ttlSec = Ttl)
   doAssert idA != idB, "the same effect on two Safes is two intents (the id commits to the account)"
   for id in [idA, idB]:
-    r.alice.publish(readEvent(id, "value", "rpc://probe", "5"))
-    r.alice.publish(readEvent(id, "nonce", "rpc://probe", "0"))
+    r.alice.publishRead(aliceKs, id, "value", "rpc://probe", "5")
+    r.alice.publishRead(aliceKs, id, "nonce", "rpc://probe", "0")
   doAssert liveContribute(r.alice, aliceKs, resolverOf(r.alice), idA, "", "", bindCtx(), Now) == "collecting"
   r.bob.poll()
   doAssert liveContribute(r.bob, bobKs, resolverOf(r.bob), idA, "", "", bindCtx(), Now) == "executable",

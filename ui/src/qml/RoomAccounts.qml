@@ -240,6 +240,7 @@ Item {
         spacing: Theme.spacing.small
 
         LogosText {
+            textFormat: Text.PlainText
             text: qsTr("Accounts")
             color: Theme.palette.text
             font.family: Theme.typography.publicSans
@@ -248,6 +249,7 @@ Item {
         }
 
         LogosText {
+            textFormat: Text.PlainText
             Layout.fillWidth: true
             visible: acc.accounts.length === 0
             text: qsTr("No shared accounts yet")
@@ -275,6 +277,7 @@ Item {
                         color: acc.checkColor(modelData.check ? modelData.check.status : "")
                     }
                     LogosText {
+                        textFormat: Text.PlainText
                         Layout.fillWidth: true
                         text: (modelData.label ? String(modelData.label) : acc.shortAddr(modelData.address))
                               + " · " + qsTr("%1 of %2").arg(modelData.threshold).arg((modelData.signers || []).length)
@@ -285,6 +288,7 @@ Item {
                     }
                 }
                 LogosText {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     text: String(modelData.family || "") + " · " + String(modelData.chain || "") + " · " + acc.shortAddr(modelData.address)
                     color: Theme.palette.textTertiary
@@ -299,6 +303,7 @@ Item {
                     spacing: Theme.spacing.small
                     visible: String(modelData.address || "").length > 0
                     TextEdit {
+                        textFormat: TextEdit.PlainText
                         id: fullAddr
                         Layout.fillWidth: true
                         readOnly: true
@@ -318,6 +323,7 @@ Item {
                     }
                 }
                 LogosText {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     text: qsTr("disclosed by %1").arg(acc.discloserNames(modelData))
                     color: Theme.palette.textSecondary
@@ -325,6 +331,7 @@ Item {
                     wrapMode: Text.WordWrap
                 }
                 LogosText {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     text: acc.checkLabel(modelData.check ? modelData.check.status : "")
                           + (modelData.check && modelData.check.detail ? " — " + String(modelData.check.detail) : "")
@@ -333,6 +340,7 @@ Item {
                     wrapMode: Text.WordWrap
                 }
                 LogosText {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     visible: modelData.conflict === true
                     text: qsTr("Members disclosed different signers or thresholds for this account. The first disclosure governs until they agree.")
@@ -346,6 +354,7 @@ Item {
         // ── what the room already holds, shown whatever is folded ──
         // The FROST key ceremonies under way here (Phase D), each with Join while it has room.
         LogosText {
+            textFormat: Text.PlainText
             Layout.fillWidth: true
             Layout.topMargin: Theme.spacing.small
             visible: acc.frostCeremonies.length > 0
@@ -353,34 +362,74 @@ Item {
             color: Theme.palette.textSecondary
             font.pixelSize: MusterStyle.caption
         }
+        // Each ceremony names who opened it and who its participants are, each one's host key
+        // beside them (exo-3b3.13): a t of n is only what it says when n distinct members hold
+        // the n shares, and the room can see that here.
         Repeater {
             model: acc.frostCeremonies
-            delegate: RowLayout {
+            delegate: ColumnLayout {
                 required property var modelData
                 Layout.fillWidth: true
-                spacing: Theme.spacing.small
-                LogosText {
+                spacing: 2
+                RowLayout {
                     Layout.fillWidth: true
+                    spacing: Theme.spacing.small
+                    LogosText {
+                        textFormat: Text.PlainText
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: modelData.address
+                              ? qsTr("%1 · %2 of %3 · %4").arg(modelData.ceremony).arg(modelData.t).arg(modelData.n).arg(modelData.address)
+                              : qsTr("%1 · %2 of %3 · %4 joined · step 1 %5/%3 · step 2 %6/%3%7")
+                                  .arg(modelData.ceremony).arg(modelData.t).arg(modelData.n).arg(modelData.joined)
+                                  .arg(modelData.step1).arg(modelData.step2)
+                                  .arg(modelData.last ? " · " + String(modelData.last) : "")
+                        color: Theme.palette.textSecondary
+                        font.family: MusterStyle.mono
+                        font.pixelSize: MusterStyle.caption
+                    }
+                    ActionButton {
+                        visible: !modelData.participant && !modelData.address && Number(modelData.joined) < Number(modelData.n)
+                        text: qsTr("Join")
+                        variant: LogosButton.Variant.Secondary
+                        onClicked: acc.frostJoinRequested(String(modelData.ceremony))
+                    }
+                }
+                LogosText {
+                    objectName: "frostCeremonyOpener"
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: 0          // the row's width is the column's, never the text's
                     wrapMode: Text.WordWrap
-                    text: modelData.address
-                          ? qsTr("%1 · %2 of %3 · %4").arg(modelData.ceremony).arg(modelData.t).arg(modelData.n).arg(modelData.address)
-                          : qsTr("%1 · %2 of %3 · %4 joined · step 1 %5/%3 · step 2 %6/%3%7")
-                              .arg(modelData.ceremony).arg(modelData.t).arg(modelData.n).arg(modelData.joined)
-                              .arg(modelData.step1).arg(modelData.step2)
-                              .arg(modelData.last ? " · " + String(modelData.last) : "")
+                    text: qsTr("Opened by %1").arg(modelData.openedByMe ? qsTr("you")
+                              : String(modelData.openerName || acc.bareId(modelData.opener).slice(0, 10)))
+                    color: Theme.palette.textSecondary
+                    font.pixelSize: MusterStyle.caption
+                }
+                LogosText {
+                    textFormat: Text.PlainText
+                    objectName: "frostCeremonyParticipants"
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: 0
+                    wrapMode: Text.WordWrap
+                    text: {
+                        var ps = modelData.participants || [];
+                        if (ps.length === 0) return qsTr("No one has joined yet");
+                        var out = [];
+                        for (var i = 0; i < ps.length; ++i) {
+                            var who = ps[i].me ? qsTr("you")
+                                    : String(ps[i].name || acc.bareId(ps[i].member).slice(0, 10));
+                            out.push(qsTr("%1 (host key %2)").arg(who).arg(acc.shortAddr(ps[i].host)));
+                        }
+                        return qsTr("Participants, one share each: %1").arg(out.join(", "));
+                    }
                     color: Theme.palette.textSecondary
                     font.family: MusterStyle.mono
                     font.pixelSize: MusterStyle.caption
                 }
-                ActionButton {
-                    visible: !modelData.participant && !modelData.address && Number(modelData.joined) < Number(modelData.n)
-                    text: qsTr("Join")
-                    variant: LogosButton.Variant.Secondary
-                    onClicked: acc.frostJoinRequested(String(modelData.ceremony))
-                }
             }
         }
         LogosText {
+            textFormat: Text.PlainText
             Layout.fillWidth: true
             visible: !!(acc.frostCeremony && acc.frostCeremony.error)
             text: acc.frostCeremony && acc.frostCeremony.error
@@ -392,6 +441,7 @@ Item {
         }
         // A LEZ multisig sent to the chain, disclosed here once a block includes it.
         LogosText {
+            textFormat: Text.PlainText
             objectName: "lezCreateResult"
             Layout.fillWidth: true
             visible: !!(acc.lezCreate && (acc.lezCreate.error || acc.lezCreate.address))
@@ -405,6 +455,7 @@ Item {
             font.pixelSize: MusterStyle.caption
         }
         LogosText {
+            textFormat: Text.PlainText
             Layout.fillWidth: true
             visible: acc.discloseResult && acc.discloseResult.error !== undefined
             text: acc.discloseResult && acc.discloseResult.error
@@ -435,6 +486,7 @@ Item {
             RowLayout {
                 Layout.fillWidth: true
                 LogosText {
+                    textFormat: Text.PlainText
                     objectName: "addAccountTitle"
                     Layout.fillWidth: true
                     text: acc.formTitle(acc.openForm)
@@ -452,6 +504,7 @@ Item {
                 }
             }
             LogosText {
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 visible: acc.openForm === "chooser"
                 text: qsTr("An account is shared here once a member discloses it. Every member checks it against the chain.")
@@ -628,6 +681,7 @@ Item {
             spacing: Theme.spacing.small
 
             LogosText {
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 text: qsTr("One key the room holds together, t of n. The chain sees one signature, and nothing of who signed.")
                 color: Theme.palette.textTertiary
@@ -686,6 +740,7 @@ Item {
             spacing: Theme.spacing.small
 
             LogosText {
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 Layout.topMargin: Theme.spacing.small
                 text: qsTr("Monero multisig (your own wallet)")
@@ -704,6 +759,7 @@ Item {
                         qsTr("Built before FCMP++: the wallet will need re-creating after Monero's upgrade.")
                     ]
                     delegate: LogosText {
+                        textFormat: Text.PlainText
                         required property var modelData
                         Layout.fillWidth: true
                         text: "• " + String(modelData)
@@ -714,6 +770,7 @@ Item {
                 }
             }
             LogosText {
+                textFormat: Text.PlainText
                 objectName: "xmrMsigNoWallet"
                 Layout.fillWidth: true
                 visible: acc.xmrWalletMissing
@@ -729,6 +786,7 @@ Item {
                 visible: acc.openForm === "xmr"
                 spacing: Theme.spacing.small
                 LogosText {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     text: qsTr("Who takes part, and how many must sign? Each must join from their own wallet; one who never joins holds the setup up.")
                     color: Theme.palette.text
@@ -796,6 +854,7 @@ Item {
                         Layout.fillWidth: true
                         spacing: Theme.spacing.small
                         LogosText {
+                            textFormat: Text.PlainText
                             Layout.fillWidth: true
                             wrapMode: Text.WordWrap
                             text: qsTr("%1 of %2 · joined %3 of %2").arg(modelData.k).arg(modelData.n)
@@ -813,6 +872,7 @@ Item {
                         }
                     }
                     LogosText {
+                        textFormat: Text.PlainText
                         Layout.fillWidth: true
                         visible: String(modelData.address || "").length > 0
                         wrapMode: Text.WrapAnywhere
@@ -823,6 +883,7 @@ Item {
                         font.pixelSize: MusterStyle.caption
                     }
                     LogosText {
+                        textFormat: Text.PlainText
                         Layout.fillWidth: true
                         visible: String(modelData.last || "").length > 0
                         wrapMode: Text.WordWrap
@@ -833,6 +894,7 @@ Item {
                 }
             }
             LogosText {
+                textFormat: Text.PlainText
                 objectName: "xmrMsigSetupResult"
                 Layout.fillWidth: true
                 visible: !!(acc.xmrMsigSetup && acc.xmrMsigSetup.error)
@@ -854,6 +916,7 @@ Item {
                 readonly property string feeAtomic: acc.xmrAtomic(xmrSendFee.text)
 
                 LogosText {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     text: qsTr("Send from the multisig")
                     color: Theme.palette.text
@@ -869,6 +932,7 @@ Item {
                     font.family: MusterStyle.mono
                 }
                 LogosText {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     // the fee cap is prefilled, so its placeholder never shows: say what each field is
                     text: qsTr("Amount, then the most the network fee may be (both in XMR)")
@@ -900,6 +964,7 @@ Item {
                     placeholderText: qsTr("a note for the room (optional)")
                 }
                 LogosText {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     visible: (xmrSendAmount.text.length > 0 && parent.amountAtomic === "")
                              || (xmrSendFee.text.length > 0 && parent.feeAtomic === "")
@@ -921,6 +986,7 @@ Item {
                         parent.feeAtomic, xmrSendMemo.text)
                 }
                 LogosText {
+                    textFormat: Text.PlainText
                     objectName: "xmrMsigProposeResult"
                     Layout.fillWidth: true
                     visible: !!(acc.xmrMsigPropose && (acc.xmrMsigPropose.error || acc.xmrMsigPropose.intentId))
@@ -941,6 +1007,7 @@ Item {
             spacing: Theme.spacing.small
 
             LogosText {
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 Layout.topMargin: Theme.spacing.small
                 text: qsTr("Members' own accounts")
@@ -948,6 +1015,7 @@ Item {
                 font.pixelSize: MusterStyle.caption
             }
             LogosText {
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 text: qsTr("Share an account of your own with this room, and anyone here can use it where an account of yours is needed, for example as your approval key when setting up a LEZ multisig. Only this room sees it, until a public multisig that uses it puts it on chain; using one account in several multisigs links them there.")
                 color: Theme.palette.textSecondary
@@ -961,6 +1029,7 @@ Item {
                     Layout.fillWidth: true
                     spacing: Theme.spacing.small
                     LogosText {
+                        textFormat: Text.PlainText
                         objectName: "memberAccount"
                         Layout.fillWidth: true
                         Layout.preferredWidth: 0          // the row's width is the column's, never the text's
@@ -981,6 +1050,7 @@ Item {
                 }
             }
             LogosText {
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 visible: acc.memberAccounts.length === 0
                 text: qsTr("No one has shared an account of their own yet.")
@@ -1011,6 +1081,7 @@ Item {
                 }
             }
             LogosText {
+                textFormat: Text.PlainText
                 objectName: "memberAccountResult"
                 Layout.fillWidth: true
                 visible: !!(acc.discloseAccount && acc.discloseAccount.error)
@@ -1034,6 +1105,7 @@ Item {
             spacing: Theme.spacing.small
 
             LogosText {
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 Layout.topMargin: Theme.spacing.small
                 text: qsTr("LEZ multisig (approvals in the room)")
@@ -1041,6 +1113,7 @@ Item {
                 font.pixelSize: MusterStyle.caption
             }
             LogosText {
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 text: qsTr("Approving costs nothing and names no one on chain until it runs. One transaction then carries the proposal and every approval, and the program checks them. The members, the threshold and, when it runs, who approved are public on the chain.")
                 color: Theme.palette.textSecondary
@@ -1054,6 +1127,7 @@ Item {
                 visible: acc.openForm === "msig"
                 spacing: Theme.spacing.small
                 LogosText {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     text: qsTr("Every member of this room takes part, each with a new key for this multisig unless you pick an account they shared below. How many must approve, and how long must an approved action wait?")
                     color: Theme.palette.text
@@ -1091,6 +1165,7 @@ Item {
                         visible: shared.length > 0
                         spacing: Theme.spacing.tiny
                         LogosText {
+                            textFormat: Text.PlainText
                             Layout.fillWidth: true
                             text: pickRow.modelData.self ? qsTr("Your approval key")
                                   : qsTr("%1's approval key").arg(pickRow.modelData.alias && String(pickRow.modelData.alias).length > 0
@@ -1145,6 +1220,7 @@ Item {
                 }
                 // the private posture (exo-efa): the same rules over a private account
                 LogosText {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     text: qsTr("Or keep it private: only the members can see it. The chain sees a proof, never who is in it or who approved. Its transactions are proved on this device, which takes a few minutes each.")
                     color: Theme.palette.textSecondary
@@ -1170,6 +1246,7 @@ Item {
                     Layout.fillWidth: true
                     spacing: Theme.spacing.small
                     LogosText {
+                        textFormat: Text.PlainText
                         objectName: "msigCeremony"
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
@@ -1208,6 +1285,7 @@ Item {
                 }
             }
             LogosText {
+                textFormat: Text.PlainText
                 objectName: "msigOpenResult"
                 Layout.fillWidth: true
                 visible: !!(acc.lezMsigOpen && acc.lezMsigOpen.error)
@@ -1230,6 +1308,7 @@ Item {
                 readonly property string payBase: acc.lezBase(msigPayAmount.text)
 
                 LogosText {
+                    textFormat: Text.PlainText
                     objectName: "msigState"
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
@@ -1250,6 +1329,7 @@ Item {
                 }
                 // its deliberation runs in a chat group that follows its members (exo-7a5)
                 LogosText {
+                    textFormat: Text.PlainText
                     objectName: "msigChat"
                     Layout.fillWidth: true
                     readonly property var c: parent.st.chat || null
@@ -1267,6 +1347,7 @@ Item {
                     wrapMode: Text.WordWrap
                 }
                 LogosText {
+                    textFormat: Text.PlainText
                     objectName: "msigPrivateNote"
                     Layout.fillWidth: true
                     visible: parent.st.private === true
@@ -1318,6 +1399,7 @@ Item {
                     visible: parent.st.private === true
                     spacing: Theme.spacing.small
                     LogosText {
+                        textFormat: Text.PlainText
                         objectName: "msigRecoverNote"
                         Layout.fillWidth: true
                         text: acc.lezMsigRecover && acc.lezMsigRecover.error
@@ -1337,6 +1419,7 @@ Item {
                     }
                 }
                 LogosText {
+                    textFormat: Text.PlainText
                     objectName: "msigTopupResult"
                     Layout.fillWidth: true
                     visible: !!(acc.lezMsigTopup && (acc.lezMsigTopup.error || acc.lezMsigTopup.job))
@@ -1348,6 +1431,7 @@ Item {
                     wrapMode: Text.WordWrap
                 }
                 LogosText {
+                    textFormat: Text.PlainText
                     objectName: "msigFundResult"
                     Layout.fillWidth: true
                     visible: !!(acc.lezMsigFund && (acc.lezMsigFund.error || acc.lezMsigFund.job))
@@ -1359,6 +1443,7 @@ Item {
                     wrapMode: Text.WordWrap
                 }
                 LogosText {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     text: qsTr("Pay from the vault")
                     color: Theme.palette.text
@@ -1377,6 +1462,7 @@ Item {
                     font.family: MusterStyle.mono
                 }
                 LogosText {
+                    textFormat: Text.PlainText
                     objectName: "msigPrivatePayeeNote"
                     Layout.fillWidth: true
                     visible: msigPayTo.privatePayee
@@ -1415,6 +1501,7 @@ Item {
                         Layout.fillWidth: true
                         spacing: Theme.spacing.small
                         LogosText {
+                            textFormat: Text.PlainText
                             objectName: "msigLimit"
                             Layout.fillWidth: true
                             text: qsTr("Spending limit %1: %2 of %3 signers may spend up to %4 LEZ every %5 h, without a vote")
@@ -1502,6 +1589,7 @@ Item {
                         Layout.fillWidth: true
                         spacing: Theme.spacing.small
                         LogosText {
+                            textFormat: Text.PlainText
                             objectName: "msigQueued"
                             Layout.fillWidth: true
                             text: qsTr("Queued: proposal #%1, runs from %2").arg(modelData.nonce)
@@ -1523,6 +1611,7 @@ Item {
                     }
                 }
                 LogosText {
+                    textFormat: Text.PlainText
                     objectName: "msigProposeResult"
                     Layout.fillWidth: true
                     visible: !!(acc.lezMsigPropose && (acc.lezMsigPropose.error || acc.lezMsigPropose.intentId))
@@ -1555,6 +1644,7 @@ Item {
                     onClicked: acc.lezMemberRequested()
                 }
                 LogosText {
+                    textFormat: Text.PlainText
                     objectName: "lezMemberAccount"
                     Layout.fillWidth: true
                     elide: Text.ElideMiddle

@@ -101,7 +101,10 @@ proc correct(k: int): bool =
   if renewable:
     if rn.covers.mapIt(it.debtor).sorted() != unpaid.sorted(): return false
     for c in rn.covers:
-      if c.intent != id or c.creditor != alice or c.amount != "300" or c.payTo != AlicePayTo: return false
+      # each cover is that debtor's own share of the split (distinct shares, exo-3b3.14)
+      let own = evenShares("900", alice, @[bob, carol]).filterIt(it.who == c.debtor)
+      if c.intent != id or c.creditor != alice or own.len != 1 or c.amount != own[0].amount or
+         c.payTo != AlicePayTo: return false
     let rid = propose(EvmPolicy, rn.effectJson, at)
     if not rid.startsWith("0x") or rid == earlierId: return false
     r.sync()

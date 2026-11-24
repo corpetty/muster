@@ -24,6 +24,7 @@ ColumnLayout {
         spacing: Theme.spacing.small
         visible: room.kindNeedsAccount(room.policyKind)
         LogosText {
+            textFormat: Text.PlainText
             text: qsTr("From")
             color: Theme.palette.textTertiary
             font.family: MusterStyle.mono
@@ -45,6 +46,7 @@ ColumnLayout {
         Item { Layout.fillWidth: true }
     }
     LogosText {
+        textFormat: Text.PlainText
         Layout.fillWidth: true
         visible: room.policyError && room.policyError.error !== undefined
         text: {

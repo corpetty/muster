@@ -48,6 +48,7 @@ Rectangle {
             Layout.fillWidth: true
             spacing: Theme.spacing.small
             LogosText {
+                textFormat: Text.PlainText
                 objectName: "needsHeader"
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
@@ -58,6 +59,7 @@ Rectangle {
                 font.weight: Theme.typography.weightMedium
             }
             LogosText {
+                textFormat: Text.PlainText
                 text: cardRoot.needsOpen ? "−" : "+"
                 color: Theme.palette.textSecondary
                 font.pixelSize: MusterStyle.cardCaption
@@ -65,6 +67,7 @@ Rectangle {
         }
 
         LogosText {
+            textFormat: Text.PlainText
             visible: cardRoot.needsOpen && !cardRoot.readiness
             text: qsTr("checking with the module…")
             color: Theme.palette.textTertiary
@@ -89,6 +92,7 @@ Rectangle {
                     Layout.fillWidth: true
                     spacing: Theme.spacing.small
                     LogosText {
+                        textFormat: Text.PlainText
                         objectName: "needStatus_" + String(modelData.kind) + "_" + String(modelData.name)
                         text: modelData.status === "met" ? "✓" : modelData.status === "missing" ? "✗" : "?"
                         color: modelData.status === "met" ? Theme.palette.success
@@ -97,6 +101,7 @@ Rectangle {
                         font.pixelSize: MusterStyle.cardCaption
                     }
                     LogosText {
+                        textFormat: Text.PlainText
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
                         text: String(modelData.kind) + ": " + String(modelData.name)
@@ -116,6 +121,7 @@ Rectangle {
                     // Basecamp's Package Manager", "start …"), so every row reads
                     // "To fix:"; the Install button below is the one-click form
                     LogosText {
+                        textFormat: Text.PlainText
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
                         text: qsTr("To fix: ") + String(modelData.remedy || "")
@@ -128,6 +134,7 @@ Rectangle {
                     // broker (L4), so today this is an honest prompt, not a button
                     // that would open the wrong place.
                     LogosText {
+                        textFormat: Text.PlainText
                         visible: modelData.kind === "infra" && modelData.name === "lez-account"
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
@@ -174,6 +181,7 @@ Rectangle {
                         onClicked: cardRoot.askInstall(needRow.modelData)
                     }
                     LogosText {
+                        textFormat: Text.PlainText
                         objectName: "installStatus_" + needRow.pkg
                         visible: needRow.note.length > 0
                         Layout.fillWidth: true
@@ -193,6 +201,7 @@ Rectangle {
                         onClicked: cardRoot.showPackage(needRow.pkg)
                     }
                     LogosText {
+                        textFormat: Text.PlainText
                         visible: !!(needRow.req && needRow.req.state === "failed" && needRow.req.showError)
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
@@ -221,6 +230,7 @@ Rectangle {
         // of me — graded about me only. Each candidate shows its public face, its
         // F-10 grade, and what choosing it discloses; a pick shares the PUBLIC face.
         LogosText {
+            textFormat: Text.PlainText
             visible: cardRoot.showFromYou && cardRoot.needsOpen && cardRoot.shareableOffers.length > 0
             text: qsTr("From you:")
             color: Theme.palette.textSecondary
@@ -238,6 +248,7 @@ Rectangle {
                 Layout.leftMargin: Theme.spacing.medium
                 spacing: 0
                 LogosText {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
                     text: {
@@ -258,6 +269,7 @@ Rectangle {
                         Layout.leftMargin: Theme.spacing.medium
                         spacing: Theme.spacing.small
                         LogosText {
+                            textFormat: Text.PlainText
                             Layout.fillWidth: true
                             wrapMode: Text.WordWrap
                             text: {
@@ -282,6 +294,7 @@ Rectangle {
 
         // touches
         LogosText {
+            textFormat: Text.PlainText
             visible: cardRoot.needsOpen && cardRoot.readiness && cardRoot.readiness.manifest
                      && cardRoot.readiness.manifest.touches && cardRoot.readiness.manifest.touches.length > 0
             Layout.fillWidth: true
@@ -294,6 +307,7 @@ Rectangle {
 
         // what will happen: the disclosure, grouped by observer, outside-the-room included
         LogosText {
+            textFormat: Text.PlainText
             visible: cardRoot.needsOpen && cardRoot.readiness && cardRoot.readiness.declared !== false
             text: qsTr("Who will see what:")
             color: Theme.palette.textSecondary
@@ -303,6 +317,7 @@ Rectangle {
         Repeater {
             model: cardRoot.needsOpen ? cardRoot.disclosureGroups() : []
             delegate: LogosText {
+                textFormat: Text.PlainText
                 required property var modelData
                 objectName: "disclose_" + String(modelData.to)
                 Layout.fillWidth: true
@@ -316,6 +331,7 @@ Rectangle {
 
         // how we agree
         LogosText {
+            textFormat: Text.PlainText
             visible: cardRoot.needsOpen && cardRoot.agreementLine().length > 0
             Layout.fillWidth: true
             wrapMode: Text.WordWrap

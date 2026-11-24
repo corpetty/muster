@@ -23,8 +23,10 @@
 ## epoch it was published in, so only that epoch's members open it. Nothing here touches
 ## Storage; the hosted layer (S4) uploads, fetches and opens blobs.
 
-import std/[json, strutils, tables, algorithm]
+import std/[json, strutils, tables, algorithm, os]
+when defined(posix): import std/posix
 import ../log/log
+import ../security/text_controls
 import ../dcbor/dcbor
 import ../hashing/hash_input
 import ../crypto/blob_seal
@@ -68,13 +70,65 @@ proc fileIdOf*(sharer, cid: string): string =
 
 proc safeFileName*(raw: string): string =
   ## The sharer's name for a file, with no path in it: the part after the last separator,
-  ## control characters replaced. "." and ".." and an empty name read "file".
+  ## control characters replaced, and the Unicode format controls that reorder or hide what
+  ## a name shows dropped (U+202E would show "invoice<U+202E>fdp.exe" as "invoiceexe.pdf";
+  ## exo-3b3.18, audit P4-10). "." and ".." and an empty name read "file".
   var s = raw
   let cut = max(s.rfind('/'), s.rfind('\\'))
   if cut >= 0: s = s[cut + 1 .. ^1]
   for c in s.mitems:
     if ord(c) < 0x20 or ord(c) == 0x7f: c = '_'
+  s = stripFormatControls(s)
   if s.len == 0 or s == "." or s == "..": "file" else: s
+
+proc isUnder(path, dir: string): bool =
+  ## Is `path` `dir` itself or inside it (both absolute, normalized)?
+  if dir.len == 0: return false
+  let d = (if dir.endsWith("/") and dir.len > 1: dir[0 ..< ^1] else: dir)
+  path == d or path.startsWith(d & "/")
+
+proc realOrSame(path: string): string =
+  ## The path with every link resolved, when it exists; else as given, normalized.
+  try: expandFilename(path)
+  except CatchableError: normalizedPath(path)
+
+proc hiddenUnder(path, home: string): bool =
+  ## Does `path`, inside `home`, have a component (folder or file) starting with "."?
+  if home.len == 0 or not isUnder(path, home): return false
+  let h = (if home.endsWith("/") and home.len > 1: home[0 ..< ^1] else: home)
+  if path.len <= h.len: return false
+  for part in path[h.len + 1 .. ^1].split('/'):
+    if part.len > 0 and part[0] == '.': return true
+  false
+
+proc shareRefusal*(path, home: string, ownDirs: seq[string]): string =
+  ## Why `path` may not be shared into a room, or "" when it may (exo-3b3.17, audit P4-01). Any
+  ## module loaded beside Muster can ask it to share a file, so this holds whoever asks:
+  ## the path must be absolute and name a regular file, and, as given and with its links
+  ## resolved, must not sit in a hidden folder (or be a hidden file) under the home folder,
+  ## in one of Muster's own folders (`ownDirs`: where identity.mks and the wallet live), or
+  ## in the kernel's trees (/proc, /sys, /dev).
+  if path.len == 0 or not path.isAbsolute: return "a file is named by its full path"
+  let given = normalizedPath(path)
+  let real = realOrSame(path)
+  let homes = (if home.len > 0: @[normalizedPath(home), realOrSame(home)] else: @[])
+  for p in [given, real]:
+    for k in ["/proc", "/sys", "/dev"]:
+      if isUnder(p, k): return "a file in " & k & " is the system's, never shared"
+    for d in ownDirs:
+      if d.len == 0: continue
+      if isUnder(p, normalizedPath(d)) or isUnder(p, realOrSame(d)):
+        return "a file in Muster's own folder is never shared (it holds this member's keys)"
+    for h in homes:
+      if hiddenUnder(p, h):
+        return "a hidden file, or a file in a hidden folder, is never shared"
+  when defined(posix):
+    var st: Stat
+    if stat(real.cstring, st) != 0: return "no such file"
+    if not S_ISREG(st.st_mode): return "only a regular file is shared"
+  else:
+    if not fileExists(real): return "no such file"
+  ""
 
 proc shareBody(sharer, name, mime, cid, network, scheme: string, size: uint64,
                digest, key: string, at: int64): JsonNode =

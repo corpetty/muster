@@ -7,6 +7,7 @@ import Logos.Theme
 // cannot be copied (seen 2026-10-11, the settled transaction's hash). Read-only; select
 // with the mouse, then Ctrl+C, or call copyAll().
 TextEdit {
+    textFormat: TextEdit.PlainText
     readOnly: true
     selectByMouse: true
     activeFocusOnPress: true

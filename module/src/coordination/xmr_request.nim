@@ -98,8 +98,18 @@ proc xmrCreditorRefusal*(b: MoneroBackend, effect: Effect, me: string): string =
   if why.len > 0: return why
   let info = b.receiveInfo(cmNow)
   if info.read != rsAnswered: return "wallet-unread: " & info.detail
-  if info.indexOf(sp.payTo) < 0:
+  let idx = info.indexOf(sp.payTo)
+  if idx < 0:
     return "payto-not-mine: your open wallet does not list the address this request would be paid at"
+  # a fresh address only (exo-3b3.14): the wallet confirms a part by amount at this
+  # subaddress, so one that already received — in another room, or before — could let a
+  # payment made for something else settle this request
+  let hist = b.history(cmNow)
+  if hist.read != rsAnswered: return "wallet-unread: " & hist.detail
+  for r in hist.rows:
+    if r.direction == "in" and not r.failed and r.account == 0 and idx in r.subaddrIndex:
+      return "payto-used: the address this request would be paid at has already received a transfer " &
+             "(" & r.txid[0 ..< min(r.txid.len, 12)] & "…); share a fresh one (Share my Monero address)"
   ""
 
 proc xmrPropose*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor, b: MoneroBackend,

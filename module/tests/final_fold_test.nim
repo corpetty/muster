@@ -8,6 +8,7 @@ import ../src/drivers/driver
 import ../src/drivers/threshold
 import ../src/coordination/intents
 import ../src/crypto/curve25519
+import ./probes/attested
 proc seed(b: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = b)
 proc sigHex(s: Ed25519Sig): string =
   const d = "0123456789abcdef"
@@ -22,6 +23,8 @@ let mat = canonicalize(drv, effectFromJson(effect))
 let who = contributorOf(drv, effect, sigHex(edSign(m, mat.bytes)))
 var ev = @[policyDeclEvent(id, "threshold"), proposeEvent(id, effect),
            contributeEvent(id, who, sigHex(edSign(m, mat.bytes)), 1)]
+# the threshold driver is room-bound: the approval carries its attestation (exo-af5)
+ev = withAttestations(ev, fold, id, signers = [m])
 doAssert intentState(ev, fold, id) == "executable"
 ev.add submitEvent(id)
 doAssert intentState(ev, fold, id) == "submitted", "submit event → submitted"

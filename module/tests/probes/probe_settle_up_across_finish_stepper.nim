@@ -52,9 +52,16 @@ proc correct(mask: int): bool =
   r.sync()
   # the net payments, and their reports, author-signed by who the rule says may make them
   var pA, pB = ""
+  # the dinner's shares are distinct (exo-3b3.14): read from the split, never assumed —
+  # Alice is owed both (about 600), Bob 11666 less his own (about 11366)
+  proc dinnerShare(who: string): int =
+    for x in evenShares("900", alice, @[bob, carol]):
+      if x.who == who: return parseInt(x.amount)
+  let toAlice = $(dinnerShare(bob) + dinnerShare(carol))
+  let toBob = $(11666 - dinnerShare(bob))
   for t in settleUpOf(effectFromJson(composed.effectJson)).transfers:
-    if t.frm == carol and t.to == alice and t.amount == "600": pA = settlePart(t)
-    if t.frm == carol and t.to == bob and t.amount == "11366" and t.payTo == evmAddrOf["bob"]: pB = settlePart(t)
+    if t.frm == carol and t.to == alice and t.amount == toAlice: pA = settlePart(t)
+    if t.frm == carol and t.to == bob and t.amount == toBob and t.payTo == evmAddrOf["bob"]: pB = settlePart(t)
   if pA.len == 0 or pB.len == 0: return false
   if mask.has(2): r.carol.publishAuthored(carolKs, partEvent(su, pA, "settled", carol, "0xpaidalice"))
   if mask.has(3): r.alice.publishAuthored(aliceKs, partEvent(su, pA, "confirmed", alice, "0xpaidalice"))

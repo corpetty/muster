@@ -34,6 +34,7 @@ ColumnLayout {
             spacing: 2
 
             LogosText {
+                textFormat: Text.PlainText
                 objectName: "composeNeed_" + String(composeNeed.modelData.name || "")
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
@@ -44,6 +45,7 @@ ColumnLayout {
             // no Install button (installed but not running, starting,
             // failed, or nothing to install): the module's own remedy
             LogosText {
+                textFormat: Text.PlainText
                 visible: !composeNeed.installable && String(composeNeed.modelData.remedy || "").length > 0
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
@@ -72,6 +74,7 @@ ColumnLayout {
                 }
             }
             LogosText {
+                textFormat: Text.PlainText
                 objectName: "composeInstallStatus_" + composeNeed.pkg
                 visible: composeNeed.note.length > 0
                 Layout.fillWidth: true
@@ -82,6 +85,7 @@ ColumnLayout {
                 font.pixelSize: MusterStyle.caption
             }
             LogosText {
+                textFormat: Text.PlainText
                 visible: !!(composeNeed.req && composeNeed.req.state === "failed" && composeNeed.req.showError)
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
@@ -98,6 +102,7 @@ ColumnLayout {
 
     // why Propose is off — or, when Muster cannot tell, that it is not
     LogosText {
+        textFormat: Text.PlainText
         objectName: "composeNeedsGate"
         Layout.fillWidth: true
         wrapMode: Text.WordWrap

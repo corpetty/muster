@@ -262,12 +262,45 @@ method profile*(d: SafeDriver): FamilyProfile =
     maturity: maProduction, chain: chain, account: caip10(chain, addrHex(d.safe)),
     k: d.threshold, n: d.owners.len, bypassesKnown: false)
 
+proc isHexOf(t: string, nBytes: int): bool =
+  ## Exactly `nBytes` bytes of hex (any number when nBytes < 0), 0x optional.
+  var s = t
+  if s.len >= 2 and s[0] == '0' and (s[1] == 'x' or s[1] == 'X'): s = s[2..^1]
+  if s.len mod 2 != 0 or (nBytes >= 0 and s.len != 2 * nBytes): return false
+  for c in s:
+    if c notin {'0'..'9', 'a'..'f', 'A'..'F'}: return false
+  true
+
+proc fieldRefusal(e: Effect): string =
+  ## What the card shows is what is signed (exo-ffc): every field reaches the safeTxHash
+  ## exactly as written, or the transaction is refused. An address is exactly 20 bytes of
+  ## hex, data is whole hex bytes, and every number a non-negative integer of 64 bits.
+  for (k, v) in e.fields:
+    case k
+    of "to", "gasToken", "refundReceiver":
+      if v.kind != ckText or not isHexOf(v.t, 20): return k & " is not a 20-byte address"
+    of "data":
+      if v.kind != ckText or not isHexOf(v.t, -1): return "data is not whole hex bytes"
+    of "value", "nonce", "operation", "safeTxGas", "baseGas", "gasPrice":
+      if v.kind != ckUint:
+        return k & " is not a whole number this client can sign (non-negative, at most 2^64-1)"
+    else: discard
+  ""
+
 method signRefusal*(d: SafeDriver, e: Effect): string =
-  ## Refuse to propose or sign a DELEGATECALL unless this client allowlists its target
-  ## (MUSTER_SAFE_DELEGATECALL_ALLOW; e.g. MultiSendCallOnly). A delegatecall runs
-  ## foreign code as the Safe and can take it — so it needs a deliberate local opt-in,
-  ## never a default. An unknown operation is refused outright. A CALL is never refused.
+  ## Refuse to propose or sign a transaction whose fields are not exactly what the card
+  ## shows (fieldRefusal), one that pays a gas refund out of the Safe, or a DELEGATECALL
+  ## unless this client allowlists its target (MUSTER_SAFE_DELEGATECALL_ALLOW; e.g.
+  ## MultiSendCallOnly). A delegatecall runs foreign code as the Safe and can take it — so
+  ## it needs a deliberate local opt-in, never a default. An unknown operation is refused
+  ## outright. A plain CALL is never refused.
+  let bad = fieldRefusal(e)
+  if bad.len > 0: return bad
   let tx = toSafeTx(e)
+  if tx.gasPrice != 0:
+    # a refund pays (gasUsed + baseGas) * gasPrice of gasToken to refundReceiver from the
+    # Safe at execution (exo-ffc): muster settles with gasPrice 0, so a non-zero one is refused
+    return "a gas refund (gasPrice " & $tx.gasPrice & ") pays the executor from the Safe; this client signs none"
   if tx.operation == 0: return ""
   if tx.operation > 1: return "unknown Safe operation " & $tx.operation
   if tx.to in d.delegatecallAllow: return ""

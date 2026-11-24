@@ -38,7 +38,7 @@ let alice = newCoordinationSession(newLocalTransport(net), newEpochCrypto(aliceK
 let bob = newCoordinationSession(newLocalTransport(net), newEpochJoiner(bobKs), topic)
 let ctx = LinkContext(account: "room", slot: "0", expiry: high(uint64))
 bob.requestJoin(bobKs.joinRequestFor(topic, high(uint64)))
-alice.admit(bobKs.encIdentity())
+alice.admitAs(aliceKs, bobKs.encIdentity())
 
 proc held(s: CoordinationSession, k: string): Event =
   for e in s.log.allEvents(): (if e.key == k: return e)
@@ -74,7 +74,7 @@ block:
   doAssert original.after.len > 0
   let carol = newCoordinationSession(newLocalTransport(net), newEpochJoiner(carolKs), topic)
   carol.requestJoin(carolKs.joinRequestFor(topic, high(uint64)))
-  alice.admit(carolKs.encIdentity())
+  alice.admitAs(aliceKs, carolKs.encIdentity())
   alice.publish(proposeEvent(id, effectJson))          # the re-announce: rebuilt, so no after
   doAssert alice.held("intent/" & id & "/propose").after == original.after, "the stored copy is kept"
   doAssert carol.held("intent/" & id & "/propose").after == original.after, "the joiner gets the original order"
@@ -118,8 +118,7 @@ block:
   let a = newCoordinationSession(newLocalTransport(net2), newEpochCrypto(aliceKs, t2), t2)
   let b = newCoordinationSession(newLocalTransport(net2), newEpochJoiner(bobKs), t2)
   b.requestJoin(bobKs.joinRequestFor(t2, high(uint64)))
-  a.admit(bobKs.encIdentity())
-  a.publish(membershipEvent(1, hex(bobKs.encIdentity().toBytes())))
+  a.admitAs(aliceKs, bobKs.encIdentity())      # publishes the admit, signed (exo-045)
   b.poll()
   # two effects, the SECOND proposed one's propose id sorting first
   var ea, eb: string

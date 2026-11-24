@@ -134,7 +134,7 @@ proc correct(k: int): bool =
     let w = wallets()
     var r = newRoom4("/muster/1/private-equal/proto")
     let same = splitEffectJson(LezChain, "LEZ", Total, alice, payToOf(w.alice, aliceKs),
-                               evenShares(Total, alice, @[bob, carol]), "equal")
+                               evenShares(Total, alice, @[bob, carol], distinctAmounts = false), "equal")
     let refused = r.propose(LezPolicy, same)
     return refused.startsWith("refused:") and "differ" in refused
   let (source, note, report) = decode(k)

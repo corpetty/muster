@@ -46,12 +46,19 @@ proc correct(k: int): bool =
   let other = p2wpkhAddress("tb", daveKs.btcPubKey())
   # 1. the driver: dust, and payTo of another network
   let drv = newSplitDriver(BtcSplitFamily, Testnet, roster)
+  # two shares, `share` and one sat more: every share of a split differs (exo-3b3.14), so
+  # the smaller, `share`, decides dust
   proc splitWith(to: string): Effect =
-    effectFromJson(splitEffectJson(Testnet, "BTC", $(3'u64 * share), alice, to,
-                                   @[SplitShare(who: bob, amount: $share), SplitShare(who: carol, amount: $share)], "s8"))
+    effectFromJson(splitEffectJson(Testnet, "BTC", $(3'u64 * share + 1), alice, to,
+                                   @[SplitShare(who: bob, amount: $share), SplitShare(who: carol, amount: $(share + 1))], "s8"))
   let refusal = drv.signRefusal(splitWith(payTo))
   if (share < 546'u64) != ("dust" in refusal): return false
   if share >= 546'u64 and refusal.len > 0: return false
+  # two EQUAL shares are refused too, dust or not (exo-3b3.14): a payment must identify its share
+  let equal = drv.signRefusal(effectFromJson(splitEffectJson(Testnet, "BTC", $(3'u64 * share), alice, payTo,
+    @[SplitShare(who: bob, amount: $share), SplitShare(who: carol, amount: $share)], "s8")))
+  if equal.len == 0: return false
+  if share >= 546'u64 and "differ" notin equal: return false
   for foreign in [p2wpkhAddress("bc", aliceKs.btcPubKey()), p2wpkhAddress("bcrt", aliceKs.btcPubKey())]:
     if drv.signRefusal(splitWith(foreign)).len == 0: return false
   let node = startFakeNode(Testnet)

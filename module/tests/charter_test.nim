@@ -21,6 +21,7 @@ import ../src/coordination/intents
 import ../src/coordination/accounts
 import ../src/coordination/room_charter
 import ../src/coordination/effect_summary
+import ./probes/attested
 
 proc seed(b: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = b)
 proc hx(b: openArray[byte]): string =
@@ -45,6 +46,18 @@ proc propose(effectJson: string): (string, seq[Event]) =
 proc sign(k: EncKeys, id, effectJson: string): Event =
   let m = canonicalize(driverFor(CharterKind), effectFromJson(effectJson))
   contributeEvent(id, edName(k), hx(edSign(k, m.bytes)))
+
+# The charter driver is room-bound: an agreement counts only with its signer's attestation
+# over P (exo-af5). Every fold below reads the log as the live path leaves it — for each
+# proposed charter, a proposer's claim and context, and each member's attestation beside
+# their signature (dave's too: he can attest his own, and it still decides nothing).
+proc attAll(evs: seq[Event]): seq[Event] =
+  result = evs
+  var ids: seq[string]
+  for e in evs:
+    let p = e.key.split('/')
+    if p.len == 3 and p[0] == "intent" and p[2] == "propose" and p[1] notin ids: ids.add p[1]
+  for id in ids: result = withAttestations(result, driverFor, id, signers = [alice, bob, carol, dave])
 
 let circle = circleTemplate(name = "Tuesday circle", purpose = "save together, pay out in turn",
                             members = members, amendK = 2,
@@ -72,11 +85,11 @@ let foundJson = foundingEffect(circle)
 let (foundId, foundEvs) = propose(foundJson)
 block:
   var evs = foundEvs & @[sign(alice, foundId, foundJson), sign(bob, foundId, foundJson)]
-  doAssert not charterInForce(evs, driverFor).found, "two of three founders is not a founding"
+  doAssert not charterInForce(attAll(evs), driverFor).found, "two of three founders is not a founding"
   evs.add sign(dave, foundId, foundJson)
-  doAssert not charterInForce(evs, driverFor).found, "a room member the charter does not name decides nothing"
+  doAssert not charterInForce(attAll(evs), driverFor).found, "a room member the charter does not name decides nothing"
   evs.add sign(carol, foundId, foundJson)
-  let c = charterInForce(evs, driverFor)
+  let c = charterInForce(attAll(evs), driverFor)
   doAssert c.found and c.id == foundId and c.body.name == "Tuesday circle", $c.found
   doAssert c.history == @[foundId]
   echo "2. founded only when all three named members agreed; dave's signature counts for nothing OK"
@@ -87,13 +100,13 @@ let founded = foundEvs & @[sign(alice, foundId, foundJson), sign(bob, foundId, f
 # ── 3. an amendment under the charter's own rule ──────────────────────────────
 var renamed = circle.copy()
 renamed["name"] = %"Tuesday savings circle"
-let amendJson = amendmentEffect(charterInForce(founded, driverFor), renamed)
+let amendJson = amendmentEffect(charterInForce(attAll(founded), driverFor), renamed)
 let (amendId, amendEvs) = propose(amendJson)
 block:
   var evs = founded & amendEvs & @[sign(carol, amendId, amendJson)]
-  doAssert charterInForce(evs, driverFor).id == foundId, "one of the two the rule needs is not enough"
+  doAssert charterInForce(attAll(evs), driverFor).id == foundId, "one of the two the rule needs is not enough"
   evs.add sign(alice, amendId, amendJson)
-  let c = charterInForce(evs, driverFor)
+  let c = charterInForce(attAll(evs), driverFor)
   doAssert c.id == amendId and c.body.name == "Tuesday savings circle"
   doAssert c.history == @[foundId, amendId]
   # what the card counts against: the three it names, though two decide it
@@ -107,22 +120,22 @@ block:
 # ── 4. an amendment NOT under the rule never takes force ──────────────────────
 block:
   # declares k = 1 where the charter in force says 2: agreed by its own count, out of rule
-  var lax = parseJson(amendmentEffect(charterInForce(founded, driverFor), renamed))
+  var lax = parseJson(amendmentEffect(charterInForce(attAll(founded), driverFor), renamed))
   lax["k"] = %1
   lax["body"]["purpose"] = %"whatever one of us says"
   let laxJson = $lax
   let (laxId, laxEvs) = propose(laxJson)
   var evs = founded & laxEvs & @[sign(alice, laxId, laxJson)]
-  doAssert intentState(evs, driverFor, laxId) == "executable", "it is agreed by its own declared count"
-  let c = charterInForce(evs, driverFor)
+  doAssert intentState(attAll(evs), driverFor, laxId) == "executable", "it is agreed by its own declared count"
+  let c = charterInForce(attAll(evs), driverFor)
   doAssert c.id == foundId and laxId in c.outOfRule, "but not under the charter in force"
   # an electorate that swaps in a non-member, likewise
-  var packed = parseJson(amendmentEffect(charterInForce(founded, driverFor), renamed))
+  var packed = parseJson(amendmentEffect(charterInForce(attAll(founded), driverFor), renamed))
   packed["electorate"] = %(@[idOf(alice), idOf(dave), idOf(carol)])
   let packedJson = $packed
   let (packedId, packedEvs) = propose(packedJson)
   evs = founded & packedEvs & @[sign(alice, packedId, packedJson), sign(dave, packedId, packedJson)]
-  doAssert charterInForce(evs, driverFor).id == foundId, "an electorate the charter does not name"
+  doAssert charterInForce(attAll(evs), driverFor).id == foundId, "an electorate the charter does not name"
   # a founding that does not ask every member it names is not a founding
   var thin = parseJson(foundingEffect(circle))
   thin["k"] = %2
@@ -133,20 +146,20 @@ block:
 # ── 5. competing amendments of one charter: one wins, the same everywhere ─────
 var other = circle.copy()
 other["purpose"] = %"save together, lend from the pot"
-let otherJson = amendmentEffect(charterInForce(founded, driverFor), other)
+let otherJson = amendmentEffect(charterInForce(attAll(founded), driverFor), other)
 let (otherId, otherEvs) = propose(otherJson)
 let both = founded & amendEvs & otherEvs &
            @[sign(alice, amendId, amendJson), sign(bob, amendId, amendJson),
              sign(bob, otherId, otherJson), sign(carol, otherId, otherJson)]
 block:
-  let c = charterInForce(both, driverFor)
+  let c = charterInForce(attAll(both), driverFor)
   let winner = min(amendId, otherId)
   doAssert c.id == winner and c.superseded == @[max(amendId, otherId)], c.id
   var r = initRand(267)
   for trial in 0 ..< 20:
     var evs = both & both.filterIt(r.rand(1) == 0)   # duplicates
     r.shuffle(evs)                                     # reorder
-    let c2 = charterInForce(evs, driverFor)
+    let c2 = charterInForce(attAll(evs), driverFor)
     doAssert c2.id == c.id and c2.history == c.history and c2.superseded == c.superseded
   echo "5. two agreed amendments of one charter: the lower id holds, the other superseded; ",
        "20 reorders with duplicates converge (R-2/R-3) OK"
@@ -156,15 +169,15 @@ block:
   let after = founded & amendEvs & @[sign(alice, amendId, amendJson), sign(bob, amendId, amendJson)]
   var third = renamed.copy()
   third["rules"]["issue-quest"] = %("lez-multisig@lez:local:" & repeat("ab", 32))
-  let thirdJson = amendmentEffect(charterInForce(after, driverFor), third)
+  let thirdJson = amendmentEffect(charterInForce(attAll(after), driverFor), third)
   let (thirdId, thirdEvs) = propose(thirdJson)
   # and one still naming the founding charter as prev, agreed after the first amendment
-  let staleJson = amendmentEffect(charterInForce(founded, driverFor), other)
+  let staleJson = amendmentEffect(charterInForce(attAll(founded), driverFor), other)
   let (staleId, staleEvs) = propose(staleJson)
   let evs = after & thirdEvs & staleEvs &
             @[sign(bob, thirdId, thirdJson), sign(carol, thirdId, thirdJson),
               sign(alice, staleId, staleJson), sign(carol, staleId, staleJson)]
-  let c = charterInForce(evs, driverFor)
+  let c = charterInForce(attAll(evs), driverFor)
   doAssert c.history[0] == foundId
   # the stale one competes with amendId (both name the founding charter), not with third
   if amendId < staleId:
@@ -198,13 +211,13 @@ block:
                                              members = @[idOf(carol)], amendK = 1))
     let (soloId, soloEvs) = propose(solo)
     var evs = founded & soloEvs & @[sign(carol, soloId, solo)]
-    let c = charterInForce(evs, driverFor)
+    let c = charterInForce(attAll(evs), driverFor)
     doAssert c.found and c.id == foundId and soloId in c.superseded, "rival " & $i & " displaced the room's charter"
     if soloId < foundId: inc lower else: inc higher
     # and in any order
     var rng = initRand(i)
     rng.shuffle(evs)
-    doAssert charterInForce(evs, driverFor).id == foundId
+    doAssert charterInForce(attAll(evs), driverFor).id == foundId
   doAssert lower > 0, "some rival ids sort below the room's founding: the rule was exercised"
   # a re-founding naming everyone the first named (and more) is agreed by all of them: it holds
   let wider = foundingEffect(circleTemplate(name = "with dave", purpose = "",
@@ -212,14 +225,14 @@ block:
   let (widerId, widerEvs) = propose(wider)
   let evs = founded & widerEvs & @[sign(alice, widerId, wider), sign(bob, widerId, wider),
                                    sign(carol, widerId, wider), sign(dave, widerId, wider)]
-  doAssert charterInForce(evs, driverFor).id == widerId and foundId in charterInForce(evs, driverFor).superseded
+  doAssert charterInForce(attAll(evs), driverFor).id == widerId and foundId in charterInForce(attAll(evs), driverFor).superseded
   # two foundings by groups neither of which includes the other: contested, none in force
   let ab = foundingEffect(circleTemplate(name = "ab", purpose = "", members = @[idOf(alice), idOf(bob)], amendK = 1))
   let cd = foundingEffect(circleTemplate(name = "cd", purpose = "", members = @[idOf(carol), idOf(dave)], amendK = 1))
   let (abId, abEvs) = propose(ab)
   let (cdId, cdEvs) = propose(cd)
   let split = abEvs & cdEvs & @[sign(alice, abId, ab), sign(bob, abId, ab), sign(carol, cdId, cd), sign(dave, cdId, cd)]
-  let c = charterInForce(split, driverFor)
+  let c = charterInForce(attAll(split), driverFor)
   doAssert not c.found and sorted(c.contested) == sorted(@[abId, cdId]), $c.contested
   echo "8. a rival founding by fewer never displaces the room's (", lower, " of 24 sorted first); ",
        "a wider one agreed by all holds; disjoint ones are contested OK"

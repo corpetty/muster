@@ -125,7 +125,7 @@ for (family, kind) in [(P2wshFamily, "btc-p2wsh"), (TapscriptFamily, "btc-tapscr
   let id = liveProposeIntent(r.alice, aliceKs, resolver, policy, effectJson, int64(Now), 1,
                              account = acct.address, ttlSec = Ttl)
   doAssert id.len > 0 and not id.startsWith("refused") and id != "unsupported-driver", id
-  r.alice.publish(readEvent(id, "inputs", "bitcoind://scantxoutset", $parseJson(effectJson)["inputs"]))
+  r.alice.publishRead(aliceKs, id, "inputs", "bitcoind://scantxoutset", $parseJson(effectJson)["inputs"])
   doAssert liveContribute(r.alice, aliceKs, resolver, id, "", "", bindCtx(), Now) == "collecting"
   echo "3. ", family, ": disclosed, proposed, Alice approved in-app through her keystore OK"
 

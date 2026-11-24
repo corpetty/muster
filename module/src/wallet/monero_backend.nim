@@ -87,6 +87,9 @@ type
     failed*: bool
     account*: int
     subaddrIndex*: seq[int]   ## the backend's comma-joined string ("3", "1,4"), parsed
+    height*: int64            ## the block it is in (0 = none yet, or unreadable)
+    unlockTime*: uint64       ## model.rs's unlockTime: 0 none; < 500,000,000 a block height, else unix time
+    unlockUnread*: bool       ## unlockTime was written but could not be read: treated as a lock
 
   History* = object
     read*: ReadState
@@ -282,6 +285,37 @@ proc intOf(v: JsonNode): int64 =
   of JFloat: int64(v.getFloat())
   else: 0
 
+const XmrMaxBlockNumber* = 500_000_000'u64
+  ## CRYPTONOTE_MAX_BLOCK_NUMBER: an unlock_time below it is a block height, at or above a unix time
+
+proc unlockOf(v: JsonNode): tuple[t: uint64, unread: bool] =
+  ## A row's unlockTime: absent or null is no lock; a non-negative integer (or its decimal
+  ## text) is the lock; anything else was written and cannot be read, which is a lock.
+  if v == nil or v.kind == JNull: return (0'u64, false)
+  case v.kind
+  of JInt:
+    if v.getBiggestInt() < 0: (0'u64, true) else: (uint64(v.getBiggestInt()), false)
+  of JString:
+    let t = v.getStr().strip()
+    if t.len == 0 or not t.allCharsInSet(Digits) or t.len > 20: return (0'u64, true)
+    try: (parseBiggestUInt(t), false) except ValueError: (0'u64, true)
+  else: (0'u64, true)
+
+proc lockedAt*(r: HistoryRow, nowUnix: float): string =
+  ## Why a received transfer is still locked ("" = it is not), as wallet2's
+  ## is_tx_spendtime_unlocked reads unlock_time (exo-3b3.14, P5-06): a height is reached once
+  ## the chain's height (the transfer's block plus its confirmations) is at least it; a time
+  ## once now is at least it. A lock the wallet wrote unreadably, or a height lock on a
+  ## transfer in no block yet, is still a lock.
+  if r.unlockUnread: return "its unlock time could not be read"
+  if r.unlockTime == 0: return ""
+  if r.unlockTime < XmrMaxBlockNumber:
+    if r.height <= 0: return "locked until block " & $r.unlockTime
+    if uint64(r.height) + uint64(max(0'i64, r.confirmations)) >= r.unlockTime: return ""
+    return "locked until block " & $r.unlockTime
+  if nowUnix >= float(r.unlockTime): return ""
+  "locked until unix time " & $r.unlockTime
+
 proc history*(b: MoneroBackend, mode = cmNow): History =
   ## history(): the open wallet's transfers, newest first.
   let j = b.call("history", newJArray(), mode)
@@ -293,7 +327,9 @@ proc history*(b: MoneroBackend, mode = cmNow): History =
     result.rows.add HistoryRow(txid: row{"txid"}.getStr().toLowerAscii(), direction: row{"direction"}.getStr(),
                                amount: atomicOf(row{"amount"}), confirmations: intOf(row{"confirmations"}),
                                pending: row{"pending"}.getBool(false), failed: row{"failed"}.getBool(false),
-                               account: int(intOf(row{"account"})), subaddrIndex: indicesOf(row{"subaddrIndex"}))
+                               account: int(intOf(row{"account"})), subaddrIndex: indicesOf(row{"subaddrIndex"}),
+                               height: intOf(row{"height"}),
+                               unlockTime: unlockOf(row{"unlockTime"}).t, unlockUnread: unlockOf(row{"unlockTime"}).unread)
 
 proc balances*(b: MoneroBackend, mode = cmNow): Balances =
   ## balances(0): account 0's total and unlocked amounts ({ok, balance, unlocked, …}).

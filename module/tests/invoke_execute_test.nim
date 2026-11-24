@@ -18,6 +18,7 @@ import ../src/drivers/invoke
 import ../src/drivers/driver
 import ../src/intents/materialization
 import ../src/crypto/curve25519
+import ./probes/attested
 
 proc toHex(b: openArray[byte]): string =
   const d = "0123456789abcdef"
@@ -78,6 +79,9 @@ block:
     policyDeclEvent(id, "invoke"),
     proposeEvent(id, effectJson),
     contributeEvent(id, who, sigHex)]
+  # the invoke driver is room-bound: the endorsement carries the member's attestation
+  # over P, as the live path publishes it (exo-af5)
+  events = withAttestations(events, driverFor, id, signers = [member])
   doAssert intentState(events, driverFor, id) == "executable",
            "one endorsement (k=1) folds the invoke intent to executable"
 

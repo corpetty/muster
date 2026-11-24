@@ -187,7 +187,7 @@ block:
   doAssert lezDrv.signRefusal(e) == "", lezDrv.signRefusal(e)
   doAssert decode(canonicalize(lezDrv, e).bytes).arr.len == 10
   let same = effectFromJson(splitEffectJson(Lez, "LEZ", lq.total, alice, payTo,
-                                            evenShares(lq.total, alice, @[bob, carol]), "Dinner", lq.quote))
+                                            evenShares(lq.total, alice, @[bob, carol], distinctAmounts = false), "Dinner", lq.quote))
   doAssert lezDrv.signRefusal(same).len > 0, "equal shares are still refused on the private rail"
   echo "7. the private split: 12.00 EUR converts to 6 LEZ, signed; its shares stay pairwise distinct OK"
 

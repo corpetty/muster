@@ -19,6 +19,7 @@ RowLayout {
     Layout.fillWidth: true
 
     LogosText {
+        textFormat: Text.PlainText
         text: header.count.length > 0 ? header.text + " · " + header.count : header.text
         color: header.hot ? MusterStyle.needs : Theme.palette.textTertiary
         font.pixelSize: MusterStyle.caption

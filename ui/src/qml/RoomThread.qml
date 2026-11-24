@@ -11,8 +11,9 @@ import Logos.Controls
 // proposals are cards IN the conversation, not a side list. A message whose
 // body is an `intent-ref` card resolves to the live proposal from the
 // verified fold (state + verify + provenance), rendered inline with its own
-// approve affordance; address-share / receipt cards render in place; anything
-// else is plain text.
+// approve affordance; an ask for an address and a shared address render in place,
+// under their verified author; anything else, even JSON shaped like an approval or a
+// receipt, is plain text (exo-3b3.18: a typed card never comes from a chat body).
 Rectangle {
     required property var room   // the Room this piece belongs to (Room.qml's roomItem)
 
@@ -22,6 +23,19 @@ Rectangle {
     Layout.fillHeight: true
     // the page itself, not a box on it: the conversation owns the screen (exo-720.7)
     color: "transparent"
+
+    // The only card kinds drawn from a message body (module coordination/chat_cards.nim,
+    // ChatCardKinds): a reference, whose card is the verified fold's, an ask for an address
+    // and a shared address. The module refuses the kinds it posts itself as chat.
+    readonly property var chatCardKinds: ["intent-ref", "address-request", "address-share"]
+    function chatCardOf(body) {
+        try {
+            var o = JSON.parse(body);
+            if (!o || typeof o !== "object" || Array.isArray(o)) return null;
+            var k = String(o.kind || o.type || "");
+            return threadRoot.chatCardKinds.indexOf(k) >= 0 ? o : null;
+        } catch (e) { return null; }
+    }
 
     // the pinned line's Review (RoomPinned): scroll to that proposal's card
     Connections {
@@ -68,16 +82,11 @@ Rectangle {
             // one intent; the intent is one thing, so show it once.
             implicitHeight: msg.isDupRef ? 0 : rowCol.implicitHeight
 
-            // A body that parses to an object with a `kind` is a typed card.
-            // `intent-ref` points at a proposal in the verified fold; other
-            // kinds (address-share / receipt) are peer data rendered in place;
-            // anything else is plain chat text.
-            readonly property var parsedCard: {
-                try {
-                    var o = JSON.parse(modelData.body);
-                    return (o && (o.kind || o.type)) ? o : null;
-                } catch (e) { return null; }
-            }
+            // A body naming one of chatCardKinds is a card: `intent-ref` points at a
+            // proposal in the verified fold; an address-request / address-share is the
+            // author's own ask or disclosure, drawn under their verified name. Anything
+            // else is plain chat text, whatever JSON it holds.
+            readonly property var parsedCard: threadRoot.chatCardOf(modelData.body)
             readonly property bool isIntentRef:
                 msg.parsedCard && String(msg.parsedCard.kind || "") === "intent-ref"
             readonly property var liveIntent:
@@ -118,10 +127,7 @@ Rectangle {
                                            && (!msg.prev || !msg.prev.ts
                                                || MusterStyle.dayKey(msg.prev.ts) !== MusterStyle.dayKey(modelData.ts))
             function who(a) { return String(a || "").replace(/^0x/, "").toLowerCase(); }
-            function isChat(m) {
-                try { var o = JSON.parse(m.body); return !(o && (o.kind || o.type)); }
-                catch (e) { return true; }
-            }
+            function isChat(m) { return threadRoot.chatCardOf(m.body) === null; }
             readonly property bool continues: !msg.newDay && !!msg.prev && msg.parsedCard === null
                                               && msg.isChat(msg.prev)
                                               && msg.who(msg.prev.author) === msg.who(modelData.author)
@@ -148,6 +154,7 @@ Rectangle {
                     spacing: Theme.spacing.medium
                     Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.palette.borderSubtle }
                     LogosText {
+                        textFormat: Text.PlainText
                         text: msg.newDay ? MusterStyle.dayLabel(modelData.ts) : ""
                         color: Theme.palette.textTertiary
                         font.pixelSize: MusterStyle.caption
@@ -283,6 +290,7 @@ Rectangle {
                     spacing: Theme.spacing.tiny
 
                     LogosText {
+                        textFormat: Text.PlainText
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
                         text: qsTr("Paste a signature made elsewhere over exactly what this proposal "
@@ -362,6 +370,7 @@ Rectangle {
                                                ? room.outsideImport : null
 
                     LogosText {
+                        textFormat: Text.PlainText
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
                         text: qsTr("Give this PSBT to a signer outside muster (a hardware signer, Sparrow, "
@@ -373,6 +382,7 @@ Rectangle {
                     }
 
                     LogosText {
+                        textFormat: Text.PlainText
                         visible: !!(outsideBox.exp && outsideBox.exp.error)
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
@@ -391,6 +401,7 @@ Rectangle {
                         border.color: Theme.palette.borderSubtle
                         clip: true
                         TextEdit {
+                            textFormat: TextEdit.PlainText
                             id: psbtOut
                             objectName: "roomOutsidePsbt"
                             anchors.fill: parent
@@ -439,6 +450,7 @@ Rectangle {
                     }
 
                     LogosText {
+                        textFormat: Text.PlainText
                         objectName: "roomOutsideImportResult"
                         visible: outsideBox.imp !== null
                         Layout.fillWidth: true
@@ -516,6 +528,13 @@ Rectangle {
                         && String(room.roomSubmit.id || "") === String((msg.liveIntent && msg.liveIntent.id) || ""))
                         ? room.roomSubmit : null
                     // the invoke-execute outcome, only when it names THIS intent
+                    // Run the action runs it with THIS member's module access, so it is offered
+                    // only to a member who endorsed it, and asks first, showing the exact call
+                    // (exo-3b3.18, audit P4-06). The module refuses anyone else too.
+                    readonly property bool iEndorsed: !!(msg.liveIntent && msg.liveIntent.approvedByMe)
+                    readonly property string exactCall: String((msg.liveIntent && msg.liveIntent.summary
+                                                                && msg.liveIntent.summary.text) || "")
+                    property bool confirmRun: false
                     readonly property var execOutcome: (room.executeResult
                         && String(room.executeResult.id || "") === String((msg.liveIntent && msg.liveIntent.id) || ""))
                         ? room.executeResult : null
@@ -524,6 +543,7 @@ Rectangle {
                         Layout.fillWidth: true
                         spacing: Theme.spacing.small
                         LogosText {
+                            textFormat: Text.PlainText
                             Layout.fillWidth: true
                             wrapMode: Text.WordWrap
                             // Track the folded state so the line doesn't keep
@@ -562,9 +582,9 @@ Rectangle {
                         ActionButton {
                             objectName: "roomExecuteButton"
                             visible: readyBox.isInvoke && readyBox.st === "executable"
+                                     && readyBox.iEndorsed && !readyBox.confirmRun
                             text: qsTr("Run the action")
-                            onClicked: if (room.backend)
-                                           room.backend.executeInRoom(String((msg.liveIntent && msg.liveIntent.id) || ""));
+                            onClicked: readyBox.confirmRun = true
                         }
                         ActionButton {
                             objectName: "roomSubmitButton"
@@ -574,6 +594,58 @@ Rectangle {
                             text: qsTr("Settle on-chain")
                             onClicked: if (room.backend)
                                            room.backend.submitInRoom(String((msg.liveIntent && msg.liveIntent.id) || ""));
+                        }
+                    }
+
+                    // not an endorser: who may run it, said plainly
+                    LogosText {
+                        textFormat: Text.PlainText
+                        objectName: "roomExecuteNotEndorser"
+                        visible: readyBox.isInvoke && readyBox.st === "executable" && !readyBox.iEndorsed
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: qsTr("Only a member who endorsed this action runs it: it runs with their own module access.")
+                        color: Theme.palette.textSecondary
+                        font.pixelSize: MusterStyle.caption
+                    }
+                    // the confirmation: the exact call, then Run it / Cancel
+                    ColumnLayout {
+                        objectName: "roomExecuteConfirm"
+                        visible: readyBox.isInvoke && readyBox.st === "executable"
+                                 && readyBox.iEndorsed && readyBox.confirmRun
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing.small
+                        LogosText {
+                            textFormat: Text.PlainText
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            text: qsTr("This runs, with your own module access:")
+                            color: Theme.palette.text
+                            font.pixelSize: MusterStyle.caption
+                            font.weight: Theme.typography.weightBold
+                        }
+                        SelectableText {
+                            objectName: "roomExecuteCall"
+                            Layout.fillWidth: true
+                            text: readyBox.exactCall.replace(/^an action: /, "")
+                        }
+                        RowLayout {
+                            spacing: Theme.spacing.small
+                            ActionButton {
+                                objectName: "roomExecuteConfirmButton"
+                                text: qsTr("Run it")
+                                onClicked: {
+                                    readyBox.confirmRun = false;
+                                    if (room.backend)
+                                        room.backend.executeInRoom(String((msg.liveIntent && msg.liveIntent.id) || ""));
+                                }
+                            }
+                            ActionButton {
+                                objectName: "roomExecuteCancel"
+                                text: qsTr("Cancel")
+                                variant: LogosButton.Variant.Secondary
+                                onClicked: readyBox.confirmRun = false
+                            }
                         }
                     }
 
@@ -636,7 +708,7 @@ Rectangle {
                                 txClip.selectAll(); txClip.copy();
                                 copied = true; copiedTimer.restart();
                             }
-                            TextEdit { id: txClip; visible: false; width: 0; height: 0 }
+                            TextEdit { textFormat: TextEdit.PlainText; id: txClip; visible: false; width: 0; height: 0 }
                             Timer { id: copiedTimer; interval: 1500; onTriggered: copyTx.copied = false }
                         }
                     }
@@ -645,6 +717,7 @@ Rectangle {
                     // The core never reports a false success — a gated or failed
                     // call is an error here, not a silent "ran".
                     LogosText {
+                        textFormat: Text.PlainText
                         visible: readyBox.execOutcome !== null
                         Layout.fillWidth: true
                         wrapMode: Text.WrapAnywhere
@@ -682,6 +755,7 @@ Rectangle {
                 // a ref the fold hasn't caught up to yet — a quiet placeholder,
                 // never an invented card.
                 LogosText {
+                    textFormat: Text.PlainText
                     visible: msg.isIntentRef && msg.liveIntent === null
                     Layout.fillWidth: true
                     text: qsTr("· a proposal")
@@ -690,7 +764,21 @@ Rectangle {
                     font.pixelSize: MusterStyle.caption
                 }
 
-                // ── other typed cards (address-share / receipt) ────────────
+                // ── an ask for an address, or a shared one: always under who posted it,
+                //    by the name the module resolves from the message's verified author ──
+                LogosText {
+                    textFormat: Text.PlainText
+                    objectName: "cardAuthor"
+                    visible: msg.parsedCard !== null && !msg.isIntentRef
+                    Layout.fillWidth: true
+                    text: (String((msg.parsedCard || {}).kind || "") === "address-share"
+                               ? qsTr("%1 shared their own address") : qsTr("%1 asked for an address"))
+                              .arg(msg.authorName)
+                          + (modelData.ts ? " · " + MusterStyle.ago(modelData.ts) : "")
+                    color: Theme.palette.textSecondary
+                    font.pixelSize: MusterStyle.caption
+                    font.weight: Theme.typography.weightBold
+                }
                 MusterCard {
                     visible: msg.parsedCard !== null && !msg.isIntentRef
                     Layout.fillWidth: true
@@ -732,12 +820,14 @@ Rectangle {
                         Layout.topMargin: msg.index > 0 && !msg.newDay ? Theme.spacing.small : 0
                         spacing: Theme.spacing.small
                         LogosText {
+                            textFormat: Text.PlainText
                             text: msg.authorName
                             color: modelData.self ? Theme.palette.textSecondary : Theme.palette.text
                             font.pixelSize: MusterStyle.caption
                             font.weight: Theme.typography.weightBold
                         }
                         LogosText {
+                            textFormat: Text.PlainText
                             objectName: "messageTime"
                             visible: !!modelData.ts
                             text: MusterStyle.ago(modelData.ts)
@@ -748,6 +838,7 @@ Rectangle {
                         }
                     }
                     LogosText {
+                        textFormat: Text.PlainText
                         Layout.fillWidth: true
                         text: String(modelData.body || "")
                         color: modelData.pending || modelData.failed ? Theme.palette.textSecondary : Theme.palette.text
@@ -759,12 +850,14 @@ Rectangle {
                         visible: !!modelData.pending || !!modelData.failed
                         spacing: Theme.spacing.small
                         LogosText {
+                            textFormat: Text.PlainText
                             objectName: modelData.failed ? "messageNotSent" : modelData.pending ? "messageSending" : ""
                             text: modelData.failed ? qsTr("Not sent") : qsTr("Sending…")
                             color: modelData.failed ? MusterStyle.warning : Theme.palette.textTertiary
                             font.pixelSize: MusterStyle.caption
                         }
                         LogosText {
+                            textFormat: Text.PlainText
                             id: retryLink
                             objectName: modelData.failed ? "messageRetry" : ""
                             signal clicked()

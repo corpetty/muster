@@ -41,7 +41,7 @@ proc res(s: CoordinationSession): DriverFor =
 
 # ── 1. the ceremony ───────────────────────────────────────────────────────────
 const Cid = "treasury-1"
-discard frostCeremonyOpen(r.alice, Cid, "regtest", 2, 3)
+discard frostCeremonyOpen(r.alice, aliceKs, Cid, "regtest", 2, 3)
 pollAll()
 for (s, ks) in members: discard frostCeremonyJoin(s, ks, Cid)
 var outcomes: seq[string]
@@ -72,7 +72,7 @@ let id = liveProposeIntent(r.alice, aliceKs, res(r.alice), policy, effectJson, i
                            account = a.address, ttlSec = Ttl)
 doAssert id.startsWith("0x"), id
 # the coins came from the proposer's node: the read is recorded (invariant 10), as the composer does
-r.alice.publish(readEvent(id, "inputs", "bitcoind:scantxoutset", $parseJson(effectJson)["inputs"]))
+r.alice.publishRead(aliceKs, id, "inputs", "bitcoind:scantxoutset", $parseJson(effectJson)["inputs"])
 pollAll()
 block:
   let got = liveFrostContribute(r.alice, aliceKs, res(r.alice), id, Now)
@@ -120,7 +120,7 @@ let effectJson2 = buildFrostSpend(acct, utxos, "bcrt1qw508d6qejxtdg4y5r3zarvary0
 let id2 = liveProposeIntent(r.alice, aliceKs, res(r.alice), policy, effectJson2,
                             int64(Now), 2, account = a.address, ttlSec = Ttl)
 doAssert id2.startsWith("0x"), id2
-r.alice.publish(readEvent(id2, "inputs", "bitcoind:scantxoutset", $parseJson(effectJson2)["inputs"]))
+r.alice.publishRead(aliceKs, id2, "inputs", "bitcoind:scantxoutset", $parseJson(effectJson2)["inputs"])
 pollAll()
 block:
   let got = liveFrostContribute(r.alice, aliceKs, res(r.alice), id2, Now)
@@ -157,7 +157,7 @@ let effectJson3 = buildFrostSpend(acct, utxos, "bcrt1qw508d6qejxtdg4y5r3zarvary0
 let id3 = liveProposeIntent(r.alice, aliceKs, res(r.alice), policy, effectJson3,
                             int64(Now), 3, account = a.address, ttlSec = Ttl)
 doAssert id3.startsWith("0x"), id3
-r.alice.publish(readEvent(id3, "inputs", "bitcoind:scantxoutset", $parseJson(effectJson3)["inputs"]))
+r.alice.publishRead(aliceKs, id3, "inputs", "bitcoind:scantxoutset", $parseJson(effectJson3)["inputs"])
 pollAll()
 let aliceHost = toHex(aliceKs.frostHostPubkey(ceremonyLabel(Cid)))
 var proposeIds: seq[EventId]

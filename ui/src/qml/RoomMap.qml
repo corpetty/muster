@@ -531,12 +531,14 @@ Rectangle {
         ColumnLayout {
             spacing: 2
             LogosText {
+                textFormat: Text.PlainText
                 text: qsTr("Room map")
                 color: Theme.palette.text
                 font.pixelSize: MusterStyle.subtitle
                 font.weight: Theme.typography.weightBold
             }
             LogosText {
+                textFormat: Text.PlainText
                 objectName: "roomMapNewSince"
                 visible: map.newCount > 0
                 text: qsTr("%n new since you last looked", "", map.newCount)
@@ -549,6 +551,7 @@ Rectangle {
                 HoverHandler { cursorShape: Qt.PointingHandCursor }
             }
             LogosText {
+                textFormat: Text.PlainText
                 text: qsTr("%n entries you can open", "", map.replayOrder.length)
                       + (map.readFrom > 0 ? qsTr(" · from epoch %1, when you joined").arg(map.readFrom) : "")
                 color: Theme.palette.textSecondary
@@ -610,6 +613,7 @@ Rectangle {
                 }
             }
             LogosText {
+                textFormat: Text.PlainText
                 visible: membrane.opacity > 0.5
                 x: map.cx - width / 2
                 y: map.cy - map.ringR - height - 4
@@ -637,6 +641,7 @@ Rectangle {
             }
             // which part of a long log the Log lens shows
             LogosText {
+                textFormat: Text.PlainText
                 objectName: "roomMapLogWindow"
                 visible: map.lens === "log" && map.replayOrder.length > map.logWindow
                 x: 48; y: 46
@@ -655,6 +660,7 @@ Rectangle {
                     Rectangle { anchors.fill: parent; color: index % 2 ? MusterStyle.neutralSoft : "transparent"; opacity: 0.5 }
                     Rectangle { width: 1; height: parent.height; color: Theme.palette.borderSubtle }
                     LogosText {
+                        textFormat: Text.PlainText
                         x: 8; y: 6 + (index % 2) * 14
                         text: String(modelData.admitted || "").length === 0 ? qsTr("epoch %1").arg(modelData.epoch)
                                           : qsTr("epoch %1 · %2 admitted").arg(modelData.epoch).arg(map.memberName(modelData.admitted))
@@ -766,11 +772,13 @@ Rectangle {
                             }
                             Avatar { x: -22; y: -22; size: 44; identity: parent.hex; name: map.memberName(node.modelData.id) }
                             LogosText {
+                                textFormat: Text.PlainText
                                 x: -width / 2; y: 28
                                 text: map.memberName(node.modelData.id) + (parent.self ? qsTr(" (this device)") : "")
                                 color: Theme.palette.text; font.pixelSize: MusterStyle.caption
                             }
                             LogosText {
+                                textFormat: Text.PlainText
                                 x: -width / 2; y: 44
                                 readonly property int joined: Number((node.modelData.attrs || {}).joined)
                                 text: joined >= 0 ? qsTr("joined epoch %1").arg(joined) : ""
@@ -803,6 +811,7 @@ Rectangle {
                                 }
                             }
                             LogosText {
+                                textFormat: Text.PlainText
                                 x: -width / 2; y: -height / 2 - 2
                                 width: Math.min(implicitWidth, 2 * node.r - 10)
                                 horizontalAlignment: Text.AlignHCenter
@@ -831,6 +840,7 @@ Rectangle {
                                 border.width: 1.2
                             }
                             LogosText {
+                                textFormat: Text.PlainText
                                 x: -width / 2; y: node.r + 6
                                 text: node.kind === "account" ? String((node.modelData.attrs || {}).family || qsTr("account"))
                                     : node.kind === "signer" ? qsTr("key %1").arg(map.shortId(node.modelData.id.slice(2)))
@@ -858,16 +868,19 @@ Rectangle {
                                             : parent.fields.length > 0 ? MusterStyle.info : Theme.palette.border
                             }
                             LogosText {
+                                textFormat: Text.PlainText
                                 x: -width / 2; y: -parent.h / 2 + 6
                                 text: map.obsWord(node.modelData.id, 0)
                                 color: Theme.palette.text; font.pixelSize: MusterStyle.caption
                             }
                             LogosText {
+                                textFormat: Text.PlainText
                                 x: -width / 2; y: -parent.h / 2 + 22
                                 text: map.obsWord(node.modelData.id, 1)
                                 color: Theme.palette.textTertiary; font.pixelSize: MusterStyle.badge
                             }
                             LogosText {
+                                textFormat: Text.PlainText
                                 id: fieldText
                                 visible: parent.big
                                 x: -parent.w / 2 + 10; y: -parent.h / 2 + 42
@@ -906,6 +919,7 @@ Rectangle {
                                               ? MusterStyle.colorFor(String(parent.a.account).slice(2)) : Theme.palette.text
                             }
                             LogosText {
+                                textFormat: Text.PlainText
                                 readonly property bool below: map.lens === "prov" || node.modelData.seq % 2 === 0
                                 visible: map.lens !== "log" || map.logPitch >= 46
                                          || map.hovered === node.modelData.id || map.selected === node.modelData.id
@@ -928,6 +942,7 @@ Rectangle {
                                 LogosIcon { anchors.centerIn: parent; width: 18; height: 18; source: MusterStyle.icon("lock"); color: Theme.palette.textTertiary }
                             }
                             LogosText {
+                                textFormat: Text.PlainText
                                 x: -width / 2; y: node.r + 6
                                 text: qsTr("Before you joined: sealed to you")
                                 color: Theme.palette.textSecondary; font.pixelSize: MusterStyle.badge
@@ -945,9 +960,9 @@ Rectangle {
                             Column {
                                 anchors.centerIn: parent
                                 spacing: 2
-                                LogosText { anchors.horizontalCenter: parent.horizontalCenter; text: qsTr("Signed bytes"); color: Theme.palette.text; font.pixelSize: MusterStyle.caption }
-                                LogosText { anchors.horizontalCenter: parent.horizontalCenter; text: qsTr("materialization + P"); color: Theme.palette.textTertiary; font.pixelSize: MusterStyle.badge; font.family: MusterStyle.mono }
-                                LogosText { anchors.horizontalCenter: parent.horizontalCenter; text: qsTr("re-derived on each device"); color: MusterStyle.settled; font.pixelSize: MusterStyle.badge }
+                                LogosText { textFormat: Text.PlainText; anchors.horizontalCenter: parent.horizontalCenter; text: qsTr("Signed bytes"); color: Theme.palette.text; font.pixelSize: MusterStyle.caption }
+                                LogosText { textFormat: Text.PlainText; anchors.horizontalCenter: parent.horizontalCenter; text: qsTr("materialization + P"); color: Theme.palette.textTertiary; font.pixelSize: MusterStyle.badge; font.family: MusterStyle.mono }
+                                LogosText { textFormat: Text.PlainText; anchors.horizontalCenter: parent.horizontalCenter; text: qsTr("re-derived on each device"); color: MusterStyle.settled; font.pixelSize: MusterStyle.badge }
                             }
                         }
                     }
@@ -979,6 +994,7 @@ Rectangle {
                         id: chipRow
                         anchors { fill: parent; leftMargin: Theme.spacing.medium; rightMargin: Theme.spacing.tiny }
                         LogosText {
+                            textFormat: Text.PlainText
                             Layout.fillWidth: true
                             text: qsTr("Showing one proposal: %1").arg(map.intentWord(map.crossingsFilter))
                             color: MusterStyle.needsText
@@ -993,12 +1009,14 @@ Rectangle {
                     }
                 }
                 LogosText {
+                    textFormat: Text.PlainText
                     text: qsTr("What crossed the room's boundary")
                     color: Theme.palette.text
                     font.pixelSize: MusterStyle.subtitle
                     font.weight: Theme.typography.weightBold
                 }
                 LogosText {
+                    textFormat: Text.PlainText
                     objectName: "roomMapCrossingsSummary"
                     Layout.fillWidth: true
                     wrapMode: Text.Wrap
@@ -1030,6 +1048,7 @@ Rectangle {
                     anchors { fill: parent; margins: Theme.spacing.small }
                     spacing: Theme.spacing.medium
                     LogosText {
+                        textFormat: Text.PlainText
                         Layout.preferredWidth: 44
                         Layout.alignment: Qt.AlignTop
                         text: row.modelData.seq < 0 ? qsTr("all") : "#" + (map.rank(row.modelData.seq) + 1)
@@ -1037,6 +1056,7 @@ Rectangle {
                         font.pixelSize: MusterStyle.caption; font.family: MusterStyle.mono
                     }
                     LogosText {
+                        textFormat: Text.PlainText
                         Layout.preferredWidth: 46
                         Layout.alignment: Qt.AlignTop
                         text: row.dir === "out" ? qsTr("OUT →") : row.dir === "join" ? qsTr("JOIN +") : qsTr("IN ←")
@@ -1048,6 +1068,7 @@ Rectangle {
                         Layout.fillWidth: true
                         spacing: 2
                         LogosText {
+                            textFormat: Text.PlainText
                             Layout.fillWidth: true
                             wrapMode: Text.Wrap
                             text: map.crossingTitle(row.modelData)
@@ -1055,6 +1076,7 @@ Rectangle {
                             font.pixelSize: MusterStyle.body
                         }
                         LogosText {
+                            textFormat: Text.PlainText
                             Layout.fillWidth: true
                             wrapMode: Text.Wrap
                             text: String(row.modelData.mechanism || "")
@@ -1073,6 +1095,7 @@ Rectangle {
         }
 
         LogosText {
+            textFormat: Text.PlainText
             anchors { left: parent.left; bottom: parent.bottom; margins: Theme.spacing.small }
             width: Math.min(parent.width - 2 * Theme.spacing.small, 520)
             wrapMode: Text.Wrap
@@ -1230,11 +1253,13 @@ Rectangle {
                 width: parent.width
                 spacing: Theme.spacing.small
                 LogosText {
+                    textFormat: Text.PlainText
                     text: inspector.info.kicker
                     color: Theme.palette.textTertiary
                     font.pixelSize: MusterStyle.badge; font.family: MusterStyle.mono
                 }
                 LogosText {
+                    textFormat: Text.PlainText
                     objectName: "roomMapInspectorTitle"
                     Layout.fillWidth: true
                     text: inspector.info.title
@@ -1245,6 +1270,7 @@ Rectangle {
                 }
                 StatusPill { visible: inspector.info.pill.length > 0; text: inspector.info.pill; tone: inspector.info.tone }
                 LogosText {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     visible: text.length > 0
                     text: inspector.info.lead
@@ -1259,6 +1285,7 @@ Rectangle {
                         Layout.fillWidth: true
                         spacing: Theme.spacing.small
                         LogosText {
+                            textFormat: Text.PlainText
                             Layout.preferredWidth: 120
                             Layout.maximumWidth: 120
                             Layout.alignment: Qt.AlignTop
@@ -1268,6 +1295,7 @@ Rectangle {
                             font.pixelSize: MusterStyle.caption
                         }
                         LogosText {
+                            textFormat: Text.PlainText
                             Layout.fillWidth: true
                             text: modelData[1]
                             wrapMode: Text.WrapAtWordBoundaryOrAnywhere
@@ -1284,6 +1312,7 @@ Rectangle {
                     radius: 6
                     color: MusterStyle.settledSoft
                     LogosText {
+                        textFormat: Text.PlainText
                         id: guarantee
                         anchors { fill: parent; margins: Theme.spacing.small }
                         text: inspector.info.guarantee
@@ -1294,6 +1323,7 @@ Rectangle {
                 }
                 // what each guarantee is, against whom, and how (imperative / motivational / exposed)
                 LogosText {
+                    textFormat: Text.PlainText
                     visible: inspector.info.facets.length > 0
                     text: qsTr("WHAT IT GUARANTEES")
                     color: Theme.palette.textTertiary
@@ -1310,6 +1340,7 @@ Rectangle {
                             spacing: Theme.spacing.small
                             StatusPill { text: map.credWord(String(modelData["class"])); tone: map.credTone(String(modelData["class"])) }
                             LogosText {
+                                textFormat: Text.PlainText
                                 Layout.fillWidth: true
                                 wrapMode: Text.Wrap
                                 text: String(modelData.about) + (String(modelData.party || "").length > 0 ? qsTr(" · relies on %1").arg(modelData.party) : "")
@@ -1318,6 +1349,7 @@ Rectangle {
                             }
                         }
                         LogosText {
+                            textFormat: Text.PlainText
                             Layout.fillWidth: true
                             wrapMode: Text.Wrap
                             text: String(modelData.mechanism)
@@ -1327,6 +1359,7 @@ Rectangle {
                     }
                 }
                 LogosText {
+                    textFormat: Text.PlainText
                     visible: inspector.info.reliance.length > 0
                     text: qsTr("WHAT IT RELIES ON")
                     color: Theme.palette.textTertiary
@@ -1341,6 +1374,7 @@ Rectangle {
                         spacing: Theme.spacing.small
                         StatusPill { text: map.credWord(modelData.cred); tone: map.credTone(modelData.cred) }
                         LogosText {
+                            textFormat: Text.PlainText
                             Layout.fillWidth: true
                             wrapMode: Text.Wrap
                             text: modelData.text
@@ -1350,6 +1384,7 @@ Rectangle {
                     }
                 }
                 LogosText {
+                    textFormat: Text.PlainText
                     visible: inspector.info.links.length > 0
                     text: qsTr("CONNECTIONS")
                     color: Theme.palette.textTertiary
@@ -1363,6 +1398,7 @@ Rectangle {
                         spacing: Theme.spacing.small
                         StatusPill { text: map.credWord(modelData.cred); tone: map.credTone(modelData.cred) }
                         LogosText {
+                            textFormat: Text.PlainText
                             Layout.fillWidth: true
                             wrapMode: Text.Wrap
                             text: modelData.text + (String(modelData.party || "").length > 0 ? qsTr(" · relies on %1").arg(modelData.party) : "")
@@ -1378,8 +1414,9 @@ Rectangle {
                         required property var modelData
                         Layout.fillWidth: true
                         spacing: 2
-                        LogosText { text: modelData[0]; color: Theme.palette.textSecondary; font.pixelSize: MusterStyle.caption }
+                        LogosText { textFormat: Text.PlainText; text: modelData[0]; color: Theme.palette.textSecondary; font.pixelSize: MusterStyle.caption }
                         TextEdit {
+                            textFormat: TextEdit.PlainText
                             objectName: "roomMapFingerprint"
                             Layout.fillWidth: true
                             readOnly: true
@@ -1401,6 +1438,7 @@ Rectangle {
                     placeholderText: qsTr("Another member's fingerprint")
                 }
                 LogosText {
+                    textFormat: Text.PlainText
                     objectName: "roomMapCompareResult"
                     readonly property var res: map.compareFingerprint(compareField.text)
                     visible: compareField.visible && compareField.text.trim().length > 0
@@ -1751,6 +1789,7 @@ Rectangle {
                     }
                 }
                 LogosText {
+                    textFormat: Text.PlainText
                     objectName: "roomMapNow"
                     Layout.fillWidth: true
                     elide: Text.ElideRight

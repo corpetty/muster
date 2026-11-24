@@ -12,6 +12,7 @@ include muster_gen
 
 import std/[json, tables, strutils, os, algorithm, times, sets, sequtils, options]
 import ../src/dcbor/dcbor
+import ../src/security/private_files   # owner-only files beside the keystore (exo-863)
 import ../src/drivers/driver
 import ../src/drivers/safe
 import ../src/drivers/threshold      # a second coordination policy (Ed25519 k-of-n)
@@ -138,6 +139,8 @@ import ../src/coordination/xmr_request  # …and in XMR: a monero: link to pay f
 import ../src/wallet/monero_backend_lp  # …monero_wallet_backend over lp_*: reads and one mint, never a spend
 import ../src/storage/storage_lp       # FileShare: storage_module over lp_* (exo-4d0.2)
 import ../src/storage/storage_readiness # FileShare: where storage_module stands, registry first
+import ../src/coordination/chat_cards  # which cards a chat body may be (exo-3b3.18)
+import ../src/coordination/invoke_run  # who may run an executable module action (exo-3b3.18)
 import ../src/coordination/swarm       # FileShare: the room as tracker (exo-4d0.4)
 import ../src/coordination/swarm_live  # FileShare: share, fetch and seed from a pump (exo-4d0.5)
 import std/mimetypes
@@ -241,6 +244,7 @@ proc msigPrivFor(chain: string, program, createKey: seq[byte]): MsigPrivate   ##
 proc questProgram(): tuple[ok: bool, q: seq[byte], err: string]   ## forward — the quest program setting (exo-267.8)
 proc circleNow(): tuple[ok: bool, setup: CircleSetup, view: CircleView, chain: LezMultisigLive,
                         acct: LezMultisigAccount, err: string]   ## forward — the room's circle (exo-267.3)
+proc invitersOf(ctopic: string): seq[Member]   ## forward — who invited us to a room (exo-3b3)
 proc memberChangePump()   ## forward — removals the chain executed, carried into the room (exo-267.6)
 proc evmPlatform(): bool               ## forward — EVM chains read through eth_rpc_module (exo-d4d.3)
 proc platformRegistry(): tuple[ok: bool, scope: string, chains: seq[PlatformChain]]   ## forward — its registry
@@ -317,6 +321,9 @@ var gRelayer = "self"
 # holds the person's chains and endpoints device-wide (Basecamp); "url" = gRpcUrl, muster's
 # own setting (the runner, anvil); "auto" = the platform when it offers a chain, else the URL.
 var gEvmChains = getEnv("MUSTER_EVM_CHAINS", "auto")
+var gEvmConfirmations = getEnv("MUSTER_EVM_CONFIRMATIONS", "")
+  ## how deep an EVM split payment's block must be before this member's client confirms it
+  ## (exo-3b3.15): "" = 1 on the local dev chain (anvil, eip155:31337), 12 elsewhere
 var gBtcRpc = getEnv("MUSTER_BTC_RPC", "")   ## the user's Bitcoin node, "http://user:pass@host:port"; "" = none (exo-a50.2.6)
 var gXmrMsigRpc = getEnv("MUSTER_XMR_MSIG_RPC", "")
   ## the member's own monero-wallet-rpc for a Monero multisig (ADR-020): it holds their key
@@ -378,9 +385,16 @@ var gMixSaved = false               ## did the user persist a mix choice? (else 
 
 # Persist the infra settings beside the keystore, so a user's chosen endpoints
 # survive a restart. Best-effort — a missing/malformed file leaves the defaults.
+
+proc instanceDir(): string =
+  ## Where this instance keeps its files: the host's per-instance directory, else
+  ## MUSTER_DATA_DIR, else <tmp>/muster. moduleKeystore checks, before it opens or mints an
+  ## identity there, that the directory is this user's own (exo-863).
+  result = context().instancePersistencePath
+  if result.len == 0: result = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
+
 proc settingsPath(): string =
-  var dir = context().instancePersistencePath
-  if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
+  let dir = instanceDir()
   dir / "settings.json"
 
 var gKeystoreBackend = getEnv("MUSTER_KEYSTORE_BACKEND", "auto")   ## "off" | "interim" | "auto" (exo-d4d.2)
@@ -415,6 +429,7 @@ proc loadSettingsFile() =
       if j.hasKey("relayer"): gRelayer = j["relayer"].getStr("self")
       if j.hasKey("evmChains"): gEvmChains = j["evmChains"].getStr("auto")
       if j.hasKey("btcRpc"): gBtcRpc = j["btcRpc"].getStr()
+      if j.hasKey("evmConfirmations"): gEvmConfirmations = j["evmConfirmations"].getStr()
       if j.hasKey("xmrMsigRpc"): gXmrMsigRpc = j["xmrMsigRpc"].getStr()
       if j.hasKey("lezRpc"): gLezRpc = j["lezRpc"].getStr()
       if j.hasKey("lezChain"): gLezChain = j["lezChain"].getStr()
@@ -451,13 +466,12 @@ proc loadSettingsFile() =
 
 proc saveSettingsFile() =
   try:
-    createDir(parentDir(settingsPath()))
     # the Bitcoin node URL may carry its RPC credentials — kept beside the keystore,
     # like a bitcoin.conf, and never shown back (settings() redacts them)
-    writeFile(settingsPath(), $(%*{"rpc": gRpcUrl, "delivery": gDeliveryConfig,
+    writePrivateFile(settingsPath(), $(%*{"rpc": gRpcUrl, "delivery": gDeliveryConfig,
                                    # only a level the user chose: one from MUSTER_MIX stays the runner's
                                    "mix": (if gMixSaved: $gMix else: ""), "relayer": gRelayer,
-                                   "evmChains": gEvmChains, "btcRpc": gBtcRpc, "xmrMsigRpc": gXmrMsigRpc, "lezRpc": gLezRpc, "lezChain": gLezChain,
+                                   "evmChains": gEvmChains, "evmConfirmations": gEvmConfirmations, "btcRpc": gBtcRpc, "xmrMsigRpc": gXmrMsigRpc, "lezRpc": gLezRpc, "lezChain": gLezChain,
                                    "lezMultisigProgram": gLezProgram, "lezMsigProgram": gLezMsigProgram, "lezQuestProgram": gLezQuestProgram,
                                    "keystoreBackend": gKeystoreBackend,
                                    "keystoreAccount": gKeystoreAccount,
@@ -526,8 +540,16 @@ proc demoChatIdOf(secpSeed: seq[byte]): string =
 
 proc moduleKeystore(): Keystore =
   if gKeystore == nil:
-    var dir = context().instancePersistencePath
-    if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
+    let dir = instanceDir()
+    # A fallback under a shared temporary directory may have been made by another account,
+    # which would then hold this identity's keyfile beside it (exo-863): refuse, never use it.
+    ensurePrivateDir(dir)
+    if not dirOwnedByMe(dir):
+      raise newException(KeystoreError, "the data directory " & dir & " belongs to another " &
+        "user; set MUSTER_DATA_DIR to a directory of your own")
+    # NOT a secret: with no MUSTER_KEY_PASSPHRASE the keyfile is protected by its file
+    # permissions alone (0600, owner-only), and the UI must say so. The real protection is
+    # the platform's keystore (exo-833); this passphrase only keeps a copied file opaque.
     let pass = getEnv("MUSTER_KEY_PASSPHRASE", "muster-dev-passphrase")
     # dev/demo: MUSTER_DEV_SECP_KEY seeds this instance's account with a known secp
     # key (e.g. an anvil Safe owner key) so it signs Safe intents in-app AS a real
@@ -554,9 +576,13 @@ proc moduleKeystore(): Keystore =
       # still shows; only keystore-dependent calls (wallet, identity, signing) fail,
       # each surfacing this line (the module dispatch turns a handler raise into a
       # {"error": …} response now, so one bad keyfile no longer crashes the module).
+      # The passphrase itself is never echoed: this line reaches the UI and its log
+      # (exo-3b3.16, audit P4-02). Say only where it came from.
+      let source = (if existsEnv("MUSTER_KEY_PASSPHRASE"): "the passphrase in MUSTER_KEY_PASSPHRASE"
+                    else: "the built-in development passphrase (MUSTER_KEY_PASSPHRASE is not set)")
       raise newException(KeystoreError,
-        "keystore locked (" & path & "): " & e.msg & ". The passphrase " &
-        "MUSTER_KEY_PASSPHRASE=\"" & pass & "\" does not match this keyfile. " &
+        "keystore locked (" & path & "): " & e.msg & ". " & source &
+        " does not open this keyfile. " &
         "For a dev/demo peer, delete the file to re-mint a fresh identity " &
         "(scripts/demo-peer.sh … --isolate --fresh does this for you); otherwise " &
         "set the passphrase this keyfile was created with.")
@@ -599,8 +625,7 @@ proc seedDemoContacts(book: ContactBook) =
 
 proc contactBook(): ContactBook =
   if gContacts == nil:
-    var dir = context().instancePersistencePath
-    if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
+    let dir = instanceDir()
     gContacts = newContactBook(dir / "contacts.json")
     seedDemoContacts(gContacts)
   gContacts
@@ -903,8 +928,7 @@ proc invitesSince(): int64 =
   gInvitesSince
 
 proc dismissedInvitesPath(): string =
-  var dir = context().instancePersistencePath
-  if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
+  let dir = instanceDir()
   dir / "dismissed_invites.json"
 
 proc loadDismissedInvites() =
@@ -925,23 +949,19 @@ proc clearInvite(ctopic: string) =
   loadDismissedInvites()
   gDismissedInvites.incl ctopic
   try:
-    let p = dismissedInvitesPath()
-    createDir(parentDir(p))
     var arr = newJArray()
     for t in gDismissedInvites: arr.add %t
-    writeFile(p, $arr)
+    writePrivateFile(dismissedInvitesPath(), $arr)
   except CatchableError: discard
 
 proc joinedRoomsPath(): string =
-  var dir = context().instancePersistencePath
-  if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
+  let dir = instanceDir()
   dir / "joined_rooms.json"
 
 proc roomJournalPath(ctopic: string): string =
   ## The member's own copy of one room (exo-dcc.14), beside the joined rooms, named by a
   ## hash of the topic (a topic is a path, and names nothing anyway).
-  var dir = context().instancePersistencePath
-  if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
+  let dir = instanceDir()
   var buf: seq[byte]
   for c in ctopic: buf.add byte(c)
   const d = "0123456789abcdef"
@@ -949,10 +969,31 @@ proc roomJournalPath(ctopic: string): string =
   for b in sha256(buf)[0 ..< 12]: (hx.add d[int(b shr 4)]; hx.add d[int(b and 0x0f)])
   dir / "room_journals" / (hx & ".journal")
 
-proc attachJournal(s: CoordinationSession, ctopic: string) =
-  ## Rebuild the room from the member's own copy first, then keep everything it sees from
-  ## now on (exo-dcc.14): the store is catch-up, not the room's only copy.
+proc bannedIds(s: CoordinationSession): seq[string] =
+  ## Members the room has removed (a removal the chain executed, whoever proposed it), as
+  ## identity hex (exo-a16).
+  let evs = s.roomEvents()
+  executedRemovals(evs, driverFor, s.topic) & msigExecutedRemovals(evs, s.topic)
+
+proc armBans(s: CoordinationSession) =
+  ## No grant naming a member the room has removed is taken here (exo-a16): a removed
+  ## member's own re-key, or a sibling grant that keeps them in, never lands.
+  if s.crypto of EpochCrypto:
+    let ss = s
+    EpochCrypto(s.crypto).setBanned(proc(): seq[Member] {.gcsafe.} =
+      {.cast(gcsafe).}:
+        for id in bannedIds(ss):
+          let b = hexToBytes(id)
+          if b.len == 64: result.add encIdentityFromBytes(b))
+
+proc attachJournal(s: CoordinationSession, ctopic: string, rejoining = false) =
+  ## Rebuild the room from the member's own copy first, then keep everything it accepts
+  ## from now on (exo-dcc.14): the store is catch-up, not the room's only copy. A room
+  ## re-entered with no copy (a journal lost, or kept by a build from before it) takes its
+  ## grant from the store, as it did before (exo-3b3).
   let j = openJournal(roomJournalPath(ctopic))
+  armBans(s)
+  if rejoining and j.frames.len == 0: s.expectAnyGrant()
   s.replay(j.replayOrder())
   s.setJournal(proc(frame: seq[byte]) {.gcsafe.} =
     {.cast(gcsafe).}: discard j.record(frame))
@@ -971,6 +1012,8 @@ proc musterCoordinateJoin(topic: string): string =
     gSession = newCoordinationSession(newDeliveryTransport(gDeliveryConfig, mix = gMix), newEpochCrypto(ks, ctopic), ctopic)
     attachJournal(gSession, ctopic)
     gSessions[ctopic] = gSession
+  # an invite to this room: its sender's grant is the one to take (exo-3b3)
+  for m in invitersOf(ctopic): gSession.expectInviteFrom(m)
   gTopic = ctopic
   # Remember the room beside the keystore, so a relaunch re-enters it (exo-ecbe).
   discard rememberJoinedRoom(joinedRoomsPath(), ctopic)
@@ -1018,6 +1061,7 @@ proc inboxSessionFor(ctopic: string): CoordinationSession =
   gInboxTopics.incl ctopic
   if ctopic in gSessions: return gSessions[ctopic]
   let s = newCoordinationSession(newDeliveryTransport(gDeliveryConfig, mix = gMix), newEpochJoiner(moduleKeystore()), ctopic)
+  s.markInbox()                         # invites only: no grant, no data, no beacon answers (exo-5b5)
   gSessions[ctopic] = s
   s
 
@@ -1036,7 +1080,7 @@ proc restoreJoinedRooms(): seq[string] =
     # The same founding epoch coordinate_join made, derived again (exo-6dc.1): the room's
     # pre-admit history opens on relaunch, not only the epochs granted since.
     let s = newCoordinationSession(newDeliveryTransport(gDeliveryConfig, mix = gMix), newEpochCrypto(ks, ctopic), ctopic)
-    attachJournal(s, ctopic)
+    attachJournal(s, ctopic, rejoining = true)
     gSessions[ctopic] = s
     s.announceBeacon()
     result.add ctopic
@@ -1076,7 +1120,7 @@ proc musterCoordinateInvite(peerChatIdHex, roomTopic, note: string): string =
   let room = toContentTopic(roomTopic)
   var admitted = false
   if room in gSessions and room notin gInboxTopics:
-    admitted = gSessions[room].admitInvited(peerEnc)
+    admitted = gSessions[room].admitInvitedAs(ks, peerEnc)
   let ctopic = inboxTopicFor(peerChatIdHex)
   let s = inboxSessionFor(ctopic)
   s.sendInvite(sealed)
@@ -1139,8 +1183,7 @@ proc musterCoordinateInvites(): string =
   $arr
 
 proc roomTitlesPath(): string =
-  var dir = context().instancePersistencePath
-  if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
+  let dir = instanceDir()
   dir / "room_titles.json"
 
 proc musterCoordinateLeave(roomTopic: string): string =
@@ -1532,7 +1575,8 @@ proc splitSeam(chain: string): EvmPartSeam =
   let wchain = "evm:" & $cid
   let ep = evmEndpoint(chain)
   newEvmPartSeam(chain, ep, newEvmAdapter(wchain, ep, fromUnlocked = false), moduleKeystore(),
-                 Account(chain: wchain, form: afPublic, id: myEvmPayAddress()))
+                 Account(chain: wchain, form: afPublic, id: myEvmPayAddress()),
+                 confirmations = evmConfirmationsFor(chain, gEvmConfirmations))
 
 var gTokenInfo = initTable[string, tuple[symbol: string, decimals: int]]()
 
@@ -1597,8 +1641,7 @@ proc myPayTos(family: string): seq[string] =
   gMyLezPayTos
 
 proc splitBookPath(): string =
-  var dir = context().instancePersistencePath
-  if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
+  let dir = instanceDir()
   dir / "split-pending.json"
 
 proc loadSplitBook() =
@@ -1611,10 +1654,7 @@ proc loadSplitBook() =
 
 proc saveSplitBook() =
   try:
-    let p = splitBookPath()
-    createDir(parentDir(p))
-    writeFile(p & ".tmp", $gSplitBook.toJson())
-    moveFile(p & ".tmp", p)
+    writePrivateFile(splitBookPath(), $gSplitBook.toJson())
   except CatchableError as e:
     if gLpDebug: stderr.writeLine("MUSTER-LP split book not saved: " & e.msg)
 
@@ -1642,6 +1682,17 @@ proc splitUnresolvedFor(intentId, part: string): bool =
     if e.pp.intentId == intentId and e.pp.part == part and e.unresolved: return true
   false
 
+proc confirmedRefsPath(): string =
+  ## The ledger of chain references this member's client confirmed a part on, in any room
+  ## (coordination/parts RefLedger, exo-3b3.14): beside the joined rooms, so it is this
+  ## keystore's and survives a restart.
+  var dir = context().instancePersistencePath
+  if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
+  dir / "confirmed_refs.json"
+
+proc ensureRefLedger() =
+  if refLedger() == nil: setRefLedger(openRefLedger(confirmedRefsPath()))
+
 proc splitPumpRoom(topic: string, sess: CoordinationSession, ks: Keystore, now: float,
                    note: proc (msg: string)): (bool, bool) =
   ## One joined room's share of the split pump: its payments in flight, the parts I confirm
@@ -1649,6 +1700,7 @@ proc splitPumpRoom(topic: string, sess: CoordinationSession, ks: Keystore, now: 
   ## in, not only the one on screen (exo-408 item 1): a payment made in a room I have
   ## switched away from still completes, and a payment to me there is still confirmed.
   ## Returns (whether the book changed, whether a private split waits on me here).
+  ensureRefLedger()   # one payment settles one part across every room (exo-3b3.14)
   let seamOf = proc (pp: PendingPart): PartSeam = seamOfPending(sess, pp)
   var changed = false
   for (pp, outcome, said) in gSplitBook.pumpBook(topic, sess, ks, driverFor, seamOf, now, note):
@@ -1887,13 +1939,13 @@ proc musterCoordinateProposeSplitImpl(chain, total, sharesJson, memo: string): s
     if j.kind == JObject and j{"creditor"}.getStr().len > 0:
       creditor = j["creditor"].getStr().toLowerAscii().replace("0x", "")
     if j.kind == JArray:
-      # the private split needs every share distinct: its note is matched by amount (§4.7)
-      shares = evenShares(total, creditor, j.getElems().mapIt(it.getStr().toLowerAscii()), distinctAmounts = lez)
+      # every share distinct, in every family: a payment is matched to its part by amount (exo-3b3.14)
+      shares = evenShares(total, creditor, j.getElems().mapIt(it.getStr().toLowerAscii()), distinctAmounts = true)
     elif j.kind == JObject and j.hasKey("shares"):
       for x in j["shares"].getElems(): shares.add SplitShare(who: x{"who"}.getStr().toLowerAscii(), amount: x{"amount"}.getStr())
     elif j.kind == JObject and j.hasKey("parties"):
       shares = evenShares(total, creditor, j["parties"].getElems().mapIt(it.getStr().toLowerAscii()),
-                          creditorShares = j{"creditorShares"}.getBool(true), distinctAmounts = lez)
+                          creditorShares = j{"creditorShares"}.getBool(true), distinctAmounts = true)
     else: return $(%*{"error": "bad-shares", "detail": "an array of room identities, {parties}, or {shares}"})
   except CatchableError as e:
     return $(%*{"error": "bad-shares", "detail": e.msg})
@@ -1974,6 +2026,7 @@ proc musterCoordinateConfirmPartImpl(intentId, part, tx: string): string =
   ## As the creditor, confirm one share: from this member's own read of `tx`, or — with no
   ## reference — received outside muster.
   if gSession == nil: return $(%*{"error": "not-joined"})
+  ensureRefLedger()
   let policy = intentPolicyOf(gSession.roomEvents(), intentId)
   if splitPolicy(policy).kind notin SplitKinds: return $(%*{"error": "not-a-split"})
   if splitPolicy(policy).kind == "monero-split":
@@ -2627,7 +2680,7 @@ proc isKeystoreAccount(keyRef: string): bool =
 proc keystoreContribute(intentId, account: string): string =
   ## Ask keystore_module for a human's approval of `intentId` with `account`. Returns at
   ## once ("awaiting-approval"); keystorePump publishes when the human has approved.
-  let req = planKeystoreApproval(gSession, driverFor, intentId, account, uint64(epochTime()))
+  let req = planKeystoreApproval(gSession, driverFor, intentId, account, uint64(epochTime()), isTestChain)
   if req.refusal.len > 0: return req.refusal
   if not gKsReq.canRequest(): return "keystore-busy"
   let ans = keystoreProbe().requestApproval($req.intent)
@@ -2860,14 +2913,12 @@ proc storage(): LpStorage =
   ## keeps its data in THIS instance's folder, never in ~/.logos_storage/data, which another
   ## app's node may hold (storage_lp.nim).
   if gStorage == nil:
-    var dir = context().instancePersistencePath
-    if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
+    let dir = instanceDir()
     gStorage = newLpStorage(dir / "storage")
   gStorage
 
 proc swarmWorkDir(topic: string): string =
-  var dir = context().instancePersistencePath
-  if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
+  let dir = instanceDir()
   dir / "fileshare" / toHex(sha256(topic.toOpenArrayByte(0, topic.high)))[0 ..< 16].toLowerAscii
 
 proc swarmNode(topic: string): SwarmNode =
@@ -2907,6 +2958,13 @@ proc musterFileshareShare(path: string): string =
   if not ready: return $(%*{"error": "not-ready", "detail": note})
   if not path.isAbsolute or not fileExists(path):
     return $(%*{"error": "no such file", "detail": path})
+  # Any module loaded beside Muster can call this (exo-3b3.17, audit P4-01: a Nim provider does
+  # not see its caller), so what no room should be sent is refused whoever asks: a hidden
+  # path under the home folder (~/.ssh, ~/.config, …), Muster's own folders (identity.mks,
+  # the wallet), anything but a regular file (swarm.shareRefusal).
+  let refusal = shareRefusal(path, getHomeDir(),
+                             @[instanceDir(), context().instancePersistencePath, getEnv("MUSTER_DATA_DIR")])
+  if refusal.len > 0: return $(%*{"error": "refused", "detail": refusal})
   let mime = (let e = splitFile(path).ext; if e.len > 1: newMimetypes().getMimetype(e[1 .. ^1]) else: "application/octet-stream")
   let op = swarmNode(gTopic).share(gSession, path, mime)
   for o in swarmNode(gTopic).ops():
@@ -2999,6 +3057,8 @@ proc musterCoordinateIntents(): string =
   let nowS = uint64(epochTime())
   let views = reduceIntentViews(events, driverFor)
   let coveredNow = coverIndex(events, driverFor, views, nowS)
+  # parts whose reported payment another part's report names too: confirmed on neither (exo-3b3.14)
+  let contestedNow = contestedParts(events, driverFor)
   var charterView: JsonNode = nil      # computed once, if any card is a charter (exo-267.1)
   var circleTried = false              # the circle's rounds, read once, if any card is a vault payout (exo-267.3)
   var circleV: CircleView
@@ -3085,7 +3145,8 @@ proc musterCoordinateIntents(): string =
     # uses (effect_summary.nim), so a Bitcoin spend or a LEZ call shows its amount (exo-59c).
     # members named as the card names them ("1 person owes you", not a short id)
     let sm = effectSummary(v.effectJson, proc(who: string): string = memberName(who, mine))
-    o["summary"] = %*{"kind": sm.kind, "amount": sm.amount, "unit": sm.unit, "to": sm.to, "text": sm.text}
+    o["summary"] = %*{"kind": sm.kind, "amount": sm.amount, "unit": sm.unit, "to": sm.to, "text": sm.text,
+                      "args": sm.args}
     if prof.family in [LezMsigFamily, LezMsigPrivateFamily]:
       # the card decodes the proposal from the exact bytes the approvals sign (RFP U.6)
       try:
@@ -3236,7 +3297,9 @@ proc musterCoordinateIntents(): string =
                        # paid only through a settle-up that covers it, while one does (exo-3c6, exo-a90.16)
                        "covered": not pv.settled and not pv.confirmed and v.id & "/" & pv.part in coveredNow,
                        # confirmed with no chain reference because a settle-up paid it (exo-a90.19)
-                       "settledUp": pv.confirmed and pv.tx.len == 0 and v.id & "/" & pv.part in coveredNow}
+                       "settledUp": pv.confirmed and pv.tx.len == 0 and v.id & "/" & pv.part in coveredNow,
+                       # why the reported payment confirms nothing: another part reports it too ("" = not so)
+                       "contested": contestedNow.getOrDefault(v.id & "/" & pv.part, "")}
           if xmr:
             let l = links.getOrDefault(pv.part)
             parts[^1]["uri"] = %(if l.ok: l.uri else: "")
@@ -4825,7 +4888,7 @@ proc musterCoordinateProposeBtcSpend(payTo, amountSat, feeRate: string): string 
     return $(%*{"error": "cannot-build", "detail": id})
   # the coins came from the proposer's node: record the read (inv 10) — the source names
   # the kind of read, never the node's address
-  gSession.publish(readEvent(id, "inputs", "bitcoind:scantxoutset", $parseJson(effectJson)["inputs"]))
+  gSession.publishRead(moduleKeystore(), id, "inputs", "bitcoind:scantxoutset", $parseJson(effectJson)["inputs"])
   id
 
 # ── the LEZ multisig composers (exo-3c9) ───────────────────────────────────────
@@ -4920,9 +4983,14 @@ proc musterCoordinateProposeLezConfig(specJson: string): string =
          "detail": "proposal #" & $pp.index & " is on its way to the chain; it appears in the room once included"})
   except CatchableError as e: $(%*{"error": "sequencer-unreachable", "detail": e.msg})
 
+var gBanNoticed = initTable[string, float]()   ## exo-a16: removed member → when this client first saw them still in its roster
+
 proc memberChangePump() =
   ## A removal the chain executed that THIS member proposed, of a member who still holds the
-  ## room's key: re-key them out of the room (exo-267.6), once, here and nowhere else.
+  ## room's key: re-key them out of the room (exo-267.6). And any removed member this
+  ## client's roster still holds a minute after it noticed — the proposer gone, or a grant
+  ## that raced the removal — is re-keyed out here too (exo-a16): every member's client
+  ## enforces the room's removals, so a removal does not rest on one client.
   if gSession == nil: return
   let me = toHex(moduleKeystore().encIdentity().toBytes()).toLowerAscii()
   let holders = gSession.members().mapIt(toHex(it.toBytes()).toLowerAscii())
@@ -4931,8 +4999,22 @@ proc memberChangePump() =
   for (who, id) in removalsDue(evs, driverFor, gTopic, holders, me) & msigRemovalsDue(evs, gTopic, holders, me):
     for m in gSession.members():
       if toHex(m.toBytes()).toLowerAscii() == who:
-        gSession.expel(m)
+        gSession.expelAs(moduleKeystore(), m)
         echo "[muster] removed ", who[0 ..< 12], "… from the room's encryption after ", id, " executed"
+  let now = epochTime()
+  for who in bannedIds(gSession):
+    let k = gTopic & "|" & who
+    var held = false
+    for m in gSession.members():
+      if toHex(m.toBytes()).toLowerAscii() == who: held = true
+    if not held: (gBanNoticed.del k; continue)
+    if k notin gBanNoticed: (gBanNoticed[k] = now; continue)
+    if now - gBanNoticed[k] < 60.0: continue
+    for m in gSession.members():
+      if toHex(m.toBytes()).toLowerAscii() == who:
+        gSession.expelAs(moduleKeystore(), m)
+        gBanNoticed.del k
+        echo "[muster] re-keyed out ", who[0 ..< 12], "…, whom the room removed and this roster still held"
 
 proc musterCoordinateProposeLez(actionJson: string): string =
   var action: LezAction
@@ -5011,7 +5093,7 @@ proc lezFrostTransfer(recipient, amount: string): string =
   let id = musterCoordinatePropose(effectJson)
   if not id.startsWith("0x"): return $(%*{"error": "refused", "detail": id})
   # the nonce came from the user's sequencer: the read is recorded (invariant 10)
-  gSession.publish(readEvent(id, "nonces", "lez:getAccount", $parseJson(effectJson)["nonces"]))
+  gSession.publishRead(moduleKeystore(), id, "nonces", "lez:getAccount", $parseJson(effectJson)["nonces"])
   id
 
 proc musterCoordinateProposeLezTransfer(recipient, amount: string): string =
@@ -5378,19 +5460,28 @@ proc musterFrostCeremonyOpen(ceremonyId, network, t, n: string): string =
   if ceremonyId.strip().len == 0 or '/' in ceremonyId: return $(%*{"error": "a ceremony id is a name without /"})
   if ni < 2 or ti < 1 or ti > ni: return $(%*{"error": "a t-of-n needs 1 <= t <= n and n >= 2"})
   let net = (if network.strip().len > 0: network.strip() else: "regtest")
-  discard frostCeremonyOpen(gSession, ceremonyId.strip(), net, ti, ni)
-  let host = frostCeremonyJoin(gSession, moduleKeystore(), ceremonyId.strip())
-  gFrostJoined.add (gSession, ceremonyId.strip())
-  $(%*{"ceremony": ceremonyId.strip(), "network": net, "t": ti, "n": ni, "host": host})
+  let ks = moduleKeystore()
+  try:
+    # the opener's own join commits to the terms it just opened (exo-3b3.13)
+    let terms = frostCeremonyOpen(gSession, ks, ceremonyId.strip(), net, ti, ni)
+    let host = frostCeremonyJoin(gSession, ks, ceremonyId.strip(), terms)
+    gFrostJoined.add (gSession, ceremonyId.strip())
+    $(%*{"ceremony": ceremonyId.strip(), "network": net, "t": ti, "n": ni, "host": host,
+         "opener": terms.opener})
+  except CatchableError as e: $(%*{"error": "refused", "detail": e.msg})
 
 proc musterFrostCeremonyJoin(ceremonyId: string): string =
   if gSession == nil: return $(%*{"error": "not-joined"})
   gSession.poll()
-  if not ceremonyView(gSession.roomEvents(), ceremonyId.strip()).open:
+  let v = ceremonyView(gSession.roomEvents(), ceremonyId.strip())
+  if not v.open:
     return $(%*{"error": "not-open", "detail": "no ceremony " & ceremonyId & " is open in this room"})
-  let host = frostCeremonyJoin(gSession, moduleKeystore(), ceremonyId.strip())
-  gFrostJoined.add (gSession, ceremonyId.strip())
-  $(%*{"ceremony": ceremonyId.strip(), "host": host})
+  # the join commits to the open in force as this member reads it: its opener and t of n (exo-3b3.13)
+  try:
+    let host = frostCeremonyJoin(gSession, moduleKeystore(), ceremonyId.strip(), v.terms)
+    gFrostJoined.add (gSession, ceremonyId.strip())
+    $(%*{"ceremony": ceremonyId.strip(), "host": host, "opener": v.opener, "t": v.t, "n": v.n})
+  except CatchableError as e: $(%*{"error": "refused", "detail": e.msg})
 
 proc musterFrostCeremonies(): string =
   if gSession == nil: return "[]"
@@ -5412,9 +5503,19 @@ proc musterFrostCeremonies(): string =
         try:
           if parseJson(a.config)["ceremony"].getStr() == cid: address = a.address
         except CatchableError: discard
+    # who the participants are (exo-3b3.13): each one's room identity beside its host key, so
+    # the room sees that n distinct members hold the n shares, and who opened it
+    let me = toHex(mine.encIdentity().toBytes())[2 .. ^1]     # as the view names members: no 0x
+    let ids = myIds()
+    var parts = newJArray()
+    for i, h in v.hosts:
+      parts.add %*{"member": v.members[i], "name": memberName(v.members[i], ids),
+                   "host": toHex(h)[2 .. ^1], "me": v.members[i] == me}
     arr.add %*{"ceremony": cid, "network": v.network, "t": v.t, "n": v.n, "joined": v.hosts.len,
                "step1": v.pmsg1.len, "step2": v.pmsg2.len,
-               "participant": mine.frostHostPubkey(ceremonyLabel(cid)) in v.hosts,
+               "opener": v.opener, "openerName": (if v.open: memberName(v.opener, ids) else: ""),
+               "openedByMe": v.opener == me, "participants": parts,
+               "participant": me in v.members,
                "address": address, "last": gFrostLast.getOrDefault(cid, "")}
   $arr
 
@@ -5690,6 +5791,11 @@ proc musterCoordinateExecute(intentId: string): string =
   let st = intentState(events, driverFor, intentId)
   if st != "executable":
     return $(%*{"id": intentId, "error": "not-executable", "state": st})
+  # It runs with THIS member's module tokens, so only a member who endorsed exactly this
+  # call runs it (exo-3b3.18, audit P4-06; coordination/invoke_run.nim).
+  let notMine = runRefusal(events, driverFor, intentId, moduleKeystore().encIdentity(), myNames())
+  if notMine.len > 0:
+    return $(%*{"id": intentId, "error": "not-endorser", "detail": notMine})
   let ej = effectJsonOf(events, intentId)
   var module, meth, argsJson: string
   try:
@@ -5736,20 +5842,27 @@ proc musterCoordinateAvailableActions(): string =
   if gInvoker == nil: gInvoker = newLpInvoker("muster_module")
   $discoverAcross(gInvoker, modules, allow)
 
-proc invitedTo(ctopic: string): bool =
-  ## Whether an invite to this room (its content topic) reached our inbox: the inviter
-  ## admitted us when they sent it (exo-dcc.29), so our grant waits in the store.
-  if gInbox == nil: return false
+proc invitersOf(ctopic: string): seq[Member] =
+  ## Who invited us to this room (its content topic): each inviter admitted us when they
+  ## sent it (exo-dcc.29), so our grant waits in the store — and theirs is the grant to
+  ## take (exo-3b3), not anyone else's.
+  if gInbox == nil: return
   let ks = moduleKeystore()
   for raw in gInbox.receivedInvites():
     try:
       let opened = ks.sealOpen(raw)
       var s = ""
       for b in opened: s.add char(b)
-      let t = parseJson(s){"topic"}.getStr()
-      if t.len > 0 and toContentTopic(t) == ctopic: return true
+      let j = parseJson(s)
+      let t = j{"topic"}.getStr()
+      if t.len == 0 or toContentTopic(t) != ctopic: continue
+      let f = hexToBytes(normId(j{"from"}.getStr()))
+      if f.len != 64: continue
+      let m = encIdentityFromBytes(f)
+      if m notin result: result.add m
     except CatchableError: discard
-  false
+
+proc invitedTo(ctopic: string): bool = invitersOf(ctopic).len > 0
 
 proc musterCoordinateRequestJoin(): string =
   if gSession == nil: return "not-joined"
@@ -5774,10 +5887,13 @@ proc musterContacts(): string =
   ## The address book — [{identity, alias, address}].
   $contactBook().asJson()
 proc musterContactAdd(identityHex, alias: string): string =
-  ## Add or update a contact by its 64-byte encryption identity hex (0x optional).
-  contactBook().add(identityHex, alias); "ok"
+  ## Add or update a contact by its 64-byte encryption identity hex (0x optional). An alias
+  ## another contact already has, in any case, is refused (exo-3b3.18, audit P4-09).
+  let why = contactBook().add(identityHex, alias)
+  if why.len > 0: $(%*{"error": "alias-refused", "detail": why}) else: "ok"
 proc musterContactSetAlias(identityHex, alias: string): string =
-  contactBook().setAlias(identityHex, alias); "ok"
+  let why = contactBook().setAlias(identityHex, alias)
+  if why.len > 0: $(%*{"error": "alias-refused", "detail": why}) else: "ok"
 proc musterContactRemove(identityHex: string): string =
   contactBook().remove(identityHex); "ok"
 
@@ -5814,6 +5930,13 @@ proc musterCoordinatePostMessage(body: string): string =
   ## the existing encrypted transport, as a new "message/<id>" event on the shared
   ## log. Returns the message id.
   if gSession == nil: return "not-joined"
+  # A card the module makes itself (a proposal's reference, an approval, a receipt, a shared
+  # address) never comes from a chat body (exo-3b3.18, audit P4-05): coordinate_share_address
+  # and the propose path post those; here they are refused (coordination/chat_cards.nim).
+  let reserved = reservedCardKind(body)
+  if reserved.len > 0:
+    return $(%*{"error": "reserved-kind", "kind": reserved,
+                "detail": "a " & reserved & " card is posted by Muster itself, never as a chat message"})
   let author = toHex(moduleKeystore().encIdentity().toBytes())
   inc gMsgSeq
   let ts = int64(epochTime())
@@ -5977,7 +6100,12 @@ proc moduleWallet(): Wallet =
     let lezCore: LezCore =
       if getEnv("MUSTER_LEZ_REAL").len > 0:
         try:
-          let dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
+          # Where the wallet lives (exo-3b3.16, audit P4-03): a folder an operator named
+          # (MUSTER_DATA_DIR, which the dev scripts keep between runs), else this instance's
+          # own persistence folder; never a shared default under /tmp. newLpLezCore makes its
+          # lez/ folder 0700 and refuses one that belongs to someone else.
+          let named = getEnv("MUSTER_DATA_DIR")
+          let dir = (if named.len > 0: named else: context().instancePersistencePath)
           # its wallet on this instance's zone (the lez-rpc setting), as the multisig and
           # FROST paths are; lez_core's own default is the public testnet
           LezCore(newLpLezCore(dir, sequencer = gLezRpc))
@@ -6259,7 +6387,7 @@ proc musterCoordinateAdmit(identityHex: string): string =
   for r in gSession.pendingRequests():
     if r.enc == m and joinRequestValid(r, gSession.topic, nowSec): verified = true
   if not verified: return "unverified"      # no valid request from this identity
-  gSession.admit(m)
+  gSession.admitAs(moduleKeystore(), m)
   "ok"
 
 # ── settings: user-configurable infrastructure (invariant 8) ────────────────────
@@ -6281,6 +6409,7 @@ proc musterSettings(): string =
     "rpc": gRpcUrl, "rpcMasked": redactUrl(gRpcUrl),
     "relayer": gRelayer,
     "evmChains": gEvmChains,                 # where EVM chains are read (exo-d4d.3)
+    "evmConfirmations": gEvmConfirmations,   # an EVM share's confirmation depth; "" = 12 (1 on anvil), exo-3b3.15
     "identityBackend": gIdentityBackend,     # where the room identity lives (exo-833)
     "evmPlatform": evmPlatform(),            # …and whether that is eth_rpc_module right now
     "btcRpc": gBtcRpc, "btcRpcMasked": redactUrl(gBtcRpc),
@@ -6320,6 +6449,13 @@ proc musterSetSetting(key, value: string): string =
     gEvmChains = value
     gPlatformAt = -1e9       # re-read the platform's registry on next use
     gWallet = nil
+  of "evm-confirmations":
+    # how deep an EVM split payment must be before it is confirmed (exo-3b3.15); "" = the
+    # default, 12 blocks (1 on the local dev chain)
+    let v = value.strip()
+    if v.len > 0 and not (v.len <= 6 and v.allCharsInSet(Digits) and parseInt(v) >= 1):
+      return $(%*{"error": "evm-confirmations is a whole number of blocks, 1 or more (\"\" = 12, 1 on anvil)"})
+    gEvmConfirmations = v
   of "relayer":
     # who sends settling transactions: "self" or "unlocked:<0x…>" (exo-a50.1.5)
     if value != "self" and not (value.startsWith("unlocked:0x") and value.len == 51):

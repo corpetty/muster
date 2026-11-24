@@ -69,8 +69,9 @@ Popup {
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: 2
-                LogosText { text: tile.title; color: Theme.palette.text; font.pixelSize: MusterStyle.body; font.weight: Theme.typography.weightBold }
+                LogosText { textFormat: Text.PlainText; text: tile.title; color: Theme.palette.text; font.pixelSize: MusterStyle.body; font.weight: Theme.typography.weightBold }
                 LogosText {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
                     text: tile.detail
@@ -86,12 +87,14 @@ Popup {
     contentItem: ColumnLayout {
         spacing: Theme.spacing.medium
         LogosText {
+            textFormat: Text.PlainText
             text: qsTr("Propose something")
             color: Theme.palette.text
             font.pixelSize: MusterStyle.body
             font.weight: Theme.typography.weightBold
         }
         LogosText {
+            textFormat: Text.PlainText
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
             text: qsTr("The room sees it the moment you propose it, and nothing happens until the people it takes agree.")

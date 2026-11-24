@@ -52,8 +52,9 @@ proc sharesSorted(ws: seq[(EncKeys, string)]): JsonNode =
   result = newJArray()
   for (w, a) in xs: result.add %*{"who": w, "amount": a}
 
+# every share distinct (exo-3b3.14): a payment identifies its part by amount
 proc splitJson(total = "1200000000000000000", shares = sharesSorted(@[(ana, "300000000000000000"),
-               (jb, "300000000000000000"), (you, "300000000000000000")]), chain = Chain, asset = "ETH",
+               (jb, "299999999999999999"), (you, "299999999999999998")]), chain = Chain, asset = "ETH",
                creditor = idOf(devon), payTo = PayTo, memo = "Dinner at Tasca"): string =
   $(%*{"effect": "split", "chain": chain, "asset": asset, "total": total, "creditor": creditor,
        "payTo": payTo, "shares": shares, "memo": memo})
@@ -127,7 +128,7 @@ block:
   doAssert drv.partAuthor(e, edName(ana), "refunded") == "", "an unknown step"
   let t = drv.partTransfer(e, edName(jb))
   doAssert t.ok and t.chain == Chain and t.asset == "ETH" and t.to == PayTo and
-           t.amount == "300000000000000000", "the transfer is derived from the effect"
+           t.amount == "299999999999999999", "the transfer is derived from the effect"
   doAssert not drv.partTransfer(e, edName(outsider)).ok
   doAssert not drv.partTransfer(effectFromJson(splitJson(total = "1")), edName(ana)).ok,
            "a malformed split derives no transfer"
@@ -136,7 +137,7 @@ block:
 # ── 4. conformance: the same standard as every driver ────────────────────────────
 block:
   let tampered = effectFromJson(splitJson(shares = sharesSorted(@[(ana, "300000000000000000"),
-    (jb, "300000000000000000"), (you, "300000000000000001")])))
+    (jb, "299999999999999999"), (you, "299999999999999997")])))
   let m = canonicalize(drv, e)
   let r = checkConformance(drv, e, tampered, Contribution(bytes: @(edSign(ana, m.bytes))))
   doAssert r.allPass(), "split driver must conform: failed " & $r.failed()
@@ -231,17 +232,20 @@ block:
 block:
   let es = evenShares("1200000000000000000", idOf(devon), @[idOf(ana), idOf(jb), idOf(you), idOf(devon)])
   doAssert es.len == 3, "the creditor is never a debtor, even when listed"
-  doAssert es.allIt(it.amount == "300000000000000000")
+  # every share distinct (exo-3b3.14): the i-th debtor, by who, owes i wei less
+  for i, x in es: doAssert x.amount == $(300000000000000000'u64 - uint64(i)), $es
   doAssert es.mapIt(it.who) == sorted(es.mapIt(it.who)), "sorted: one spelling"
   let odd = evenShares("10", idOf(devon), @[idOf(ana), idOf(jb)])
-  doAssert odd.allIt(it.amount == "3"), "10 among three people: each debtor owes 3; devon's own share is 4"
+  doAssert odd.mapIt(it.amount) == @["3", "2"], "10 among three people: the debtors owe 3 and 2; devon's own share is 5"
   let j = splitEffectJson(Chain, "ETH", "10", idOf(devon), PayTo, odd, "odd")
   doAssert drv.signRefusal(effectFromJson(j)) == "", "the composer's JSON is a valid split"
   doAssert intentIdFor(j, "p") == intentIdFor(splitEffectJson(Chain, "ETH", "10", idOf(devon), PayTo,
              reversed(odd), "odd"), "p"), "the composer sorts: the same split has one id"
   let s = effectSummary(good)
   doAssert s.kind == "split" and s.amount == "1200000000000000000" and "3 people" in s.text, s.text
-  echo "8. even shares round down; the creditor absorbs the remainder; one id per split OK"
+  doAssert evenShares("1200000000000000000", idOf(devon), @[idOf(ana), idOf(jb)], distinctAmounts = false)
+             .allIt(it.amount == "400000000000000000"), "the plain even shares, which no driver takes for two debtors"
+  echo "8. even shares round down, every one distinct; the creditor absorbs the remainder; one id per split OK"
 
 # ── 9. the history's words for a split: its own decimals, and people by name (exo-221) ──
 block:
@@ -269,7 +273,8 @@ block:
     let why = drv.signRefusal(effectFromJson(splitEffectJson(Chain, bad, "900000", idOf(devon), PayTo, es, "x")))
     doAssert "token" in why or "ETH" in why, bad & ": " & why
   let t = drv.partTransfer(effectFromJson(e), partName(idOf(ana)))
-  doAssert t.ok and t.asset == Tok and t.to == PayTo and t.amount == "300000", $t
+  doAssert t.ok and t.asset == Tok and t.to == PayTo and
+           t.amount == es.filterIt(it.who == idOf(ana))[0].amount and t.amount in ["300000", "299999"], $t
   var named = false
   for r in drv.manifest(effectFromJson(e)).requirements:
     if r.kind == rqAsset and Tok in $r: named = true

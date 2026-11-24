@@ -67,7 +67,10 @@ block:
   doAssert "dust" in drv.signRefusal(dust), "a share below 546 sat can never be paid: " & drv.signRefusal(dust)
   doAssert drv.signRefusal(splitOn(Mainnet, "BTC", mainnetAddr)).len > 0, "the policy's chain, never another"
   let t = drv.partTransfer(good, partName(idOf(debtorA)))
-  doAssert t.ok and t.chain == Regtest and t.asset == "BTC" and t.to == payTo and t.amount == "100000"
+  # debtor A's own share (every share distinct, exo-3b3.14)
+  let aShare = evenShares("300000", idOf(creditor), @[idOf(debtorA), idOf(debtorB)]).filterIt(it.who == idOf(debtorA))[0].amount
+  doAssert t.ok and t.chain == Regtest and t.asset == "BTC" and t.to == payTo and t.amount == aShare and
+           aShare in ["100000", "99999"], $t
   echo "2. btc.split: BTC on its own Bitcoin chain, an address of that network, no dust share OK"
 
 # ── 3. kinds, registry, profile, manifest ────────────────────────────────────────

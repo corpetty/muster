@@ -1,13 +1,16 @@
 ## derived-exo-403 s6: submit / final entries are included when present, graded as
 ## external reads with their chain reference, never reported as verified against the
-## chain; the file states the stage reached; every pasted approval reads unattested.
+## chain; the file states the stage reached; every pasted approval reads unattested where
+## the chain binds its signature (the Safe), and rejected — counted toward nothing — under
+## a room-bound policy (the threshold), which counts only approvals attested over P in
+## this room (exo-af5; before it, every pasted approval read unattested).
 ##
 ## STEPPER: state = (stage, approval kind). Stages: proposed, collecting, executable,
 ## submitted, final, declined; approvals made in-app or pasted. Under every live
 ## policy (settlement only on the Safe rail) the file's claimed stage equals the
 ## fold's, settlement entries appear exactly when the log has them, each carries the
 ## transaction hash, the verifier grades each "external-read", and pasted approvals
-## are "unattested" in both the file and the verdict.
+## are "unattested" (Safe) or "rejected" (threshold) in both the file and the verdict.
 ## Build: see live_room.nim.
 
 import ./audit_room
@@ -45,7 +48,7 @@ proc stageCorrect(stage, kind: string): bool =
     if v.settlement.len != wantN: return false
     for s in v.settlement:
       if s.grade != "external-read" or s.chainRef != ChainRef: return false
-    let wantGrade = (if kind == "pasted": "unattested" else: "committed")
+    let wantGrade = (if kind != "pasted": "committed" elif policy == "safe": "unattested" else: "rejected")
     for (_, g) in f.approvalGradesOf:
       if g != wantGrade: return false
     for a in v.approvals:

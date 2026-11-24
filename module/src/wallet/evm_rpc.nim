@@ -140,6 +140,13 @@ proc rpcChainId*(url: string): string =
   rpcTry(url, "eth_chainId", false):
     $bounded(c.eth_chainId(), readBudget())
 
+proc rpcBlockNumber*(url: string): uint64 =
+  ## The endpoint's newest block number (eth_blockNumber): how deep a payment is, from the
+  ## creditor's own read (exo-3b3.15). A failed read raises — never "no blocks".
+  if url.isPlatform: return hexU64(pcall(url, "eth_blockNumber", newJArray()).result, "eth_blockNumber")
+  rpcTry(url, "eth_blockNumber", false):
+    q(bounded(c.eth_blockNumber(), readBudget()))
+
 proc rpcNonce*(url, addrHex: string): uint64 =
   if url.isPlatform:
     return hexU64(pcall(url, "eth_getTransactionCount", %*[addrHex, "pending"]).result, "eth_getTransactionCount")

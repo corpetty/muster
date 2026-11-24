@@ -6,6 +6,7 @@ import Logos.Controls
 // Learn at `step`, a ClaimsRegistry step id (open-room, propose, collect, executable,
 // submit, settle), where the reasons are, with what each one protects and what is still open.
 LogosText {
+    textFormat: Text.PlainText
     id: why
     property string step: ""
     signal clicked()

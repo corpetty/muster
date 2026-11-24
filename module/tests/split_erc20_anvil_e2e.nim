@@ -11,7 +11,7 @@
 ## the agreed share to payTo; the creditor refuses the right token paid to someone else and
 ## another token paid to payTo; the creditor's token balance rises by exactly the shares; the
 ## split is final on all three members.
-import std/[os, strutils, json, httpclient]
+import std/[os, strutils, json, httpclient, sequtils]
 import stint
 import ../src/log/log
 import ../src/drivers/driver
@@ -97,9 +97,10 @@ let asset = "erc20:" & token
 echo "0. deployed ", asset, " (and a second token); Bob and Carol hold 1 MTD each OK"
 
 var r = newRoom3("/muster/1/split-erc20-anvil/proto")
-const Share = "300000"                       # 0.3 MTD at 6 decimals
-let effect = splitEffectJson(Chain, asset, "900000", alice, payTo,
-                             evenShares("900000", alice, @[bob, carol]), "Team lunch")
+const Share = "300000"                       # 0.3 MTD at 6 decimals: about each share (they differ, exo-3b3.14)
+let shares = evenShares("900000", alice, @[bob, carol])
+proc shareOf(ks: Keystore): string = shares.filterIt(it.who == idHex(ks))[0].amount
+let effect = splitEffectJson(Chain, asset, "900000", alice, payTo, shares, "Team lunch")
 let id = liveProposeIntent(r.alice, aliceKs, splitFor, Policy, effect, int64(Now), 1,
                            account = Chain & ":" & payTo, ttlSec = Ttl)
 doAssert id.startsWith("0x"), id
@@ -115,7 +116,7 @@ proc pay(s: CoordinationSession, ks: Keystore): string =
   doAssert outcome == "", outcome
   let tx = rpc("eth_getTransactionByHash", %*[pp.tx])
   doAssert tx["to"].getStr().toLowerAscii() == token, "the payment is a call on the split's token: " & $tx["to"]
-  doAssert tx["input"].getStr().toLowerAscii() == "0xa9059cbb" & word(payTo) & word(toHex(parseInt(Share))),
+  doAssert tx["input"].getStr().toLowerAscii() == "0xa9059cbb" & word(payTo) & word(toHex(parseInt(shareOf(ks)))),
            "exactly transfer(payTo, share): " & tx["input"].getStr()
   doAssert tx["from"].getStr().toLowerAscii() == addrOf(ks), "from the payer's own key"
   for _ in 0 ..< 50:
@@ -157,7 +158,8 @@ for s in [r.alice, r.bob, r.carol]:
 for s in [r.alice, r.bob, r.carol]:
   doAssert intentState(s.roomEvents(), splitFor, id) == "final", "final on every member"
 let after = tokenBalance(token, payTo)
-doAssert after - before == u256(Share) * 2.u256, "Alice received exactly the two shares: " & $(after - before)
+doAssert after - before == u256(shareOf(bobKs)) + u256(shareOf(room3CarolKs)),
+         "Alice received exactly the two shares: " & $(after - before)
 echo "5. Alice's client confirms both from the Transfer logs; +0.6 MTD; final on all three members OK"
 
 echo "split_erc20_anvil_e2e: all OK"

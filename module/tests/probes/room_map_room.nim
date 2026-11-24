@@ -154,7 +154,7 @@ proc join*(r: var MapRoom, who: string, reannounce: bool) =
   let s = newCoordinationSession(newLocalTransport(r.net), newEpochJoiner(ksFor(who)), r.topic)
   s.requestJoin(ksFor(who).joinRequestFor(r.topic, high(uint64)))
   r.alice.poll()
-  r.alice.admit(ksFor(who).encIdentity())
+  r.alice.admitAs(aliceKs, ksFor(who).encIdentity())   # its membership record signed by alice (exo-045)
   r.joiners[who] = s
   r.sync()
   if reannounce:

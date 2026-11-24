@@ -98,6 +98,7 @@ Item {
             spacing: Theme.spacing.large
 
             LogosText {
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 text: qsTr("The Logos Execution Zone. Nobody has to approve a payment — you ask "
@@ -111,6 +112,7 @@ Item {
             RowLayout {
                 Layout.fillWidth: true
                 LogosText {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     text: qsTr("Your addresses — share one to be paid")
                     color: Theme.palette.textTertiary
@@ -128,6 +130,7 @@ Item {
             // so instead of showing empty headers. This is what you'd hit under
             // MUSTER_LEZ_REAL when the real lez_core can't reach testnet.lez.logos.co.
             LogosText {
+                textFormat: Text.PlainText
                 visible: lez.lezError.length > 0
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
@@ -139,6 +142,7 @@ Item {
                 font.pixelSize: MusterStyle.caption
             }
             LogosText {
+                textFormat: Text.PlainText
                 visible: lez.lezError.length === 0 && lez.lezAccounts.length === 0
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
@@ -172,6 +176,7 @@ Item {
                         RowLayout {
                             Layout.fillWidth: true
                             LogosText {
+                                textFormat: Text.PlainText
                                 text: lez.formLabel(shareRow.form)
                                 color: Theme.palette.text
                                 font.family: Theme.typography.publicSans
@@ -181,6 +186,7 @@ Item {
                             Item { Layout.fillWidth: true }
                             // what you have in this account (loadBalances)
                             LogosText {
+                                textFormat: Text.PlainText
                                 readonly property string bal: lez.balanceOf(shareRow.modelData.id)
                                 text: bal.length > 0 ? qsTr("balance: %1").arg(bal) : qsTr("balance: —")
                                 color: Theme.palette.textSecondary
@@ -189,6 +195,7 @@ Item {
                             }
                         }
                         LogosText {
+                            textFormat: Text.PlainText
                             Layout.fillWidth: true
                             wrapMode: Text.WordWrap
                             text: lez.shareHint(shareRow.form)
@@ -199,6 +206,7 @@ Item {
                             Layout.fillWidth: true
                             spacing: Theme.spacing.small
                             TextEdit {
+                                textFormat: TextEdit.PlainText
                                 id: shareField
                                 Layout.fillWidth: true
                                 readOnly: true
@@ -221,6 +229,7 @@ Item {
 
             // ── send ───────────────────────────────────────────────────────────
             LogosText {
+                textFormat: Text.PlainText
                 text: qsTr("SEND")
                 color: Theme.palette.textTertiary
                 font.family: MusterStyle.mono
@@ -232,6 +241,7 @@ Item {
                 Layout.fillWidth: true
                 spacing: Theme.spacing.small
                 LogosText {
+                    textFormat: Text.PlainText
                     text: qsTr("from")
                     color: Theme.palette.textTertiary
                     font.family: MusterStyle.mono
@@ -277,6 +287,7 @@ Item {
 
             // the honesty, before you commit
             LogosText {
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 visible: lez.preview && (lez.preview.rail !== undefined || lez.preview.error !== undefined)
@@ -308,6 +319,7 @@ Item {
             // the outcome, reported honestly (a shielded send stays "settling" for
             // minutes — never a false "landed")
             LogosText {
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 wrapMode: Text.WrapAnywhere
                 visible: lez.sendResult && (lez.sendResult.txId !== undefined || lez.sendResult.error !== undefined)

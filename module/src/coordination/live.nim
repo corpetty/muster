@@ -77,17 +77,18 @@ proc liveProposeIntent*(s: CoordinationSession, ks: Keystore, driverFor: DriverF
   s.publish(proposeEvent(id, effectJson))
   let ttl = (if ttlSec > 0: ttlSec else: DefaultIntentTtl)
   let expiry = uint64(max(0'i64, nowSec) + ttl)
-  s.publish(contextEvent(id, SigningContext(
-    environment: driverFor(policy).environment(), account: account, slot: id,
-    expiry: expiry)))
-  # Each external read that reached the effect, recorded before any agreement (inv 10).
-  if reads.len > 0:
-    let ej = parseJson(effectJson)
-    for r in reads:
-      if ej.hasKey(r.field): s.publish(readEvent(id, r.field, r.source, $ej[r.field]))
   # Who proposed it, signed (exo-770): the room reads a proposal's proposer only from this.
   let me = hex0x(ks.encIdentity().toBytes())
   s.publishAuthored(ks, proposerEvent(id, me))
+  # Its context and every external read that reached the effect, recorded before any
+  # agreement (inv 10), each signed by the proposer (exo-ea8).
+  s.publishAuthored(ks, contextEvent(id, SigningContext(
+    environment: driverFor(policy).environment(), account: account, slot: id,
+    expiry: expiry), author = me))
+  if reads.len > 0:
+    let ej = parseJson(effectJson)
+    for r in reads:
+      if ej.hasKey(r.field): s.publishAuthored(ks, readEvent(id, r.field, r.source, $ej[r.field], author = me))
   # A party whose agreement proposing carries (a split's creditor) agrees now, by their
   # own key, through the ordinary contribution path — attested, context-bound.
   if driverFor(policy).agreesByProposing(effectFromJson(effectJson), me):
@@ -357,7 +358,9 @@ proc liveReannounce*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor,
     if proposal.policy.len > 0: s.publish(policyDeclEvent(id, proposal.policy))
     s.publish(proposeEvent(id, proposal.effectJson))
     for e in events:
-      if e.key == "intent/" & id & "/context" or e.key.startsWith("intent/" & id & "/read/"):
+      # the context, its reads, and the signed proposer claim that makes it the intent's (exo-ea8)
+      if e.key == "intent/" & id & "/context" or e.key.startsWith("intent/" & id & "/read/") or
+         e.key.startsWith("intent/" & id & "/proposer/"):
         s.publish(e)
     inc msgSeq
     let refBody = $(%*{"kind": "intent-ref", "intentId": id})
@@ -396,8 +399,16 @@ proc liveNextRounds*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor,
     if nd.frostGroupOf().ok or not nd.laterRoundsInApp(): continue
     var approvedBefore, approvedNow = false
     for g in approvalGrades(events, driverFor, id):
-      if g.grade == agRejected or bareNames([g.who])[0] notin mine: continue
+      # only this member's own approval in THIS room carries it on (exo-af5): a round-1
+      # signature of theirs copied in from elsewhere, unattested here, never does
+      if g.grade != agCommitted or bareNames([g.who])[0] notin mine: continue
       if g.round < it.collection.round: approvedBefore = true
       if g.round == it.collection.round: approvedNow = true
     if approvedBefore and not approvedNow:
       result.add (id: id, outcome: liveContribute(s, ks, driverFor, id, "", "", ctxFor(id), nowSec))
+
+
+proc publishRead*(s: CoordinationSession, ks: Keystore, intentId, field, source, value: string) =
+  ## Record an external read of this intent as this member, signed (exo-ea8).
+  s.publishAuthored(ks, readEvent(intentId, field, source, value,
+                                  author = hex0x(ks.encIdentity().toBytes())))

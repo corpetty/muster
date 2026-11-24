@@ -101,6 +101,7 @@ Item {
                     Layout.fillWidth: true
                     spacing: Theme.spacing.small
                     LogosText {
+                        textFormat: Text.PlainText
                         Layout.fillWidth: true
                         text: qsTr("How this room is protected")
                         color: Theme.palette.text
@@ -124,6 +125,7 @@ Item {
                         spacing: Theme.spacing.small
 
                         LogosText {
+                            textFormat: Text.PlainText
                             Layout.alignment: Qt.AlignTop
                             Layout.preferredWidth: 14           // ✓ and ! line their text up
                             horizontalAlignment: Text.AlignHCenter
@@ -138,6 +140,7 @@ Item {
                             spacing: 0
 
                             LogosText {
+                                textFormat: Text.PlainText
                                 Layout.fillWidth: true
                                 wrapMode: Text.WordWrap
                                 text: axisRow.axis === "authentication" ? qsTr("Who said what")
@@ -149,6 +152,7 @@ Item {
                                 font.weight: Theme.typography.weightMedium
                             }
                             LogosText {
+                                textFormat: Text.PlainText
                                 Layout.fillWidth: true
                                 wrapMode: Text.WordWrap
                                 text: axisRow.axis === "authentication"
@@ -175,6 +179,7 @@ Item {
                 spacing: Theme.spacing.small
 
                 LogosText {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     text: qsTr("In the room")
                     color: Theme.palette.text
@@ -187,6 +192,7 @@ Item {
                 // Count-first, like the scope line: a number to check against the
                 // room, not a word to skim past.
                 LogosText {
+                    textFormat: Text.PlainText
                     text: qsTr("%1").arg(scope.roster.length)
                     color: Theme.palette.textTertiary
                     font.family: MusterStyle.mono
@@ -235,6 +241,7 @@ Item {
                             readonly property string memberAlias:
                                 modelData && modelData.alias ? String(modelData.alias) : ""
                             LogosText {
+                                textFormat: Text.PlainText
                                 Layout.fillWidth: true
                                 text: {
                                     var id = modelData && modelData.identity
@@ -297,6 +304,7 @@ Item {
             // so, and that a member here will admit you, rather than leave you guessing.
             // A founder alone is told who can come in instead.
             LogosText {
+                textFormat: Text.PlainText
                 visible: scope.roster.length <= 1 && (scope.founder || scope.joinStatus.length === 0)
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
@@ -309,6 +317,7 @@ Item {
 
             // Where the ask stands — sealed and sent, or still waiting for the room's key.
             LogosText {
+                textFormat: Text.PlainText
                 objectName: "joinStatusLabel"
                 visible: scope.canAskToJoin && scope.joinStatus.length > 0
                 Layout.fillWidth: true
@@ -330,6 +339,7 @@ Item {
             // admitted. Admitting re-keys the room forward (F-16) and hands them the
             // new epoch key — they read from here on, never the log before.
             LogosText {
+                textFormat: Text.PlainText
                 visible: scope.pendingList.length > 0
                 Layout.fillWidth: true
                 text: qsTr("Waiting to join")
@@ -348,6 +358,7 @@ Item {
                     spacing: Theme.spacing.small
 
                     LogosText {
+                        textFormat: Text.PlainText
                         Layout.fillWidth: true
                         readonly property string ident: modelData && modelData.identity ? String(modelData.identity) : ""
                         readonly property string alias: modelData && modelData.alias ? String(modelData.alias) : ""
@@ -370,6 +381,7 @@ Item {
 
             // ── Scope ─────────────────────────────────────────────────────────
             LogosText {
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 text: qsTr("Scope")
                 color: Theme.palette.text
@@ -395,6 +407,7 @@ Item {
                 }
 
                 LogosText {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     text: qsTr("end-to-end · %1 can read").arg(scope.roster.length)
                     color: Theme.palette.textSecondary
@@ -407,6 +420,7 @@ Item {
             // Why growing the room is a boundary change, not a settings toggle
             // (F-16). Said once, here, for inviting and admitting alike.
             LogosText {
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 // said once: "Who can read it" above already says it when the room reports
                 visible: scope.securityAxes.length === 0

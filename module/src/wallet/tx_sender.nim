@@ -94,20 +94,56 @@ proc requestJson*(chainId: int, frm: string, c: TxCall, purpose: string, meta: J
   if p.len > 256: p = p[0 ..< 253] & "..."
   %*{"chainId": chainId, "from": frm.lowerHex(), "calls": [call], "purpose": p}
 
-proc legsMismatch*(prepared: JsonNode, c: TxCall): string =
-  ## "" when prepare's legs are exactly `c`; else what differs. A refusal from prepare is
-  ## its own reason.
+proc chainIdOf(j: JsonNode): int64 =
+  ## A chain id as the sender wrote it: a number, or decimal / 0x-hex text. -1 when it is
+  ## neither (or absent): never a default that could match.
+  if j == nil: return -1
+  case j.kind
+  of JInt: j.getBiggestInt()
+  of JString:
+    let t = j.getStr().strip()
+    try:
+      if t.startsWith("0x") or t.startsWith("0X"): fromHex[int64](t)
+      elif t.len > 0 and t.allCharsInSet(Digits): parseBiggestInt(t)
+      else: -1
+    except ValueError: -1
+  else: -1
+
+proc legsMismatch*(prepared: JsonNode, c: TxCall, chainId: int, frm: string): string =
+  ## "" when prepare's answer is exactly `c`, on `chainId`, from `frm`; else what differs.
+  ## A refusal from prepare is its own reason. Each field is read as what it is (exo-1c9,
+  ## P5-08): to and value are text, data is text or absent (a plain transfer's), and a field
+  ## of any other kind is a difference — never read as a default that could match.
   if prepared == nil or prepared.kind != JObject: return "tx_sender_module did not answer prepare"
   if not prepared{"ok"}.getBool(false): return prepared{"error"}.getStr("tx_sender_module refused the payment")
+  let cid = chainIdOf(prepared{"chainId"})
+  if cid != int64(chainId):
+    return "chainId: the sender prepared for chain " &
+           (if prepared{"chainId"} == nil: "none" else: $prepared{"chainId"}) & ", not " & $chainId
+  let pf = prepared{"from"}
+  if pf == nil or pf.kind != JString or pf.getStr().lowerHex() != frm.lowerHex():
+    return "from: the sender would pay from " & (if pf == nil: "no account" else: $pf) & ", not " & frm
   let legs = prepared{"legs"}
   if legs == nil or legs.kind != JArray or legs.len != 1:
     return "legs: the sender prepared " & (if legs == nil: "none" else: $legs.len) & " for one payment"
   let l = legs[0]
-  if l{"to"}.getStr().lowerHex() != c.to: return "to: the sender would pay " & l{"to"}.getStr() & ", not " & c.to
+  if l == nil or l.kind != JObject: return "legs: the sender prepared " & $l & ", not a call"
+  let lt = l{"to"}
+  if lt == nil or lt.kind != JString or lt.getStr().lowerHex() != c.to:
+    return "to: the sender would pay " & (if lt == nil: "no one" else: $lt) & ", not " & c.to
+  let lv = l{"value"}
+  if lv == nil or lv.kind != JString:
+    return "value: the sender wrote " & (if lv == nil: "none" else: $lv) & ", not an amount of wei"
   var v = ""
-  try: v = decimalOf(l{"value"}.getStr("0")) except TxSenderError: v = "?"
-  if v != c.value: return "value: the sender would move " & l{"value"}.getStr() & ", not " & c.value & " wei"
-  var d = l{"data"}.getStr("").lowerHex()
+  try: v = decimalOf(lv.getStr()) except TxSenderError: v = "?"
+  if lv.getStr().strip().len == 0: v = "?"   # an empty value is not zero
+  if v != c.value: return "value: the sender would move " & lv.getStr() & ", not " & c.value & " wei"
+  var d = ""
+  if l.hasKey("data"):
+    let ld = l["data"]
+    if ld == nil or ld.kind != JString:
+      return "data: the sender wrote " & (if ld == nil: "null" else: $ld) & ", not calldata"
+    d = ld.getStr().lowerHex()
   if d == "0x": d = ""
   if d != c.data.lowerHex(): return "data: the sender would send other calldata than the agreed payment"
   ""

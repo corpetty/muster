@@ -8,6 +8,8 @@ import ../src/drivers/driver
 import ../src/drivers/threshold
 import ../src/coordination/intents
 import ../src/crypto/curve25519
+import ../src/log/log
+import ./probes/attested
 proc seed(b: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = b)
 proc sigHex(s: Ed25519Sig): string =
   const d = "0123456789abcdef"
@@ -27,10 +29,13 @@ let who1 = contributorOf(drv, effect, sigHex(edSign(m1, mat.bytes)))
 let who2 = contributorOf(drv, effect, sigHex(edSign(m2, mat.bytes)))
 
 var ev = @[policyDeclEvent(id, "threshold"), proposeEvent(id, effect)]
+# Folded as the live path leaves it (exo-af5): the threshold driver is room-bound, so each
+# approval carries its signer's attestation over P, beside the proposer's claim and context.
+proc att(e: seq[Event]): seq[Event] = withAttestations(e, fold, id, signers = [m1, m2])
 
 # ── 1. after only a propose: one entry, and it is the proposal ────────────────
 block:
-  let a = reduceActivity(ev, fold)
+  let a = reduceActivity(att(ev), fold)
   doAssert a.len == 1, "propose alone yields one entry, got " & $a.len
   doAssert a[0].kind == "propose"
   doAssert "a payment: 0.000000000000000007 ETH" in a[0].title, "the effect is summarized: " & a[0].title
@@ -40,7 +45,7 @@ block:
 # ── 2. one approval: count reads 1 of 2, still not ready ──────────────────────
 ev.add contributeEvent(id, who1, sigHex(edSign(m1, mat.bytes)), 1)
 block:
-  let a = reduceActivity(ev, fold)
+  let a = reduceActivity(att(ev), fold)
   let kinds = a.mapIt(it.kind)
   doAssert "approve" in kinds, "an approval appears"
   let ap = a.filterIt(it.kind == "approve")[0]
@@ -51,7 +56,7 @@ block:
 # ── 3. second approval: 2 of 2 AND a 'ready' line appears ─────────────────────
 ev.add contributeEvent(id, who2, sigHex(edSign(m2, mat.bytes)), 1)
 block:
-  let a = reduceActivity(ev, fold)
+  let a = reduceActivity(att(ev), fold)
   let kinds = a.mapIt(it.kind)
   doAssert "ready" in kinds, "threshold met → a 'ready' entry: " & $kinds
   let aps = a.filterIt(it.kind == "approve")
@@ -68,15 +73,15 @@ block:
 
 # ── 4. determinism: same events fold the identical timeline (inv 4) ───────────
 block:
-  let a = reduceActivity(ev, fold)
-  let b = reduceActivity(ev, fold)
+  let a = reduceActivity(att(ev), fold)
+  let b = reduceActivity(att(ev), fold)
   doAssert a.len == b.len
   for i in 0 ..< a.len:
     doAssert a[i].kind == b[i].kind and a[i].title == b[i].title, "deterministic"
   # a duplicate contribution folds once — no extra approve line
   var ev2 = ev
   ev2.add contributeEvent(id, who1, sigHex(edSign(m1, mat.bytes)), 1)   # dup of who1
-  doAssert reduceActivity(ev2, fold).len == a.len, "a duplicate signature folds once"
+  doAssert reduceActivity(att(ev2), fold).len == a.len, "a duplicate signature folds once"
   echo "4. deterministic + duplicate folds once OK"
 
 # ── 5. the whole lifecycle reads in order, not by content hash ────────────────
@@ -88,7 +93,7 @@ block:
   var evl = ev
   evl.add submitEvent(id)
   evl.add finalEvent(id)
-  let a = reduceActivity(evl, fold)
+  let a = reduceActivity(att(evl), fold)
   let kinds = a.mapIt(it.kind)
   proc idxOf(k: string): int =
     for i in 0 ..< a.len:

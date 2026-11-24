@@ -38,7 +38,7 @@ proc decisionCorrect(unaccountable: int): bool =
       let id = r.propose(policy, effectFor(policy, 7, "\"sources\":{" & srcs & "}"))
       for f in fields:
         if f notin missing:
-          r.alice.publish(readEvent(id, f, "rpc://probe", fieldValue(policy, f, 7)))
+          r.alice.publishRead(aliceKs, id, f, "rpc://probe", fieldValue(policy, f, 7))
       let before = r.events().len
       discard r.approveAs("alice", id)
       let evs = r.events()

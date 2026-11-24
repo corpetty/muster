@@ -98,6 +98,7 @@ Item {
         contentItem: ColumnLayout {
             spacing: Theme.spacing.small
             LogosText {
+                textFormat: Text.PlainText
                 text: qsTr("Your contact link")
                 color: Theme.palette.text
                 font.pixelSize: MusterStyle.subtitle
@@ -167,12 +168,14 @@ Item {
                     Layout.fillWidth: true
                     spacing: 2
                     LogosText {
+                        textFormat: Text.PlainText
                         text: qsTr("Needs you")
                         color: Theme.palette.text
                         font.pixelSize: MusterStyle.title
                         font.weight: Theme.typography.weightBold
                     }
                     LogosText {
+                        textFormat: Text.PlainText
                         objectName: "homeHeadline"
                         text: home.needsCount > 0 ? qsTr("%1 waiting on you").arg(home.needsCount)
                                                   : qsTr("Nothing waiting on you")
@@ -206,6 +209,7 @@ Item {
                     RowLayout {
                         Layout.fillWidth: true
                         LogosText {
+                            textFormat: Text.PlainText
                             Layout.fillWidth: true
                             text: qsTr("Getting started")
                             color: Theme.palette.text
@@ -232,6 +236,7 @@ Item {
                                 border.width: modelData.done ? 0 : 1
                                 border.color: Theme.palette.border
                                 LogosText {
+                                    textFormat: Text.PlainText
                                     anchors.centerIn: parent
                                     visible: modelData.done
                                     text: "✓"
@@ -241,6 +246,7 @@ Item {
                                 }
                             }
                             LogosText {
+                                textFormat: Text.PlainText
                                 Layout.fillWidth: true
                                 wrapMode: Text.WordWrap
                                 text: modelData.text
@@ -302,6 +308,7 @@ Item {
                                 Layout.fillWidth: true
                                 spacing: 2
                                 LogosText {
+                                    textFormat: Text.PlainText
                                     Layout.fillWidth: true
                                     elide: Text.ElideRight
                                     text: {
@@ -315,6 +322,7 @@ Item {
                                     font.weight: Theme.typography.weightBold
                                 }
                                 LogosText {
+                                    textFormat: Text.PlainText
                                     visible: String(modelData.note || "").length > 0
                                     Layout.fillWidth: true
                                     elide: Text.ElideRight
@@ -394,6 +402,7 @@ Item {
                                             Layout.fillWidth: true
                                             spacing: 2
                                             LogosText {
+                                                textFormat: Text.PlainText
                                                 Layout.fillWidth: true
                                                 elide: Text.ElideRight
                                                 text: String(row.modelData.title || "")
@@ -402,6 +411,7 @@ Item {
                                                 font.weight: Theme.typography.weightBold
                                             }
                                             LogosText {
+                                                textFormat: Text.PlainText
                                                 Layout.fillWidth: true
                                                 elide: Text.ElideRight
                                                 text: String(row.modelData.detail || "")
@@ -435,6 +445,7 @@ Item {
                 spacing: Theme.spacing.medium
                 Loading { running: parent.visible }
                 LogosText {
+                    textFormat: Text.PlainText
                     text: qsTr("Loading your rooms…")
                     color: Theme.palette.textSecondary
                     font.pixelSize: MusterStyle.body
@@ -458,6 +469,7 @@ Item {
                 Layout.topMargin: Theme.spacing.small
                 spacing: Theme.spacing.small
                 LogosText {
+                    textFormat: Text.PlainText
                     text: qsTr("Have a room code?")
                     color: Theme.palette.textTertiary
                     font.pixelSize: MusterStyle.body

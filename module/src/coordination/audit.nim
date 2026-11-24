@@ -233,7 +233,8 @@ proc exportAudit*(events: seq[Event], driverFor: DriverFor, intentId: string,
     # the lineage: every input the provenance names, and all their ancestors
     var lineage = initHashSet[EventId]()
     var queue: seq[EventId]
-    for i in inputs: queue.add i.logRef
+    # the inputs and the signed proposer claim behind the context (exo-ea8), as the fold reads them
+    for i in lineageIds(ordered, driverFor, intentId): queue.add i
     proc needReadable(id: EventId) =
       if id notin byId:
         refuse("the intent's history reaches an event this member cannot read (an earlier epoch)")
@@ -473,9 +474,8 @@ proc verifyAudit*(bytes: seq[byte]): AuditVerdict =
     if not inputs.allAccountable: refuse("the provenance names an input the file does not carry")
     if encode(f.field("provenance")) != encode(provenanceCbor(inputs)):
       refuse("the provenance record does not match the lineage")
-    var named = initHashSet[EventId]()
-    for i in inputs: named.incl i.logRef
-    var reach = named
+    # what the provenance names, and the proposer claim that makes the context the intent's (exo-ea8)
+    var reach = lineageIds(lineage, fileDriverFor, intentId)
     var changed = true
     while changed:
       changed = false
@@ -522,7 +522,7 @@ proc verifyAudit*(bytes: seq[byte]): AuditVerdict =
         if att.key != "intent/" & intentId & "/attest/" & k:
           refuse("approval by " & a.who & " carries another approval's attestation")
         if verifyAttestation(a.who, p, att.value): ok = true
-      let grade = (if ok: $agCommitted elif a.atts.len > 0: $agRejected else: $agUnattested)
+      let grade = $gradeFor(ok, chainBindsSignatures(fdrv))   # the fold's own rule (exo-af5, exo-83c)
       if grade != a.grade:
         refuse("approval by " & a.who & " claims '" & a.grade & "' but its attestations make it '" & grade & "'")
       if grade == $agCommitted: inc committed

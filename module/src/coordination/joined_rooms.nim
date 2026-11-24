@@ -8,6 +8,7 @@
 ## damaged file reads as the rooms it validly holds, never as a raise.
 
 import std/[json, os, tables]
+import ../security/private_files
 export tables
 
 proc loadJoinedRooms*(path: string): seq[string] =
@@ -23,10 +24,9 @@ proc loadJoinedRooms*(path: string): seq[string] =
 
 proc writeRooms(path: string, rooms: seq[string]) =
   try:
-    createDir(parentDir(path))
     var arr = newJArray()
     for t in rooms: arr.add %t
-    writeFile(path, $arr)
+    writePrivateFile(path, $arr)
   except CatchableError: discard
 
 proc rememberJoinedRoom*(path, ctopic: string): bool =
@@ -73,9 +73,8 @@ proc setRoomTitle*(path, ctopic, title: string): bool =
   if title.len == 0: titles.del ctopic
   else: titles[ctopic] = title
   try:
-    createDir(parentDir(path))
     var obj = newJObject()
     for k, v in titles: obj[k] = %v
-    writeFile(path, $obj)
+    writePrivateFile(path, $obj)
   except CatchableError: discard
   true

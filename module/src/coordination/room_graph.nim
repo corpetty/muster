@@ -291,20 +291,26 @@ proc reduceRoomGraph*(events: seq[Event], driverFor: DriverFor, founders: seq[st
   result.epochs.add RoomEpoch(epoch: 0, fromSeq: 0, admitted: "")
   var epochAt = newSeq[int](ordered.len)
   var epoch = 0
+  # each admission's epoch is the one it names, whatever order the records sort in (they
+  # are content-addressed, so an admit to epoch 2 can sort before one to epoch 1): the
+  # epochs and each member's joining epoch are read in epoch order, never position
+  var admits: seq[tuple[ep, at: int, who: string]]
   for i, e in ordered:
     let p = e.key.split('/')
     if p.len >= 4 and p[0] == "membership" and p[2] == "admit":
       var ep = epoch
-      try: ep = max(epoch, parseInt(p[1]))
+      try: ep = parseInt(p[1])
       except ValueError: discard
-      epoch = ep
-      let who = norm(p[3])
-      if ep > result.epochs[^1].epoch: result.epochs.add RoomEpoch(epoch: ep, fromSeq: i, admitted: who)
-      if who notin members:
-        members.incl who
-        addNode("m:" & who, "member", i, ep, %*{"joined": ep})
-      if who == result.viewer: result.readFrom = ep
+      epoch = max(epoch, ep)
+      admits.add (ep: ep, at: i, who: norm(p[3]))
     epochAt[i] = sealedIn.getOrDefault(eventId(e), epoch)
+  admits.sort(proc(a, b: auto): int = (if a.ep != b.ep: cmp(a.ep, b.ep) else: cmp(a.at, b.at)))
+  for a in admits:
+    if a.ep > result.epochs[^1].epoch: result.epochs.add RoomEpoch(epoch: a.ep, fromSeq: a.at, admitted: a.who)
+    if a.who notin members:
+      members.incl a.who
+      addNode("m:" & a.who, "member", a.at, a.ep, %*{"joined": a.ep})
+    if a.who == result.viewer: result.readFrom = a.ep
   # an admission names its joiner, but what that member did before is not in THIS
   # graph unless this client could open it — so readFrom is simply the viewer's own
   # admission epoch, read from the log it holds

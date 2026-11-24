@@ -6,7 +6,10 @@
 ##
 ## Pure Nim (json/os/tables) — headless-testable; the module wires the path in.
 
-import std/[json, os, tables, strutils]
+import std/[json, os, tables, strutils, unicode]
+import ../security/private_files
+import ../security/text_controls
+export text_controls.mixesScripts
 
 type
   Contact* = object
@@ -26,11 +29,10 @@ proc normId*(hex: string): string =
 
 proc save(b: ContactBook) =
   try:
-    createDir(parentDir(b.path))
     var o = newJObject()
     for id, c in b.byId:
       o[id] = %*{"alias": c.alias, "address": c.address}
-    writeFile(b.path, $o)
+    writePrivateFile(b.path, $o)
   except CatchableError: discard
 
 proc newContactBook*(path: string): ContactBook =
@@ -47,25 +49,53 @@ proc newContactBook*(path: string): ContactBook =
                                       address: v{"address"}.getStr())
   except CatchableError: discard
 
-proc add*(b: ContactBook, identity, alias: string, address = "") =
+proc cleanAlias(alias: string): string =
+  ## An alias as stored: no format controls (they hide or reorder what it shows, exo-3b3.18),
+  ## no surrounding space.
+  stripFormatControls(alias).strip()
+
+proc aliasRefusal*(b: ContactBook, identity, alias: string): string =
+  ## Why `alias` may not name `identity`, or "": another contact already has it, in any case
+  ## (a second "Alice" would be indistinguishable on every surface; exo-3b3.18, audit P4-09).
+  ## An empty alias is never a duplicate.
+  let id = normId(identity)
+  let a = cleanAlias(alias)
+  if a.len == 0: return ""
+  let key = unicode.toLower(a)
+  for other, c in b.byId:
+    if other != id and c.alias.len > 0 and unicode.toLower(c.alias) == key:
+      return "another contact is already named " & c.alias
+  ""
+
+proc add*(b: ContactBook, identity, alias: string, address = ""): string {.discardable.} =
   ## Add or replace a contact. Merges: an empty alias/address does not clobber a
   ## stored one, so `add(id, "")` from an admit can seed a contact that a later
-  ## rename fills in.
+  ## rename fills in. Returns "" or why the alias is refused (aliasRefusal); a refused
+  ## add stores nothing.
   let id = normId(identity)
-  if id.len == 0: return
+  if id.len == 0: return "no identity"
+  let a = cleanAlias(alias)
+  let why = b.aliasRefusal(id, a)
+  if why.len > 0: return why
   var c = (if id in b.byId: b.byId[id] else: Contact(identity: id))
-  if alias.len > 0: c.alias = alias
+  if a.len > 0: c.alias = a
   if address.len > 0: c.address = address
   b.byId[id] = c
   b.save()
+  ""
 
-proc setAlias*(b: ContactBook, identity, alias: string) =
+proc setAlias*(b: ContactBook, identity, alias: string): string {.discardable.} =
+  ## Rename a contact (or create it with just an alias). Returns "" or why it is refused.
   let id = normId(identity)
-  if id.len == 0: return
+  if id.len == 0: return "no identity"
+  let a = cleanAlias(alias)
+  let why = b.aliasRefusal(id, a)
+  if why.len > 0: return why
   var c = (if id in b.byId: b.byId[id] else: Contact(identity: id))
-  c.alias = alias
+  c.alias = a
   b.byId[id] = c
   b.save()
+  ""
 
 proc remove*(b: ContactBook, identity: string) =
   let id = normId(identity)
@@ -79,10 +109,13 @@ proc aliasOf*(b: ContactBook, identity: string): string =
   if id in b.byId: b.byId[id].alias else: ""
 
 proc asJson*(b: ContactBook): JsonNode =
-  ## The address-book view: [{identity, alias, address}].
+  ## The address-book view: [{identity, alias, address, mixedScript}]. `mixedScript` flags an
+  ## alias mixing Latin letters with Cyrillic or Greek ones (a look-alike "Аlice"), for the
+  ## UI to show; the alias itself is the person's and is kept as they typed it.
   result = newJArray()
   for id, c in b.byId:
-    result.add %*{"identity": c.identity, "alias": c.alias, "address": c.address}
+    result.add %*{"identity": c.identity, "alias": c.alias, "address": c.address,
+                  "mixedScript": mixesScripts(c.alias)}
 
 proc nameFor*(b: ContactBook, who: string): string =
   ## A contributor's alias, however its driver names it (exo-59c): the 64-byte identity,

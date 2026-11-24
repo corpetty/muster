@@ -53,7 +53,7 @@ let prepared = PreparedTx(chain: "evm:11155111",
 block:
   reset()
   let a = newEvmAdapter("evm:11155111", Ep, fromUnlocked = false)
-  prepareReply = %*{"ok": true, "legs": [{"to": Safe, "value": "0x0", "data": data, "gasLimit": 120000}]}
+  prepareReply = %*{"ok": true, "chainId": 11155111, "from": Owner, "legs": [{"to": Safe, "value": "0x0", "data": data, "gasLimit": 120000}]}
   sendReply = %*{"ok": true, "pending": true, "requestId": "snd_s1", "handle": "ksh_s1"}
   let r = a.submit(prepared, ks())
   doAssert r.id == "txs:snd_s1", r.id
@@ -68,7 +68,7 @@ block:
 block:
   reset()
   let a = newEvmAdapter("evm:11155111", Ep, fromUnlocked = false)
-  prepareReply = %*{"ok": true, "legs": [{"to": Safe, "value": "0x0", "data": "0x6a761202"}]}
+  prepareReply = %*{"ok": true, "chainId": 11155111, "from": Owner, "legs": [{"to": Safe, "value": "0x0", "data": "0x6a761202"}]}
   var raised = ""
   try: discard a.submit(prepared, ks())
   except WalletError as e: raised = e.msg
@@ -79,7 +79,7 @@ block:
 block:
   reset()
   let a = newEvmAdapter("evm:11155111", Ep, fromUnlocked = false)
-  prepareReply = %*{"ok": true, "legs": [{"to": Safe, "value": "0x0", "data": data}]}
+  prepareReply = %*{"ok": true, "chainId": 11155111, "from": Owner, "legs": [{"to": Safe, "value": "0x0", "data": data}]}
   sendReply = %*{"ok": true, "pending": true, "requestId": "snd_s3", "handle": "ksh_s3"}
   let r = a.submit(prepared, ks())
   statusReply = %*{"ok": true, "status": "awaitingApproval", "final": false}

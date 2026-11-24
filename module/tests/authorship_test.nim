@@ -144,7 +144,8 @@ block:
             "intent/" & intentId & "/decline",
             "intent/" & intentId & "/material/payee/" & victor & "/extra",
             "account/eip155:1:0xabc/disclose/" & victor & "/x",
-            "frost/c1/join/" & victor & "/x", "message/abc"]:
+            "frost/c1/join/" & victor & "/x", "message/abc",
+            "membership/1/admit/" & victor, "membership/2/remove/" & victor]:
     doAssert authorOf(Event(key: k, value: "{}")).authored, "author-bearing shape: " & k
     doAssert authenticEvents(@[Event(key: k, value: "{}")], roomA).len == 0, k
   echo "7. every key shape a fold reads as author-bearing is classified and dropped unsigned OK"
@@ -152,10 +153,10 @@ block:
 # ── 8. kinds that name no author pass through untouched ──────────────────────────
 block:
   let others = @[propose, policyDeclEvent(intentId, "stub"), contributeEvent(intentId, victor, "aa"),
-                 submitEvent(intentId), finalEvent(intentId), membershipEvent(1, victor)]
+                 submitEvent(intentId), finalEvent(intentId)]
   for e in others: doAssert not authorOf(e).authored, e.key
   doAssert authenticEvents(others, roomA).mapIt(it.key) == others.mapIt(it.key)
-  echo "8. propose / policy / contribute / submit / final / membership pass through OK"
+  echo "8. propose / policy / contribute / submit / final pass through OK"
 
 # ── 9. convergence: the filter is a pure function of the event set (inv 4) ───────
 block:

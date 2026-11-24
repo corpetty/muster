@@ -109,7 +109,7 @@ block:
   doAssert lv.allIt(it.seq >= submitSeq or it.src != "i:" & idA), "nothing of A leaves before submit"
   # the split: bob's counted settle leaves with the manifest's fields; the forged one does not
   let bobPaid = canonicalOrder(story).mapIt(it.key).find("intent/" & idB & "/part/" & bob & "/settled")
-  let splitOut = lv.filterIt(it.src == "i:" & idB and it.dst == "o:chain-observer")   # an undeclared profile names no chain
+  let splitOut = lv.filterIt(it.src == "i:" & idB and it.dst == "o:chain-observer")   # a profile naming no chain names none
   doAssert splitOut.len == 1, $splitOut
   doAssert splitOut[0].attrs["fields"].getElems().mapIt(it.getStr()) == @["amount", "payer"]
   doAssert splitOut[0].seq > bobPaid, "the counted report is the later one, by bob himself"

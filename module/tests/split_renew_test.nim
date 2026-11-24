@@ -82,7 +82,9 @@ block:
   sync()
   let rn = renewalOf(r.alice.roomEvents(), splitFor, dinner, late)
   doAssert rn.why == "", rn.why
-  doAssert rn.covers.len == 1 and rn.covers[0].debtor == carol and rn.covers[0].amount == "300",
+  # Carol's own share of the dinner (every share distinct, exo-3b3.14)
+  let carolShare = evenShares("900", alice, @[bob, carol]).filterIt(it.who == carol)[0].amount
+  doAssert rn.covers.len == 1 and rn.covers[0].debtor == carol and rn.covers[0].amount == carolShare,
            "only Carol's unpaid share: " & $rn.covers.len
   let e = parseJson(rn.effectJson)
   doAssert e["effect"].getStr() == "settle-up" and e["transfers"].len == 1

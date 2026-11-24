@@ -29,6 +29,7 @@ Rectangle {
     Accessible.name: avatar.name.length > 0 ? avatar.name : avatar.identity
 
     LogosText {
+        textFormat: Text.PlainText
         anchors.centerIn: parent
         text: avatar.letter
         color: avatar.room ? Theme.palette.text : Theme.palette.background

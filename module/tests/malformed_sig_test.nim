@@ -24,6 +24,8 @@ import ../src/coordination/intents
 import ../src/drivers/driver as drivercore
 import ../src/drivers/eip191
 import ../src/drivers/safe
+import ../src/log/log
+import ./probes/attested
 
 proc hexOf(b: openArray[byte]): string =
   const d = "0123456789abcdef"
@@ -81,9 +83,11 @@ block:
   doAssert psDrv.identifyContributor(m, Contribution(bytes: @bad)) == ""
   echo "5. Safe + EIP-191 drivers: a malformed contribution is not valid and names no one OK"
 
-# 6. The fold: a hostile member publishes a malformed approval (no attestation, so it
-#    reaches the driver). reduce(log) must not raise, must not count it, and the room
-#    must still reach executable on the honest approvals.
+# 6. The fold: a hostile member publishes a malformed approval. The driver's verify sees
+#    it whatever its attestation (the fold asks it before the attestation gate, exo-c00).
+#    reduce(log) must not raise, must not count it, and the room must still reach
+#    executable on the honest approvals — which, eip191 being a room family, carry their
+#    signers' attestations over P as the live path publishes them (exo-af5).
 block:
   var skA, skB: array[32, byte]
   for i in 0 ..< 32: (skA[i] = byte(i + 1); skB[i] = byte(i + 50))
@@ -99,10 +103,14 @@ block:
   var events = @[policyDeclEvent(id, "eip191"), proposeEvent(id, effectJson),
                  contributeEvent(id, "0xattacker", hexOf(hostile)),
                  contributeEvent(id, hexOf(addressOf(skA)), hexOf(signRecoverable(h, skA)))]
-  doAssert intentState(events, foldDrv, id) == "collecting",
+  proc signerOf(k: array[32, byte]): SecpSigner =
+    (address: hexOf(addressOf(k)), sign: proc(d: array[32, byte]): string = hexOf(signRecoverable(d, k)))
+  let signers = @[signerOf(skA), signerOf(skB)]
+  proc att(ev: seq[Event]): seq[Event] = withAttestations(ev, foldDrv, id, secp = signers)
+  doAssert intentState(att(events), foldDrv, id) == "collecting",
     "one honest approval of two; the malformed one is not counted"
   events.add contributeEvent(id, hexOf(addressOf(skB)), hexOf(signRecoverable(h, skB)))
-  doAssert intentState(events, foldDrv, id) == "executable",
+  doAssert intentState(att(events), foldDrv, id) == "executable",
     "the room still converges past a hostile approval"
   echo "6. the fold: a malformed approval in the log is uncounted, the room converges OK"
 

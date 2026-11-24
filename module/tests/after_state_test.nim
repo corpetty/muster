@@ -44,7 +44,10 @@ let idB = intentIdFor(pEffect, "parts")
 let sig = contributeEvent(idA, "0xkey", "sa")
 let base = chain(@[
   signAuthored(ks, room, newMessageEvent(alice, 1, "hello", 1)[1]),
-  proposeEvent(idA, effectJson), contextEvent(idA, ctx), readEvent(idA, "nonce", "rpc", "7"),
+  # the context and read are author-bearing, and the context counts only as a proposer's
+  # (exo-ea8): alice's claim, then her context and read
+  proposeEvent(idA, effectJson), proposerEvent(idA, alice), contextEvent(idA, ctx, author = alice),
+  readEvent(idA, "nonce", "rpc", "7", author = alice),
   sig, attestEvent(idA, "0xkey", 1, "00"),
   membershipEvent(1, "ca7".repeat(4)),
   submitEvent(idA), finalEvent(idA),

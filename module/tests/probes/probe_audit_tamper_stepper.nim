@@ -1,14 +1,16 @@
 ## derived-exo-403 s2: a pure verifier given only the file re-derives everything it
 ## can and checks the exporter's signature over what it can't; the untouched file is
-## accepted — its pasted approvals reported unattested — and any single change is
-## refused with a named discrepancy.
+## accepted — its pasted approvals reported unattested where the chain binds the
+## signature (the Safe), rejected where only the room does (the threshold, exo-af5) — and
+## any single change is refused with a named discrepancy.
 ##
 ## STEPPER: state = a mutation. From a valid file (a Safe intent and a threshold
 ## intent, each with a committed and a pasted approval; the Safe one settled), each
 ## mutation edits ONE field class of the decoded file and re-encodes it canonically —
 ## so it is a well-formed file that only lies — and the verifier must refuse it with a
-## reason; "none" must verify, reporting the pasted approval unattested. The verifier
-## is handed bytes only: no log, no keys, no network.
+## reason; "none" must verify, reporting the pasted approval as the fold grades it
+## (unattested on the Safe, rejected under the threshold). The verifier is handed bytes
+## only: no log, no keys, no network.
 ## Build: see live_room.nim.
 
 import ./audit_room
@@ -69,7 +71,7 @@ proc mutate(file: seq[byte], m: string, other: string, foreign: CborValue): seq[
   var committed, pasted: CborValue
   for a in apps:
     if a.field("grade").txt == "committed": committed = a
-    elif a.field("grade").txt == "unattested": pasted = a
+    elif a.field("grade").txt in ["unattested", "rejected"]: pasted = a   # rejected under a room-bound policy (exo-af5)
   case m
   of "effect": f.setField("effect", flipText(f.field("effect")))
   of "materialization": f.setField("materialization", flipBytes(f.field("materialization")))
@@ -124,8 +126,9 @@ proc verdictCorrect(m: string): bool =
     if m == "none":
       if not v.ok: return false
       var sawPasted, sawCommitted = false
+      let pastedGrade = (if policy == "safe": "unattested" else: "rejected")
       for a in v.approvals:
-        if a.grade == "unattested": sawPasted = true
+        if a.grade == pastedGrade: sawPasted = true
         if a.grade == "committed": sawCommitted = true
       if not (sawPasted and sawCommitted): return false
     else:

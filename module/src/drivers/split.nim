@@ -315,21 +315,25 @@ proc refusal(d: SplitDriver, sp: Split): string =
     sum = sum + u256(s.amount)
     if sum < before: return "the shares overflow"
   if sum > u256(sp.total): return "the shares add up to more than the total"
-  if d.family in [LezSplitFamily, MoneroSplitFamily]:
-    # the chain names no payer on the private rail, so the AMOUNT is what lets the
-    # creditor's scan tell whose note arrived (§4.7): no two shares may be equal. A Monero
-    # request pays every share to one subaddress, and the creditor's wallet history names
-    # no payer either (exo-dcc.5 s4): two equal shares there could not be told apart
-    var seen: seq[string]
-    for s in sp.shares:
-      if s.amount in seen:
-        return (if d.family == MoneroSplitFamily:
-                  "every share paid to one subaddress must differ, so the creditor's wallet can tell whose " &
-                  "payment arrived (" & s.amount & " twice)"
-                else:
-                  "every share of a private split must differ, so the creditor can tell whose payment arrived " &
-                  "without the chain naming anyone (" & s.amount & " twice)")
-      seen.add s.amount
+  # no two shares may be equal, in every family (exo-3b3.14): the AMOUNT is what lets the
+  # creditor tell whose payment arrived. The private rail names no payer (§4.7); a Monero
+  # request pays every share to one subaddress, and the creditor's wallet history names no
+  # payer either (exo-dcc.5 s4); and on a public rail the creditor's own read of a reported
+  # transaction checks where it paid and how much, not who sent it — so a payment of one
+  # share could otherwise be reported for another debtor's equal one
+  var seen: seq[string]
+  for s in sp.shares:
+    if s.amount in seen:
+      return (if d.family == MoneroSplitFamily:
+                "every share paid to one subaddress must differ, so the creditor's wallet can tell whose " &
+                "payment arrived (" & s.amount & " twice)"
+              elif d.family == LezSplitFamily:
+                "every share of a private split must differ, so the creditor can tell whose payment arrived " &
+                "without the chain naming anyone (" & s.amount & " twice)"
+              else:
+                "every share must differ, so a payment identifies the one share it pays: the creditor's " &
+                "read checks where a payment went and how much, not who sent it (" & s.amount & " twice)")
+    seen.add s.amount
   ""
 
 proc validSplit(d: SplitDriver, e: Effect): tuple[ok: bool, split: Split, why: string] =
@@ -467,8 +471,17 @@ proc ratePerUnit*(r: SettleRate, assetDecimals: int): string =
   if v > (1.stuint(512) shl 256) - 1.stuint(512): return ""
   $v
 
+proc addChecked(t: var Table[string, UInt256], who: string, amount: UInt256): bool =
+  ## t[who] += amount, unless the sum would pass 2^256 − 1: then nothing changes and false.
+  let before = t.getOrDefault(who)
+  let after = before + amount
+  if after < before: return false
+  t[who] = after
+  true
+
 proc settleRefusal(d: SplitDriver, su: SettleUp): string =
-  ## Why `su` is not a settle-up this driver will sign or pay ("" = it is one).
+  ## Why `su` is not a settle-up this driver will sign or pay ("" = it is one). Every sum is
+  ## overflow-checked (exo-3b3.15): a conservation that holds only modulo 2^256 is refused.
   if d.family == LezSplitFamily:
     return "the private split is never netted: its shares are told apart by amount, which netting would erase"
   if d.family == MoneroSplitFamily:
@@ -515,8 +528,8 @@ proc settleRefusal(d: SplitDriver, su: SettleUp): string =
       return "covers are sorted by intent then debtor, each part once"
     let conv = convertedAmount(c, su.rates, su.chain, su.asset)
     if not conv.ok: return conv.why
-    balance[c.creditor] = balance.getOrDefault(c.creditor) + u256(conv.amount)
-    owes[c.debtor] = owes.getOrDefault(c.debtor) + u256(conv.amount)
+    if not balance.addChecked(c.creditor, u256(conv.amount)) or not owes.addChecked(c.debtor, u256(conv.amount)):
+      return "the covered amounts overflow"
   var paid = initTable[string, UInt256]()
   var got = initTable[string, UInt256]()
   let parties = settleParties(su)
@@ -538,13 +551,16 @@ proc settleRefusal(d: SplitDriver, su: SettleUp): string =
       if not payToOk(d.family, d.chain, t.payTo):
         return "a recipient owed only on other chains is paid at a " & d.family & " address of " & d.chain &
                " they vouch for, not " & t.payTo
-    paid[t.frm] = paid.getOrDefault(t.frm) + u256(t.amount)
-    got[t.to] = got.getOrDefault(t.to) + u256(t.amount)
-  # conservation: each member's net across the transfers is their net across the covers
+    if not paid.addChecked(t.frm, u256(t.amount)) or not got.addChecked(t.to, u256(t.amount)):
+      return "the transfer amounts overflow"
+  # conservation: each member's net across the transfers is their net across the covers,
+  # both sides summed without wrapping
   for w in parties:
-    let owedIn = balance.getOrDefault(w) + paid.getOrDefault(w)
-    let owedOut = owes.getOrDefault(w) + got.getOrDefault(w)
-    if owedIn != owedOut:
+    var inT, outT = initTable[string, UInt256]()
+    if not inT.addChecked(w, balance.getOrDefault(w)) or not inT.addChecked(w, paid.getOrDefault(w)) or
+       not outT.addChecked(w, owes.getOrDefault(w)) or not outT.addChecked(w, got.getOrDefault(w)):
+      return "the balance of " & w[0 ..< 12] & "… overflows"
+    if inT.getOrDefault(w) != outT.getOrDefault(w):
       return "the transfers do not conserve the balance of " & w[0 ..< 12] & "…: what they are owed less " &
              "what they owe must equal what they receive less what they pay"
   ""
@@ -902,15 +918,17 @@ method manifest*(d: SplitDriver, effect: Effect): ActionManifest =
 
 # ── composing a split ──────────────────────────────────────────────────────────
 proc evenShares*(total, creditor: string, parties: seq[string],
-                 creditorShares = true, distinctAmounts = false): seq[SplitShare] =
+                 creditorShares = true, distinctAmounts = true): seq[SplitShare] =
   ## Split `total` evenly: among `parties` and the creditor (listed or not) — "I paid for
   ## dinner, split it" — or, with `creditorShares = false`, among `parties` alone — "chip
   ## in for the gift I bought". Every debtor owes total div n, rounded DOWN; the creditor
   ## absorbs the remainder — at most n−1 of the smallest unit, visible as total − sum
   ## (§10.3). Sorted by who, each once: the one spelling the driver accepts. With
-  ## `distinctAmounts` (the private split, §4.7) the i-th debtor owes i smallest units less, so
-  ## every share differs and a received note is attributable by its amount alone — the
-  ## creditor absorbs those few units too.
+  ## `distinctAmounts` — the default, and what every family's driver requires (exo-3b3.14;
+  ## the private split's rule since §4.7) — the i-th debtor owes i smallest units less, so
+  ## every share differs and a payment is attributable to its part by its amount alone; the
+  ## creditor absorbs those few units too. `distinctAmounts = false` gives the plain even
+  ## shares, which no driver accepts for two debtors or more.
   var who: seq[string]
   for p in parties:
     let w = p.toLowerAscii()

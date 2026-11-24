@@ -39,7 +39,7 @@ proc build(policy, shape: string, variant: string): (Room, string, seq[(string, 
                  ("intent/" & id & "/policy", icPeerMessage),
                  ("intent/" & id & "/context", icPeerMessage)]
   if shape in ["read1", "read_material"]:
-    r.alice.publish(readEvent(id, field, "rpc://" & variant, valueText))
+    r.alice.publishRead(aliceKs, id, field, "rpc://" & variant, valueText)
     expect.add ("intent/" & id & "/read/" & field, icExternalRead)
   if shape == "material1" or (shape == "read_material" and policy == "safe"):
     let pub = (if policy == "safe": "0x1111111111111111111111111111111111111111" else: "probe 9")

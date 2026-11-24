@@ -71,6 +71,9 @@ let aliceSeam = newFakePartSeam(ledger, "alice")
 let dinner = splitEffectJson(Chain, "ETH", "900", alice, AlicePayTo,
                              evenShares("900", alice, @[bob, carol]), "Dinner at Tasca")
 let id = propose(dinner)
+proc shareOf(who: string): string =
+  ## who's own share of the dinner: every share distinct (exo-3b3.14), so read, never assumed
+  evenShares("900", alice, @[bob, carol]).filterIt(it.who == who)[0].amount
 
 # ── 1. proposing: a well-formed split among members; anything else refused ────────
 block:
@@ -106,7 +109,7 @@ block:
   doAssert outcome == "", outcome
   doAssert ledger.sent.len == 1
   let t = ledger.sent[0].transfer
-  doAssert t.chain == Chain and t.asset == "ETH" and t.to == AlicePayTo and t.amount == "300",
+  doAssert t.chain == Chain and t.asset == "ETH" and t.to == AlicePayTo and t.amount == shareOf(bob),
            "the payment is the agreed share, to the agreed address: " & $t
   doAssert ledger.sent[0].payer == "bob"
   let pending = liveSettlePartComplete(r.bob, bobKs, splitFor, bobSeam, pp)
@@ -126,7 +129,8 @@ block:
   doAssert confirmed == @[id & "/" & partName(bob)], $confirmed
   doAssert partOf(id, bob).confirmed and stateOn(r.bob, id) == "settling"
   # Carol reports a payment that does not pay the share (one short), made outside the path
-  let short = carolSeam.sendPart(PartTransfer(ok: true, chain: Chain, asset: "ETH", to: AlicePayTo, amount: "299")).tx
+  let short = carolSeam.sendPart(PartTransfer(ok: true, chain: Chain, asset: "ETH", to: AlicePayTo,
+                                             amount: $(parseInt(shareOf(carol)) - 1))).tx
   ledger.mine()
   r.carol.publishAuthored(room3CarolKs, partEvent(id, partName(carol), "settled", carol, short))
   doAssert partOf(id, carol).settled, "Carol's own report counts as HER claim…"
