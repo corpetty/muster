@@ -44,6 +44,7 @@ Re-validate the stack decisions table in `docs/02-implementation-plan.md` agains
 - The module imports nothing from `ui/`. The UI reaches the module only through the logos API under capability policy. Inter-module calls go through logos-core.
 - The educational layer explains what the code already guarantees — it never adds a code path the invariants don't cover. If a lifecycle step can't be shown truthfully, that's a product bug, not a copy problem.
 - A runner build (`make build`) takes more than 7 GB just to evaluate the flake, and on 2026-10-05 it froze the operator's workstation. Ask before starting one. `make build`, `build-lgx` and `appimage` cap themselves when `BUILD_MEM` is set (uncapped by default, so a fresh clone builds anywhere); on a machine short of memory, set it in the shell profile (`export BUILD_MEM=10G`) and wrap any other evaluation of the flake in the same cap. Reuse an existing runner when the change touches nothing compiled into it. See `.claude/doctrine/codebase.md` § Runner builds.
+- On the host `bugger`, run one heavy job at a time across every session (a suite run, a runner build, any flake evaluation), never subagents that each run the suite, and `JOBS` at the default or lower. Its memory hardware is failing, and parallel compiles reset it twice on 2026-11-23. See `.claude/doctrine/codebase.md` § Load on `bugger`.
 
 ## Layout
 
