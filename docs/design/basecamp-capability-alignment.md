@@ -47,7 +47,8 @@ both layers, and they must not be conflated.
 
 ## 3. Where muster diverges — the gaps
 
-1. **Muster declares no `provides`/`uses`.** `capabilities: []`, no `provides`, no
+1. **Muster declares no `provides`/`uses`** (as of 2026-09-14; since then `muster_ui`
+   provides `coordinate.request` and uses nine intents, below). `capabilities: []`, no `provides`, no
    `uses`. So muster's *musters* are an **internal catalog**, invisible to Basecamp's
    intent layer. Two consequences:
    - No other app can `logos.request` muster to *coordinate* something. Muster's core
@@ -137,17 +138,21 @@ for this and should stay that way:
    room). Delegating to the LEZ Wallet App via `logos.request` is recorded as a
    **Basecamp-only future refinement** — worth it only if muster runs exclusively inside
    Basecamp and wants to stop shipping its own LEZ wallet code; until then the direct
-   drive is the correct call, and it is why muster_ui declares **no `uses`** for a wallet
-   capability today.
+   drive is the correct call, and it is why muster_ui declares **no `uses`** for a LEZ wallet
+   capability. (Its `uses` now lists nine other intents, among them `evm.signing.approve`,
+   `packages.install` and the Monero wallet's, as of 2026-11-26.)
 
 **Done so far (2026-09-14):** step 1 — muster_ui declares `provides:
 ["coordinate.request"]` + `uses: []` (the handler is the remaining wire); step 2 —
 [`docs/basecamp-access-policy.md`](../basecamp-access-policy.md) +
 [`infra/access-policy.json`](../../infra/access-policy.json); step 3 — the P-D5 manifest
 carries a `capability` name beside the schema id (logos-nim-sdk); step 4 — decided above.
-The one piece left is the **`coordinate.request` provider handler** in muster_ui (a QML
-`onIntentRequested` that opens/uses a room), which needs the Basecamp intent broker and
-careful guarding so referencing `logos` doesn't break the standalone render.
+Since then muster_ui's `uses` lists nine intents, and Basecamp 0.3.x dispatches them:
+the view raises `evm.signing.approve`, `packages.install` and the rest through
+`logos.request`, guarded so the standalone render still works (`ui/metadata.json`,
+`Main.qml`). The one piece left (open as of 2026-11-26) is the **`coordinate.request`
+provider handler** in muster_ui (a QML `onIntentRequested` that opens/uses a room), which
+needs the provider side of the Basecamp intent broker (exo-1e5).
 
 Related: [[muster-driver-derivation]], `docs/design/driver-derivation.md`,
 `docs/design/lez-adapter.md`, the invoke gate (`module/src/coordination/invoker.nim`).

@@ -15,7 +15,8 @@ signature-audit file and log proof are attributed, automatic, factual receipts, 
 killmail's three properties exactly. Its boundary gives Jarrad's "Logos delta" for free: *witness
 by default, publish by consent.* What Muster does not have yet is the part of the story machine
 past the room's wall: a deed that can leave the room by consent, a feed for it to land on, and the
-group machinery (charter, roles, succession, federation) that turns a room into an org.
+group machinery (roles, succession, federation) that turns a room into an org. (The charter has
+landed since this was written: exo-267.1.)
 
 ## What the material asks for, compressed
 
@@ -131,8 +132,9 @@ store node sees the publisher's address unless the send goes over mix (exo-dcc.4
 
 ### C. Org machinery on a room
 
-A room today is flat: any member may admit, any member may propose, and the policy is chosen per
-proposal. System 13 asks for more, and most of it fits "the room's capabilities evolve by proposal"
+When this was written (2026-10) a room was flat: any member could admit, any member could propose,
+and the policy was chosen per proposal. Items 1 and 2 have since landed as the room charter
+(exo-267.1), and item 3 for a LEZ multisig's members (exo-267.6). System 13 asks for more, and most of it fits "the room's capabilities evolve by proposal"
 (vision, layer 3):
 
 1. **A charter**: a founding entry in the log naming the room, its purpose, its roles and its rule
@@ -142,8 +144,10 @@ proposal. System 13 asks for more, and most of it fits "the room's capabilities 
    treasury spend needs the Safe at 3-of-5 plus a 48-hour delay, admitting needs any member, and
    removal needs two officers. Roles get names the players choose; the core sees only slots.
 3. **Removing a member over the wire.** The epoch layer can remove a member (`removeMember`, F-16),
-   but no hosted method does it: `coordinate_leave` is local and re-keys nothing. Expulsion is an
-   org act, so it needs a hosted method that runs under the charter's rule.
+   but no hosted method did it: `coordinate_leave` is local and re-keys nothing. Expulsion is an
+   org act, so it needs a hosted method that runs under the charter's rule. *Landed for a LEZ
+   multisig (exo-267.6):* a removal the chain executed is carried into the room, and the
+   proposer's client re-keys the member out (`CoordinationSession.expel`).
 4. **Delay with a visible pending notice that any keyholder can cancel.** Today an executable
    intent can be submitted at once. A delay policy (executable after T, cancelled by any named
    keyholder's decline) prices a heist without preventing it, which is what the corpus asks for.
@@ -209,7 +213,8 @@ and a shared load (a first k-of-n approval). The education mission is the tutori
 The desktop redesign (exo-720) already covers several surfaces of Jarrad's EVE-shell inventory. Home
 is the objectives tracker (needs you / waiting on others / settled). The room map is the local map.
 The flow view and the card are the band indicator and the city gate. The audit export is the
-exportable log. Missing: the org window (charter, roles, standings), a profile that shows deeds
+exportable log. The room's Charter tab (`RoomCharter.qml`, exo-267.1) is the start of the org
+window. Missing: the rest of it (roles, standings), a profile that shows deeds
 rather than numbers, the chronicle feed, welcomer surfaces, and stub cards for actions not yet
 built (the atlas data already exists).
 
@@ -265,6 +270,11 @@ story Jarrad wants circles to carry, into running code.
 Added 2026-11-09, with the circle on the LEZ multisig: are public books acceptable for a circle
 (every payment, payout, vote and quest record visible by account)? Who closes a quest: the circle's
 vote, the named confirmer, or both? Is a bounty set aside at issue or paid from the pot at attest?
+What was built meanwhile, as defaults until Jarrad answers (as of 2026-11-26): the circle's books
+are public (it runs on the public LEZ multisig); both close a quest (the confirmer confirms with
+their own transaction, then the circle's vote closes it, and the program refuses a close before the
+confirm); and a bounty is set aside at issue (Open moves it from the vault into the quest's record,
+and Close pays the taker from there). `coordination/quest.nim`, `programs/lez-quest/`.
 
 1. Which fields of a circle's deed should be publishable by default, and which only by opt-in? This
    is the consent-granularity fork the UI page flags as "the load-bearing Logos-vs-ANVIL delta."

@@ -5,13 +5,17 @@ The LEZ *wallet* rails (public / shield / deshield / private transfers) live in
 `module/src/wallet/lez_*.nim`. This directory is about programs the room coordinates:
 
 - `multisig.nim`: logos-co/lez-multisig's on-chain objects.
-  - `MultisigState` and `Proposal` in the program's borsh layout, in two named proposal
-    layouts: `count-only` for the published c45100b, and `account-ids` for the rebuild with
-    the #40 fix, which is what the testnet runs.
+  - `MultisigState` and `Proposal` in the program's borsh layout, in three named proposal
+    layouts: `count-only` for the published c45100b; `account-ids` for the rebuild with
+    the #40 fix, which the v0.2.4 testnet ran until its reset to LEZ v0.3 on 2026-09-30; and
+    `v0.3` (`plV03`), the port to v0.3's `run_program(plan, apply)` ABI
+    (`docs/design/lez-multisig-v03.md`, vectors `tests/vectors/lez-multisig-v030`), run on a
+    local v0.3 zone.
   - SPEL seeds and the chain's public-PDA formula, **versioned**:
     - `psNssa02` for nssa v0.2.0-rc3;
-    - `psLee02` for the LEE v0.2.x line, over the program's image id: v0.2.2–v0.2.4, which
-      is the testnet.
+    - `psLee02` for the LEE v0.2.x line, over the program's image id: v0.2.2–v0.2.4, the
+      testnet's line until 2026-09-30. The v0.3 port keeps v0.2.4's seeds and formula over
+      the program's account id.
   - The program's voting rules.
 - `multisig_chain.nim`: the chain seam muster needs (`readAccount` / `submit(signer, op,
   payer)` / `txIncluded`).

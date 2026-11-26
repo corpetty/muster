@@ -59,7 +59,7 @@
           "step": "settle",
           "who": "the opener's client — automatic once every member joined",
           "does": "Hands Create to the lez_msig_module, which proves the program's plan and apply over the private PDA and sends one privacy-preserving transaction; once the chain includes it, the client seals the note (the multisig's account, decrypted) to every member as lmsig/<ck>/note/0/<member>, and discloses the account with placement private. A member holding the group secret checks the address through the prover; anyone else in the room reads it as unknown.",
-          "signs": "nothing on chain: a privacy-preserving Create carries no signer and pays no fee on v0.3",
+          "signs": "nothing on chain: a privacy-preserving Create carries no signer; it pays no fee on v0.3, and on v0.4 pays its fee inside its proof from the group fee account (D17)",
           "reveals": [
             {
               "field": "a nullifier, a commitment and a proof",
@@ -417,7 +417,7 @@
         "lez_msig_topup",
         "lez_msig_state"
       ],
-      "ui": "Not yet in the UI: called through lez_msig_topup (its hosted path not yet run through a host).",
+      "ui": "Room \u2192 accounts \u2192 the private multisig: \"Top up the fee account\" (LEZ v0.4), before Create through the ceremony's create key; run through two Muster clients on the 0.4 devnet with real proofs (scripts/lez-msig-private-self-test.sh).",
       "invariants": [
         3,
         8

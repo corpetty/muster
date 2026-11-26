@@ -1,7 +1,9 @@
 # lez-msig
 
-An M-of-N multisig program for the Logos Execution Zone (LEZ v0.3), private by default. Built
-for RFP-005; the roadmap is `docs/proposals/RFP-005-roadmap.md`.
+An M-of-N multisig program for the Logos Execution Zone, private by default, on LEZ v0.3 and
+v0.4. Built for RFP-005. The accepted proposal is the reference for scope and milestones
+(`docs/proposals/RFP-005-lez-msig.md`, logos-co/rfp#299), and progress against it is
+`docs/proposals/RFP-005-roadmap.md`.
 
 - **The program** enforces the quorum itself. Members' BIP-340 approvals are verified inside its
   execution, with roles, expiry, a time lock, spending limits and weighted approvals.
@@ -22,21 +24,32 @@ Design and decision log: `docs/design/lez-msig.md`. What a signer signs, byte fo
 | `v03/` | LEZ v0.3 wire types and the account derivation, shared by the guest and the host |
 | `methods/` | the guest, and the deployed build in `artifacts/msig.bin` (its image id is the program's identity) |
 | `host/` | `msig_host`: the client (`public.rs`, `exec.rs`), the `msig_exec` CLI, the benchmark and the vectors |
-| `module/` | `lez_msig_module`: the same operations as a Logos module (`lez_msig_module.lidl`) |
+| `module/` | `lez_msig_module` (0.1.x): the same operations as a Logos module (`lez_msig_module.lidl`) |
+| `lez04/` | the LEZ v0.4 line, its own cargo workspace over the same `msig_core`: the actor adapter (`v04/`), the deployed guest, `msig_host04` (client, `msig_exec04`, tests) and `lez_msig_v04_module` (0.2.x). See `lez04/CLAUDE.md`. |
 
 ## Build and test
 
 ```
 cargo build -p msig_methods        # the guest; ~3 min the first time (rzup's risc0 toolchain)
 cargo test                         # core rules, the program on LEE's own state, the module trait
+cd lez04 && cargo test -p msig_host04   # the v0.4 line (its guest comes from lez04/artifacts/)
 ```
+
+Building risc0 needs its recursion circuit, which `risc0-circuit-recursion`'s build script
+downloads from a URL that has answered 403 since 2026-11-23. The nix builds fall back to the Logos
+nix cache and a copy on muster-v0.4.0. For cargo, point `RECURSION_SRC_PATH` at a copy of
+`744b999f…8849.zip`, from either source.
 
 ## Deploy, on a local zone
 
 ```
 infra/lez/localnet.sh                                          # a LEZ v0.3.0 zone on :3040 (from the repo root)
 infra/lez/localnet.sh deploy programs/lez-msig/artifacts/msig.bin   # prints the program's account id
+MUSTER_LEZ_VERSION=v0.4.0-rc3 infra/lez/localnet.sh            # or a v0.4 zone; deploy lez04/artifacts/msig.bin
 ```
+
+On the LEZ 0.4.0-rc3 devnet (`http://46.225.45.199:3040`), the v0.4 program is deployed immutable
+at `2tTh5nUpBxtTAoQBCQbzmG32JGapm2KaEpH9oxktGanG` (hex `1c0a7ce6…8170d`).
 
 On the public testnet use `infra/lez/funder.sh --zone testnet deploy …`. It needs the testnet
 funder funded, because v0.3 has no faucet. Then run the live tests against your zone:
@@ -47,6 +60,9 @@ MSIG_LIVE_RPC=http://127.0.0.1:3040 MSIG_LIVE_PROGRAM=<program id hex> \
 ```
 
 ## Use it without Muster (public posture)
+
+On the v0.3 line today. The v0.4 executor carries the private posture's operations only. Making
+both lines usable this way is the accepted proposal's M2 (exo-dbd3).
 
 Every operation is one JSON request and one JSON answer, with no key involved. They are
 available from three places, which share one implementation (`msig_host::exec::exec_request`):
@@ -92,7 +108,24 @@ see `BENCHMARKS.md`). Proving needs the group's secret, which only members hold.
 arrives with each request and is dropped with its job. Muster carries the secret and each new
 note between members in its encrypted room (`docs/design/lez-msig.md` §8).
 
+On v0.4 (`msig_exec04`, `lez_msig_v04_module`):
+- Every private transaction pays its fee inside its proof, from a fee account the group's secret
+  derives (D17). `topup` funds that account from a member's public account. Each request carries
+  the fee account's note and answers with its new one.
+- The program is proved undisclosed (D18), so a transaction names no program.
+- `recipients` seals a payment to a private payee, which only that payee can open and claim.
+- Anyone can pay the vault's address from a public account. `inbound` lists those deposits, and
+  `collectFrom` collects them in the next transaction.
+
 ## Status
 
-LEZ v0.3 only. The LEZ 0.4 port (the actor model) is roadmap milestone M3. The program has not
-been audited; that is M5. Do not hold real value in it.
+Built for LEZ v0.3 and v0.4, and released with Muster since muster-v0.4.0, which ships both
+provers. Both postures run on the LEZ 0.4.0-rc3 devnet with real proving.
+
+Still to come, per the accepted proposal:
+- rotation on removal (D19);
+- the full module and CLI for both lines (M2);
+- the target registry, disclosure tiers and docs (M3);
+- the audit (M5).
+
+**The program has not been audited. Do not hold real value in it.**

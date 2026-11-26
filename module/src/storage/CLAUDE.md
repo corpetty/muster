@@ -8,7 +8,13 @@ Muster codes against `BlobStore`, never against `storage_module`.
   the swarm depends on it: one bit for served-and-announced, connected peers then the DHT,
   a private download hides the fetcher. It records what a server and the DHT observed, so
   disclosure rows can be checked against it.
-- `LpStorage` (next, exo-4d0.2): `storage_module` over `lp_*`, compiled only into the plugin.
+- `storage_lp.nim`: `LpStorage`, the `BlobStore` seam over `storage_module` through `lp_*`
+  (exo-4d0.2), compiled only into the plugin. It attaches to the host's node; where it must
+  start one, it keeps it to this instance and puts the shared config back.
+- `storage_events.nim`: the pure half of that binding: reading `storage_module`'s replies and
+  events, and keeping Muster's jobs. No `lp_*`, so it is unit-tested directly.
+- `storage_readiness.nim`: FileShare's readiness. It asks the host's registry first (not
+  installed names the package), and the node only once the host says the module is ready.
 
 Rules:
 - Bytes here are opaque. The swarm seals a file before it is uploaded

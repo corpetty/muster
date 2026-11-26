@@ -1,6 +1,7 @@
-# programs/lez-msig/module/
+# programs/lez-msig/module/src/
 
-`lez_msig_module`: lez-msig's private posture as a Logos module (RFP-005 U.1).
+`lez_msig_module`: lez-msig's private posture as a Logos module (RFP-005 U.1). Paths below are from
+`programs/lez-msig/module/`.
 - `src/lib.rs`: the generated `LezMsigModule` trait (`../generated/provider_gen.rs`, from
   `../lez_msig_module.lidl` by `../tools/regen.sh`), implemented over `msig_host::exec::exec_request`,
   the same function the `msig_exec` CLI runs.

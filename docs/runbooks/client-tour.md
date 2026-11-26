@@ -1,7 +1,10 @@
 # Runbook: try everything — two instances, one machine
 
 **As of 2026-10-14 (main after #293): rewritten for the redesigned UI (epic exo-720).** Part 6i, the XMR request, added 2026-10-09. Two instances on one machine, driven by you,
-through everything the client can do today. Two scripts do all the setup:
+through everything the client could do on 2026-10-14. Features that landed since have no part
+here; their own scripts and runbooks cover them: lez-msig (`scripts/lez-msig-self-test.sh`,
+`scripts/lez-msig-private-self-test.sh`), FileShare (`scripts/fileshare-self-test.sh`) and the
+Monero multisig ([`xmr-multisig.md`](xmr-multisig.md)). Two scripts do all the setup:
 `scripts/try-infra.sh` brings up every local chain the tour uses, already funded, and
 `scripts/try-peer.sh` launches each peer seeded for it. After that, every part is
 clicking.
@@ -23,8 +26,8 @@ the finding.
 | [6](#6-split-the-bill) | Split the bill: ETH, a token, for someone else, another currency, settle up, Bitcoin, renewing an expired split | anvil + regtest (up) | 35 min |
 | [6h](#6h-the-private-split-on-the-lez-testnet) | The private split on the LEZ testnet | internet; proofs of minutes each | 40 min |
 | [6i](#6i-request-xmr) | Request a payment in XMR | Basecamp 0.3.2 with Monero Wallet; a stagenet wallet | 30 min |
-| [7](#7-the-lez-multisig-on-the-public-testnet) | The LEZ multisig on the public testnet | internet; ~40 s blocks | 20 min |
-| [8](#8-lez-frost) | LEZ FROST | internet | 10 min |
+| [7](#7-the-lez-multisig-on-the-public-testnet) | The LEZ multisig (its program is no longer on the testnet: a local zone) | a local LEZ v0.3 zone | 20 min |
+| [8](#8-lez-frost) | LEZ FROST | internet; native LEZ for the group's account | 10 min |
 | [9](#9-the-wallet) | The Wallet: balances and Send on LEZ | — | 5 min |
 | [10](#10-learn-and-the-atlas) | Learn and the atlas | a browser | 5 min |
 | [11](#11-preview-the-ui-in-a-nim-host) | Preview: the UI in a Nim host (no C++) | — | 5 min |
@@ -65,8 +68,10 @@ The first build takes minutes. It warns if `module/` has uncommitted edits.
 
 **Every peer must run this build.** Since #167 the wire format changed: join requests,
 key grants and envelopes are all sealed differently. An older build, the `v0.1.0-demo`
-AppImage included, cannot share a room with this one in either direction. So does the
-`v0.2.0-demo` AppImage.
+AppImage included, cannot share a room with this one in either direction. Neither can the
+`v0.2.0-demo` AppImage. Since 0.5.0 every room grant and message frame is signed
+([`../design/signed-room-wire.md`](../design/signed-room-wire.md)), so no release before
+0.5.0 can share a room with this build either.
 
 ### The chains
 
@@ -760,9 +765,21 @@ there are first on screen.
 
 ## 7. The LEZ multisig on the public testnet
 
-This is a Squads-style program on Logos's own chain, already deployed on the public
-testnet. The defaults already point there: **Settings → Advanced** shows **LEZ sequencer ·
-now: https://testnet.lez.logos.co (lez:testnet)**. Blocks take about 40 s, so expect waits.
+This is a Squads-style program on Logos's own chain. The defaults point at the public
+testnet: **Settings → Advanced** shows **LEZ sequencer · now: https://testnet.lez.logos.co
+(lez:testnet)**.
+
+> **This part does not run on the testnet as written (checked 2026-11-26).** The testnet was
+> reset to LEZ v0.3.0 on 2026-09-30 (exo-eb6.4). The program the app points at by default
+> (ImageID `2ced3d30…d4c7`) was the v0.2.4 build deployed there, and it went with the reset.
+> The v0.3 port is not deployed on the testnet. The room drives the port on a local v0.3 zone
+> (`module/tests/lez_multisig_live_v030_e2e.nim`): start it with `infra/lez/localnet.sh`,
+> deploy the port's `multisig.bin` with `infra/lez/localnet.sh deploy` (it prints the
+> program's account id), and launch both peers with `MUSTER_LEZ_RPC=http://127.0.0.1:3040`,
+> `MUSTER_LEZ_CHAIN=lez:local` and `MUSTER_LEZ_MULTISIG_PROGRAM=<that id, hex>` exported. On
+> v0.3 the create and every vote are their member's own transactions and pay a fee, so fund
+> each member account with `infra/lez/localnet.sh fund <id> <amount>` first. Nobody has done
+> this by hand yet: all of it is **first on screen**. The local zone's blocks take 15 s.
 
 1. **Both:** in room details → **Accounts** → **LEZ multisig**, click **My LEZ member
    account**. Copy the id,
@@ -796,12 +813,20 @@ now: https://testnet.lez.logos.co (lez:testnet)**. Blocks take about 40 s, so ex
 This is the Part 5b ceremony, but on the LEZ. Set **network** `lez:testnet`. The group's
 key then owns a LEZ public account directly, with no tweak.
 
+> **On the v0.3 testnet, Propose is refused until the group's account is funded.** On v0.3
+> the group pays its own fee, and a transfer its account cannot cover is included, pays its
+> gas and moves nothing. So Muster refuses the proposal up front (`not-covered`): the account
+> must hold the amount plus the fee cap. Nothing in the app funds it (`exo-2752`), and the
+> testnet has no faucet, so someone holding native LEZ has to send to it. The room's path on
+> v0.3 is held by `lez_frost_room_v030_e2e` on a local zone (`infra/lez/localnet.sh`, which
+> can `fund` the group's account); on the testnet it has not been run by hand.
+
 1. Run the ceremony. ✓ Expect a LEZ FROST account to be disclosed.
 2. **+** → **Payment** → **LEZ (FROST)** → recipient + amount → **Propose**.
 3. ✓ Expect **Approve** and **Deny** on the card.
 4. Approve once on each side. Round 2 follows.
-5. **Settle on-chain** is expected to be **rejected**: the group account holds nothing,
-   and nothing in the app funds it (`exo-2752`).
+5. **Settle on-chain** sends one aggregate signature. It is refused if the account's nonce
+   has moved since the proposal, or it no longer covers the amount and its fee cap.
 
 ---
 
@@ -852,7 +877,7 @@ key then owns a LEZ public account directly, with no tweak.
 
 The UI you have been clicking is QML over a C++ backend. Epic exo-607 moves the backend
 to Nim on nim-seaqt, so the repository holds no C++ (design and progress:
-[`../design/seaqt-ui.md`](../design/seaqt-ui.md)). The first slices run today: the real
+[`../design/seaqt-ui.md`](../design/seaqt-ui.md)). The first slice, still here as a probe: the real
 `Main.qml` in a Nim host that starts logos-core itself and calls `muster_module` over
 `lp_*`.
 
@@ -861,8 +886,9 @@ scripts/nim-app-core-probe.sh
 ```
 
 It runs offscreen and needs `make build`. ✓ Expect `PASS`: the module's health reached
-the view through the Nim host. The room surfaces are not wired in the Nim host yet;
-`scripts/ui-parity.sh` with `MUSTER_UI=nim` is how each will be checked as it lands.
+the view through the Nim host. The whole UI now runs in the Nim host (exo-607 T5–T7,
+closed 2026-10-14): `make build-nim` builds its runner, `MUSTER_UI=nim make run` launches
+it, and `MUSTER_UI=nim scripts/ui-parity.sh` runs the same offscreen self-tests against it.
 
 ---
 
@@ -874,8 +900,9 @@ for the handshake (Part 1), the chain waits (Parts 5–8) and the private split'
 (Part 6h).
 
 **Known rough edges** (so you can skip reporting these):
-- Nothing mints a LEZ token or funds a vault or group account (`exo-2752`), so the LEZ
-  settles in Parts 7–8 are expected to be rejected.
+- Nothing mints a LEZ token or funds a vault or group account (`exo-2752`). Part 7's
+  settle is expected to be rejected unless the vault holds what it pays, and Part 8's
+  Propose is refused until the group's account is funded.
 - A FROST card offers **Sign outside muster (PSBT)** with nothing to export.
 - A split agreement can reach the other side before the proposal's context does, over
   the fleet: the agreement is refused and has to be tried again (`exo-ca3`; #187 makes

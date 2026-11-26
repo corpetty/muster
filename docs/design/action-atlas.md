@@ -134,15 +134,19 @@ An **action**. Each authored file is `{ "actions": [ … ] }`:
   is one; a family's key ceremony is another.
 - **`unverified`** is an optional list of claims not yet confirmed against a primary
   source. The atlas shows them, as the registry's are shown.
-- **Generated keys.** The variants are fixed:
+- **Generated keys.** The variants are fixed (as `contracts/actions/generated.json` holds
+  them on 2026-11-26):
   - `safe/transfer`, `safe/contract-call`, `safe/delegatecall`;
   - `threshold/statement`, `threshold/add-driver`, `unanimous/statement`;
   - `frost/statement`, `eip191/statement`;
   - `invoke/module-call`, `invoke/lez-transfer`;
   - `btc-p2wsh/spend`, `btc-tapscript/spend`, `btc-frost/spend`;
   - `lez-multisig/transfer`, `lez-multisig/vault-init`, `lez-frost/transfer`;
+  - `lez-msig/transfer`, `lez-msig/spend`, `lez-msig/config`;
   - `evm-split/split`, `evm-split/settle-up`, `lez-split/split`, `btc-split/split`,
-    `btc-split/settle-up`.
+    `btc-split/settle-up`, `monero-split/request`;
+  - `xmr-msig/spend`;
+  - `charter/found`.
 - **`step`** is one of `propose` · `approve` · `ceremony` · `vote` · `settle` · `final` ·
   `act`. `act` is a one-step action: a room or wallet operation.
 - **`when`** is one of `propose` · `approve` · `settle` · `final` · `act` · `always`. The

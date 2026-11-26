@@ -2,8 +2,11 @@
 
 Status: **planned 2026-10-15. By 2026-10-16 S0, S2 and S3 are done, and FileShare runs end to
 end in the real runner**: two instances share a file through `storage_module` on a private
-storage network (`scripts/fileshare-self-test.sh`). Still open: the install remedy, the
-view on a display and in Basecamp, and a file picker (§7). Epic `exo-4d0`: S0–S7 are `exo-4d0.1`–`.8` in the order of §7,
+storage network (`scripts/fileshare-self-test.sh`). Since then (as of 2026-11-26) the
+install remedy landed (2026-10-16, `storage_readiness.nim`), file and folder pickers landed
+(exo-4d0.10, 2026-10-30), it merged in PR #339 and ships since 0.3.3, and it ran on a display
+in two Muster 0.3.5 Basecamps (the FileShare reel, 2026-11-13). Still open: a third instance
+fetching with the sharer gone, and S6–S8 (§7). Epic `exo-4d0`: S0–S7 are `exo-4d0.1`–`.8` in the order of §7,
 and the upstream asks are `exo-4d0.9`. `pb dep tree exo-4d0` shows live status.
 
 ## 1. Where this comes from
@@ -16,7 +19,8 @@ Asked what he wanted to see in Muster, Jarrad (Logos) said:
 
 Muster has not used Logos Storage yet. F-17 has asked for it since the start ("artifacts …
 content-addressed in Logos Storage, behind a storage interface"), and exo-dcc.14 (a room
-outlives the fleet's store) needs somewhere durable to keep a room's log. This epic makes
+outlives the fleet's store) needed somewhere durable to keep a room's log (it was closed on
+2026-10-16 with a journal on the member's own machine, `room_journal`). This epic makes
 Storage the first new platform stack Muster takes on since Monero, and makes it useful to
 people on day one: **a room's members share files with each other, and seed them for each
 other, and nobody outside the room can read them or tell what they are.**
@@ -237,8 +241,9 @@ agreement). S3's spec goes through `discuss-issue` first.
   dependency, three-state readiness, install remedy. *Landed 2026-10-16:* the seam, the
   stand-in, `LpStorage` (`storage_lp.nim` + the pure `storage_events.nim`), the optional
   dependency, and `storage_module` 3.0.2 in the runner (its contract handed to the UI builder
-  without `importFiles`, which that builder's parser refuses). *Open:* readiness through
-  `module_registry` and Basecamp's install remedy; today the tab only says what is missing.
+  without `importFiles`, which that builder's parser refuses). Readiness through
+  `module_registry` and Basecamp's install remedy landed the same day (`storage_readiness.nim`:
+  not installed → Install Logos Storage in the FileShare tab).
 - **S2 — Sealed blobs** (landed: `crypto/blob_seal.nim`, `blob_seal_test`). Round trip,
   tamper and truncation refusals; the check that an uploaded manifest names nothing moves
   to S1, which has a storage node. Padding is not built.
@@ -256,9 +261,10 @@ agreement). S3's spec goes through `discuss-issue` first.
   who-sees-what box from §5.5. *Landed 2026-10-16:* the tab in the room details drawer (and
   the header menu), both backends' slots, and `scripts/fileshare-self-test.sh`: two runners
   offscreen on a private storage network, share → fetch byte-identical → seed, 3 of 3 runs
-  green (~13 s). *Open:* a native file picker (a path field for now), a look on a display,
-  a third instance fetching with the sharer gone (held in process by `swarm_live_test`
-  only), and Basecamp 0.3.2 against its bundled node.
+  green (~13 s). File and folder pickers landed with exo-4d0.10 (2026-10-30), and it ran on
+  a display in two Muster 0.3.5 Basecamps on one host, on a storage network of their own (the
+  FileShare reel, 2026-11-13). *Open (as of 2026-11-26):* a third instance fetching with the
+  sharer gone (held in process by `swarm_live_test` only).
 - **S6 — The lesson.** Walkthrough steps and claims-registry entries built from §4 and
   §5.5: what a private tracker's operator sees, what the room's infrastructure sees.
 - **S7 — Pledges (decide after S5).** "Keep this available until T" as an intent with a

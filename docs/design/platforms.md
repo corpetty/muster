@@ -19,7 +19,7 @@ same four (`logos-co/logos-modules-release-action`, `release.yml@v1.9`):
 |---|---|---|
 | `linux-amd64` | AppImage | built since the first release |
 | `linux-arm64` | AppImage (aarch64) | **built** by `.github/workflows/lgx-variants.yml` on `ubuntu-24.04-arm` (exo-b89) |
-| `darwin-arm64` | `.dmg` (aarch64) | a matrix row in the same workflow, on `macos-latest`; built and checked by hand on a Mac (below), not yet on the runner |
+| `darwin-arm64` | `.dmg` (aarch64) | **built** by the same workflow on `macos-latest` (PR #321, 2026-10-17), and checked by hand on a Mac (below); served by the catalogue since 0.3.4 |
 | `windows-x86_64` | `setup.exe` | not built; mapped below |
 
 ## How the variants are built and released
@@ -99,8 +99,8 @@ Muster 0.3.0 (`15f7dc2`) and 0.3.1. The steps this page listed:
      answered `ok`.
    - **A merged package.** One carrying `darwin-arm64` and `linux-amd64` (0.3.0) installed
      its `darwin-arm64` variant.
+   - **The workflow's macOS leg** runs on GitHub's runner since PR #321 (2026-10-17).
    - **Not yet:**
-     - the workflow's macOS leg on GitHub's runner;
      - a room between a Mac and a Linux instance, as R6 did
        (`docs/labbook/muster-in-basecamp-031.md`);
      - the 0.3.1 `muster_ui` in Basecamp.

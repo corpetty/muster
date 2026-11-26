@@ -114,7 +114,7 @@ muster/
 
 ## Phases
 
-> **Status (updated 2026-10-09):** P0 ✅ · P1 ✅ · P2 ✅ · P4 ✅ (UI ships the whole lifecycle; render blocker routed around via ADR-013, 6/6 acceptance harness) · P3 ✅ core (transport + encryption + multi-party coordination; **two instances converge over the live Logos fleet**; room settles Safe intents on-chain via `coordinate_submit`; only the two-machine cross-host Safe settle run + R-4/R-6 resilience remain) · P5–P6 not started. Beyond the phase plan, the multisig families (epic exo-a50) landed Phases A–D 2026-09-24/25 (Safe fidelity, Bitcoin through PSBT, the LEZ multisig program, FROST); their two-machine runs remain. Muster runs in Logos Basecamp on the platform's keys and chains (epic exo-d4d; R6 passed on Sepolia, 2026-10-07). Since 2026-10-07 the work aims at the Monero community campaign (epic exo-dcc, ADR-018); it sits beside the phases rather than in one, and its status is [below](#beyond-the-phases-monero-in-rooms-exo-dcc). The 11 invariant pebbles are closed; 149 unit tests and 84 invariant probes are green via `module/tests/run-suite.sh` (233/233, 2026-10-09). Per-phase status lines below.
+> **Status (updated 2026-11-26):** P0 ✅ · P1 ✅ · P2 ✅ · P4 ✅ (UI ships the whole lifecycle; render blocker routed around via ADR-013, 6/6 acceptance harness) · P3 ✅ core (transport + encryption + multi-party coordination; **two instances converge over the live Logos fleet**; room settles Safe intents on-chain via `coordinate_submit`; only the two-machine cross-host Safe settle run + R-4/R-6 resilience remain) · P5–P6 not started. Beyond the phase plan, the multisig families (epic exo-a50) landed Phases A–D 2026-09-24/25 (Safe fidelity, Bitcoin through PSBT, the LEZ multisig program, FROST); their two-machine runs remain. Muster runs in Logos Basecamp on the platform's keys and chains (epic exo-d4d; R6 passed on Sepolia, 2026-10-07). Since 2026-10-07 the work aims at the Monero community campaign (epic exo-dcc, ADR-018); it sits beside the phases rather than in one, and its status is [below](#beyond-the-phases-monero-in-rooms-exo-dcc). So does lez-msig, the private-by-default LEZ multisig of RFP-005, whose proposal was accepted on 2026-11-26 ([below](#beyond-the-phases-lez-msig-and-rfp-005-exo-0d3)). The current release is muster-v0.5.0 (2026-11-24), a security release that signs every frame on a room's wire. The 11 invariant pebbles are closed; `module/tests/run-suite.sh` runs 208 unit tests and 99 invariant probes. Per-phase status lines below.
 
 ### P0 — Module scaffold and the log
 
@@ -198,7 +198,7 @@ The one hard dependency across all of it is the **plugin runtime (P5)** — the 
 
 **Delivery stood up in the runner (2026-08-24).** `delivery_module` (v0.2.0) is now a declared dependency of `muster_module` (the `lp_*` caller) and `muster_ui`, so the builder bundles it into the standalone runner's module set. Launching the runner offscreen shows the host load and initialize it (`Module loaded: delivery_module` → `DeliveryModuleImpl: Initialized successfully`), so `coordinate_join` resolves the transport instead of raising. Because `publish()` records to the local log before broadcasting, a single instance's propose/contribute/fold completes with no peer — the fold itself is covered by `coordination_surface_test` step 6. The driven end-to-end render, and the two-instance network wire (the join boots an isolated node with `"{}"` today; two hosts need the endpoint set, invariant 8), remain — the former gated on a driveable display (the standing UI-e2e blocker).
 
-**Still ahead in P4:** the driven room loop end-to-end + the two-instance network wire (delivery is now in the runner's set, above); room-side **submit** (executable → on-chain `execTransaction` still lives in the Safe dashboard); wallet-in-room; multi-room (the session is single-room); U-10 keyboard/a11y and the CI acceptance harness (the launch-verify is a standalone qt-mcp driver, not yet a committed CI test); and the shielded **LEZ private-transfer journey** — which needs the deferred, infra-bound LEZ adapter (the module ships Safe + EVM/mock, not LEZ), so the coordination experience around a payment reproduces but the shielded transfer itself does not.
+**P4, done since (2026-08-26 to 2026-09):** the two-instance network wire (two instances converge over the live Logos fleet, 2026-09-01); room-side **submit** (`coordinate_submit`, proven on anvil); multi-room (`gSessions`, one session per topic); and the real **LEZ adapter** on the zone's four rails (PR #64), whose private rail ran in the private split on the LEZ testnet. **Still ahead in P4:** U-10 keyboard/a11y, and a committed CI acceptance harness for the UI (the offscreen self-tests in `scripts/ui-parity.sh` run on a host, not in CI).
 
 Resolve **ADR-011** first: build on `Logos.Theme` / `Logos.Controls` from logos-design-system, mapping the prototype v2 tokens onto its palette/spacing/typography singletons, and reach for a bespoke component only where the room surfaces genuinely have no design-system equivalent (the enclosure, the seam, the slot row). Muster looking like the rest of the platform is worth more than pixel-fidelity to the prototype, and U-10's contrast and reduced-motion obligations are easier to inherit than to re-prove.
 
@@ -226,7 +226,7 @@ Keycard signer backend over PC/SC (F-14). Logos Storage module as the artifact b
 
 ### Beyond the phases: Monero in rooms (exo-dcc)
 
-**Status (2026-10-09): the XMR payment request landed; the live payment and the deal-desk demo are ahead.** The epic serves one outcome: people in the Monero community use XMR from inside rooms, on their own machines. The plan, phase by phase, is [`docs/design/monero-in-rooms.md`](design/monero-in-rooms.md); the decision is ADR-018 below; `pb dep tree exo-dcc` is live status.
+**Status (2026-11-26): the XMR payment request and the Monero multisig landed; the live payment and the deal-desk demo are ahead.** The epic serves one outcome: people in the Monero community use XMR from inside rooms, on their own machines. The plan, phase by phase, is [`docs/design/monero-in-rooms.md`](design/monero-in-rooms.md); the decision is ADR-018 below; `pb dep tree exo-dcc` is live status.
 
 It cuts across the phases rather than adding one:
 - **The payment request** (`exo-dcc.5`) is a fourth family of the split driver, `monero.split`, on the `each` locus. It needs nothing new in the core: settlement in parts, the creditor's agreement, and the driver seams the split already uses (invariant 6). Spec `derived-exo-dcc.5`, graded 7/7.
@@ -238,15 +238,24 @@ It cuts across the phases rather than adding one:
 |---|---|---|
 | 0 Ground truth: Basecamp 0.3.2, the lp_* spike, the ADR | `exo-dcc.1` | ✅ done 2026-10-08. Two spike questions wait on a funded stagenet wallet (`exo-dcc.19`) |
 | 1 Messaging with no LEZ | `exo-dcc.2` | Decided 2026-10-08: `logos.test` with a room gifter we run. Not built; waits on native LEZ to fund the gifter. For now (2026-10-09) the demo and live testing run on `logos.dev`, the default |
-| 1 An installable Muster | `exo-dcc.3` | Done: release `muster-v0.2.0` published 2026-10-09, installable from the catalogue |
+| 1 An installable Muster | `exo-dcc.3` | ✅ first release `muster-v0.2.0` 2026-10-09; the current one is `muster-v0.5.0` (2026-11-24), for Linux x86_64, Linux arm64 and Apple Silicon |
 | 1 The mixnet | `exo-dcc.4` | ✅ opt-in `mix` setting, off by default |
 | 1 Install what's missing | `exo-dcc.10`, `.11` | ✅ seen on display in Basecamp 0.3.2 |
 | 2 The XMR payment request | `exo-dcc.5`, `.20` | ✅ module and UI, seen on display up to the payment. The live two-machine payment is `exo-dcc.19`, waiting on stagenet XMR |
 | 3 Pay from Basecamp's own Monero wallet | `exo-dcc.6` | Waits on an upstream review intent |
-| 4 The deal-desk demo | `exo-dcc.7` | Not started; needs `.2`, `.3`, `.19` |
+| 4 The deal-desk demo | `exo-dcc.7` | Partly built: the shareable receipt landed 2026-10-12 (`split_receipt_test`); the demo waits on `.2` and `.19` |
+| — The Monero multisig (ADR-020) | `exo-dcc.34` | ✅ built and run on stagenet through the UI (PR #324); experimental, stagenet only |
 | 5 The mainnet gate | `exo-dcc.8` | Not started |
 
 **Accept** (the epic's): two fresh installs on two machines, stagenet, nothing seeded, run from terms to a confirmed payment and a receipt the member chooses to share (`exo-dcc.7`).
+
+### Beyond the phases: lez-msig and RFP-005 (exo-0d3)
+
+**Status (2026-11-26): the RFP-005 proposal was accepted.** lez-msig is Muster's own M-of-N program on the LEZ, private by default (`programs/lez-msig/`). Approvals are collected in a room and verified inside the program at execution. It runs on LEZ v0.3 and v0.4, and is deployed on the 0.4.0-rc3 devnet, where both postures ran with real proving. Like the Monero work, it sits beside the phases rather than in one: it is a driver family (invariant 6), and its private posture reuses the room's sealed epochs (F-16) to carry the group secret and notes.
+
+- **The reference** for its scope and milestones is the accepted proposal, [`docs/proposals/RFP-005-lez-msig.md`](proposals/RFP-005-lez-msig.md) (logos-co/rfp#299).
+- **Progress against it** is kept in the Progress section of [logos-co/rfp#299](https://github.com/logos-co/rfp/issues/299); the engineering detail, milestone by milestone with an issue for each item left, is [`docs/proposals/RFP-005-roadmap.md`](proposals/RFP-005-roadmap.md).
+- **The design and decision log (D1–D19)** is [`docs/design/lez-msig.md`](design/lez-msig.md).
 
 ## Decision gates (ADRs)
 
@@ -281,7 +290,7 @@ It cuts across the phases rather than adding one:
 
   **Decision.** Build `muster-ui` with a **basecamp-coherent** `logos-module-builder` (mainline at basecamp's revs — `cpp-sdk 4b66dac0` + `view-runtime 1fde7d43` — **not** the Nim-cdylib-authoring branch), and stop following `muster_module`'s builder. `muster_module` keeps its own Nim-cdylib build and ships as a separate `.lgx` loaded into the same host; the two share the (already-matching) `protocol`/`qt-sdk` bus but no longer share the view-glue toolchain. This is precisely the pattern `demo/muster-ui` already ships: it follows `chat_module`'s coherent builder and still generates a typed client for a *different-repo* dependency it pulls in for its LIDL + runtime presence (`modules().lez_core.get_balance(...)`, `lez_core` from `logos-blockchain/logos-execution-zone-module`). The typed `modules().muster_module.<method>()` client is **kept** — the coherent builder generates it from `muster.lidl`, the same way the demo generates `lez_core`'s. `invokeRemoteMethod`-by-name is the fallback only if client-codegen against `muster_module`'s flake hits a snag.
 
-  **Concrete change set (spec, not yet built):**
+  **Concrete change set (built; this ADR is resolved):**
   1. `ui/flake.nix` — replace `logos-module-builder.follows = "muster_module/logos-module-builder"` with a pin at basecamp's coherent builder rev (or, proven-fastest, `follows = "chat_module/logos-module-builder"` with a `chat_module` input sourced only for that builder, mirroring the demo). Keep `muster_module.url = path:../module` as an input **only** so its `muster.lidl`/metadata is available for client-codegen and it lands in the runtime module set — its packages are built by its own flake, not this builder.
   2. `ui/metadata.json` — unchanged in shape (`type: ui_qml`, `interface: universal`, `codegen.rep`, `dependencies: ["muster_module"]`). Add any runtime `nix.packages` the coherent host needs (the demo carries `qt6.qtdeclarative`, `zstd`, `krb5`, `abseil-cpp`).
   3. `ui/src/*` — no rewrite. The backend keeps calling `modules().muster_module.health()/describe()/propose()`; only the toolchain that compiles the generated client + view-glue changes.

@@ -115,5 +115,5 @@ Revised after reading the draft (the earlier four questions are answered or refr
 
 ## Open, muster-side
 
-- Issuer set semantics: the grant is signed by *an* instance, which names it (fine inside a named room, ADR-015). A grant that speaks for the room as one signer would be a threshold signature over the same digest, which the FROST driver would produce once it is a real threshold scheme (see the claims registry's FROST gap).
+- Issuer set semantics: the grant is signed by *an* instance, which names it (fine inside a named room, ADR-015). A grant that speaks for the room as one signer would be a threshold signature over the same digest, which the FROST driver could now produce: BIP-445 FROST landed (exo-a50.4), demo-grade and not constant time. Issuing a room grant that way is not built (open as of 2026-11-26).
 - `expiry` is fixed at 600s. It should come from the driver descriptor once finality types carry a settlement horizon.

@@ -21,7 +21,7 @@ Per room, one pipeline:
 
 1. **Identity.** A secp256k1 authorization key and an Ed25519/X25519 encryption key, joined by a signed binding (F-14). Both sit behind the `Keystore` seam (`crypto/keystore.nim`).
 2. **Room.** A delivery content topic plus epoch crypto (`crypto/epoch_crypto.nim` behind `ConversationCrypto`). A join request → admit handshake re-keys forward on every admit (F-16).
-3. **Log.** `Event = {parents, key, value}`, content-addressed and hash-linked (`log/log.nim:29-48`), sealed under the current epoch key. It lives in memory and is rebuilt from the store node on restart (`transport/store_catchup.nim`).
+3. **Log.** `Event = {parents, key, value}`, content-addressed and hash-linked (`log/log.nim:29-48`), sealed under the current epoch key. It lives in memory and is rebuilt from the store node on restart (`transport/store_catchup.nim`). Since exo-dcc.14 each room also keeps a sealed local journal on the member's machine, replayed on re-entry (`coordination/room_journal.nim`).
 4. **Authenticate.** `roomEvents` drops any event whose author signature fails (`coordination/authorship.nim:178-196`). Every fold reads it; only `buildProof` reads the raw log.
 5. **Fold.** `reduceIntents` → `reduceIntentViews` → home, covers, settle-up, activity, provenance and flow, plus messages, accounts and ceremonies. About 30 folds; most are pure functions of the event set (`coordination/*`).
 6. **Act.** Propose, contribute, decline, disclose, share. Each passes the gates: invariant 1 re-derivation (`live.nim` `planApproval`), invariant 2 context and invariant 10 provenance (`attest.nim` `intentInputs` / `allAccountable`). Then it is signed and published.
@@ -64,7 +64,7 @@ Grouped by what each part touches:
 Four structural problems sit under the last rows. Each one blocks an offload.
 
 **1. The module has no clock.** Dispatch is synchronous on the host's module thread, and muster runs no loop, timer or thread of its own. Every pump runs inside `coordinate_intents`, and only for the active room (`muster_module.nim:2146-2150`: `gSession.poll`, `lezPump`, `frostPump`, `splitPump`, `keystorePump`). So the UI's one-second Room timer is the module's heartbeat.
-- A split payment in a room that is not open is neither reported nor confirmed (`splitPump` reads `gSession` only). This symptom was filed independently as exo-273, now `exo-ff5.9` in this epic. The rooms exo-ecbe now re-enters at startup inherit it, because none of them is made active.
+- A split payment in a room that is not open is neither reported nor confirmed (`splitPump` reads `gSession` only). This symptom was filed independently as exo-273, now `exo-ff5.9` in this epic. The rooms exo-ecbe now re-enters at startup inherit it, because none of them is made active. (Since then `splitPump` loops over every joined room, `gSessions`; the other pumps still run for the open room only, and `exo-ff5.9` is open as of 2026-11-26.)
 - Headless `logoscore` advances nothing.
 - Reads have side effects: `gSession.poll()` fires store queries.
 
@@ -75,7 +75,7 @@ Four structural problems sit under the last rows. Each one blocks an offload.
   - the 1 s Room tick is six calls, because `loadIntents` chains `frost_ceremonies` and `coordinate_activity` (`ui/src/muster_ui_backend.cpp:418-428`);
   - plus the 2 s Home timers and the 5 s and 10 s Room timers.
 - **No reuse.** Each call re-reduces the entire log, and no fold is cached.
-- **The quadratic sort.** `canonicalOrder` is roughly quadratic (`log/log.nim:50-86`). It runs several times per intent per call: in `reduceIntents`, `intentRecord`, `intentInputs`, `intentContext`, and again inside `approvalGrades`.
+- **The quadratic sort.** `canonicalOrder` was roughly quadratic (`log/log.nim:50-86`); since exo-53d (`ac8cc732`) it pops from a heap, n log n. It runs several times per intent per call: in `reduceIntents`, `intentRecord`, `intentInputs`, `intentContext`, and again inside `approvalGrades`.
 - **Repeated account folds.** Every `driverOf` call redoes `roomEvents` and `reduceAccounts`.
 - **Push is unused.** The platform supports it (the SDK's `emit`; `muster_gen.nim` installs the callback), but `muster.lidl` declares no events.
 
@@ -113,7 +113,7 @@ Put together, a side-module that holds decrypted room data would serve it to eve
 | Candidate | Verdict | Why |
 |---|---|---|
 | Chain watching and broadcast (Bitcoin, LEZ multisig inclusion, Safe execution finality, part confirmation) | **Yes: a new key-less module (S8)** | No key, no plaintext beyond what goes public on chain anyway. Takes blocking IO off the dispatch thread and gives progress a clock that does not depend on the UI. |
-| EVM reads and sends | **Yes: adopt the official modules (S7)** | `eth_rpc_module` (with `verified_proxy_module`), `fee_module` and `tx_sender_module` already exist, with one nonce ledger per device. Safe settlement moves under exo-149.4. Basecamp only: the standalone runner keeps the in-process path. |
+| EVM reads and sends | **Yes: adopt the official modules (S7)** | `eth_rpc_module` (with `verified_proxy_module`), `fee_module` and `tx_sender_module` already exist, with one nonce ledger per device. Safe settlement moves under exo-149.4. Basecamp only: the standalone runner keeps the in-process path. **Done** under exo-d4d R2 and R4 (`exo-d4d.3`, `.5`) and exo-149.4. |
 | EVM key | **Already moving** | keystore_module, exo-149 (#213). |
 | LEZ wallet, proofs, scans | **Already out** | lez_core, over `lp_*` with a 900 s async budget for proofs. |
 | Transport | **Already out** | delivery_module. |
@@ -196,13 +196,13 @@ Once S1–S2 land, the kernel/effector boundary should become an ADR (the next f
 Not part of the plan; recorded here so they are not lost. Each was confirmed by reading the code, not by a test.
 
 - **Intent ids were not re-derived in folds. Fixed in exo-dbd (`bc90342`).** A member could publish a second `intent/<id>/propose` (or `/policy`) under an existing id, and approval signing and the fold picked different copies. Now `proposalOf` (`intent_events.nim`) counts a propose/policy only as the pair the id is the hash of. The same gap for `intent/<id>/context`, which the id hash does not cover, is filed as exo-f12.
-- **Epoch-0 history after a restart.** `coordinate_join` always founds a fresh epoch-0 key (`muster_module.nim:741`, `epoch_crypto.nim:84`). A founder appears unable to read anything posted before the first admit after a relaunch, which would break "rebuilt from log + keys".
-- **Untimed RPC on the dispatch thread.**
+- **Epoch-0 history after a restart. Fixed in exo-6dc.1:** epoch 0's key is now derived from the keystore and the room. Before that, `coordinate_join` always founded a fresh epoch-0 key (`muster_module.nim:741`, `epoch_crypto.nim:84`). A founder appears unable to read anything posted before the first admit after a relaunch, which would break "rebuilt from log + keys".
+- **Untimed RPC on the dispatch thread. Fixed in exo-14f:** every chain call now runs under a deadline (`wallet/rpc_budget.nim`), and a null read raises. What was found:
   - `safe_rpc.nim:56-62` uses `newHttpClient()` with no timeout;
   - `evm_rpc.nim` and `lez_multisig_live.nim` run `waitFor` with none set;
   - `safeNonce` reads a null result as 0.
 - **The flow view never subtracts admitted members from its founders.** `musterCoordinateFlow` compares a `0x`-prefixed hex string to the bare hex in admit keys (`muster_module.nim:2547-2549`).
-- **One delivery node per session.**
+- **One delivery node per session.** The first item is fixed in exo-dcc.12: only the first transport boots delivery's node, one per module instance. The others were not re-checked.
   - `newDeliveryTransport` runs `createNode` + `start` for every room and every inbox (`muster_module.nim:741`, `:789`), contrary to the comment at `:782`.
   - Inbox sessions made for invites are never polled again.
   - Whether delivery dedupes repeated `createNode` calls is upstream behaviour to check.

@@ -32,11 +32,16 @@ and asserts the real lifecycle surfaces:
    Join). This is the on-display gate for `Room.qml` + `MusterCard.qml` (ADR-011:
    `nix build` does not evaluate QML, so a bad type name would blank the view). It
    stops at render on purpose — joining drives `coordinate_join` →
-   `DeliveryTransport`, which needs `delivery_module` (muster_module declares no
-   dependency on it and this bake does not carry it), so the functional
-   propose → card → contribute loop belongs with the live delivery node (the
-   documented cross-host item). The fold those cards render from is covered
-   headless (`module/tests/coordination_surface_test.nim` step 6). Off-chain.
+   `DeliveryTransport`, which needs `delivery_module` in the bake. When this test
+   was written muster_module did not declare it; it now requires `>=0.3.2`. The fold
+   those cards render from is covered headless
+   (`module/tests/coordination_surface_test.nim` step 6). Off-chain.
+
+The harness has since grown to 11 tests. The three not listed above join a room on a
+single instance (so the bake must carry `delivery_module`), all off-chain: an in-room
+Safe proposal renders the re-derived `safeTxHash` in its verify box; a FROST payment is
+approved in-app through both rounds to executable; and a Safe approval signs in-app and
+counts the local owner. Each is described in a comment above it in `muster-ui-test.mjs`.
 
 It writes screenshots to `$MUSTER_SHOT` (default `./muster-ui.png`), with
 `-executable` / `-final` / `-room` suffixes for the respective surfaces.
@@ -64,8 +69,9 @@ filter, e.g. `node ui/tests/muster-ui-test.mjs --ci <app> health`.
 
 ## Why basecamp (not the standalone runner)
 
-`logos-standalone-app` renders no `ui_qml` view on the current stack; `logos-basecamp`
-is the working host. Per **ADR-013**, `muster-ui` must be built on a **basecamp-coherent**
+When this harness was written, `logos-standalone-app` rendered no `ui_qml` view
+(`exo-c6a`, closed since: `make run` launches the standalone runner). The harness drives
+`logos-basecamp`, the host people install Muster into. Per **ADR-013**, `muster-ui` must be built on a **basecamp-coherent**
 `logos-module-builder` (its `ui/flake.nix` pins basecamp's builder rev) so the
 generated `muster_module` client + QtRO view-glue ABI-match basecamp's ui-host.
 
@@ -163,16 +169,13 @@ MUSTER_SHOT="$PWD/muster-ui.png" \
   node ui/tests/muster-ui-test.mjs --ci "$PWD/result-app/bin/LogosBasecamp"
 ```
 
-Expected: `3 passed, 0 failed`, and `muster-ui.png` showing the Muster view — the
+Expected: `0 failed` (11 tests; without anvil the submit test fails, as above), and `muster-ui.png` showing the Muster view — the
 Safe account from `describe()`, the proposed intent, the green re-materialization
 strip with the re-derived `safeTxHash`, and `module.health() → ok`.
 
 ### Which UI build it tests (exo-607)
 
-The harness drives whatever app binary you pass it, so the build is chosen at bake time: step 1 bakes in either `muster_ui`'s C++ backend or, once it exists, the Nim (seaqt) one. How the Nim build reaches this harness depends on exo-607's hosting decision (`docs/design/seaqt-ui.md` §6):
-
-- **Option A, a Nim plugin inside Basecamp:** bake it the same way and pass the same binary. The harness is unchanged.
-- **Option B, a standalone seaqt app:** there is no Basecamp sidebar to click, so `openMuster` would need a standalone path.
+The harness drives whatever app binary you pass it, so the build is chosen at bake time. Only `muster_ui`'s C++ backend is baked into Basecamp. exo-607's hosting decision (ADR-019, 2026-10-14) made the Nim (seaqt) UI a standalone app (option B, `docs/design/seaqt-ui.md` §8), so it has no Basecamp sidebar to click and this harness does not drive it; `openMuster` would need a standalone path.
 
 The offscreen self-tests select their build with `MUSTER_UI=cpp|nim` instead (`scripts/lib/ui-build.sh`, `scripts/ui-parity.sh`).
 

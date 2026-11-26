@@ -54,7 +54,8 @@ TLS shipped NULL and export-grade cipher suites, and the result was **downgrade 
   - `Transport` → **none**, honestly: it carries opaque bytes, so all axes are null with mechanisms naming where the real level lives (the `DeliveryTransport` override names the store-node metadata exposure, FS-9).
 - **`combine()`** composes the active room envelope — per axis, the strongest rung any active seam provides — the data source for the UI's "active level on all three axes".
 
-**Next (tracked on exo-1ec.5):**
+- **UI visibility (exo-1ec.5, closed 2026-09-23):** `security_levels()` in `muster.lidl` surfaces `combine()` over the room's live seams, and the ScopePanel's "Security level" section renders the three axes, each with its named mechanism, so a participant can see which nulls are still in place (PRs #121, #122).
 
-- **UI visibility (the second DONE-WHEN half):** surface `combine()` over the room's live seams as a module method and render the three axes in the UI, each with its named mechanism, so a participant can see which nulls are still in place. Render-bound (ADR-013 harness).
+**Next (open as of 2026-11-26; exo-1ec.5 closed without it):**
+
 - **The provenance ladder as a first-class rung** wired directly to the invariant-10 accountability record, rather than stood in by the signed log's existence.

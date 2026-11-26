@@ -15,21 +15,28 @@ in `../contracts/specs/derived-exo-*.spec.json`; each names probes under
 
 **P0–P4 landed; P3 built — two instances converge over the live Logos fleet;
 the multisig families (Phases A–D) landed 2026-09-24/25; the XMR payment request
-landed 2026-10-09; released as 0.3.0 on 2026-10-14.** The signing-path core,
-the intent lifecycle and driver interface, all ten invariants (163 unit tests and
-92 invariant probes, 255/255 green via `tests/run-suite.sh` on 2026-10-14), and the LIDL codegen that
+landed 2026-10-09; the latest release is 0.5.0 (2026-11-24), which signs every room
+grant and message frame and cannot read rooms made by 0.4.x or earlier.** The signing-path core,
+the intent lifecycle and driver interface, all ten invariants (208 unit tests and
+99 invariant probes in `tests/run-suite.sh`'s default run, 2026-11-26), and the LIDL codegen that
 generates the surface from the contract are all in. P4 put the whole lifecycle
 through the real UI (ADR-013). P3 — transport, encryption, and multi-party
 coordination — is built and tested; two `muster-ui` instances converge over the
 public fleet (join → ask → admit → both at two members, ~1s cross-host receive).
 The room coordinates and settles multisigs of four kinds: Safe v1.4.1 (the real
 contract on anvil, at the live nonce), Bitcoin P2WSH / tapscript through PSBT
-(regtest), the LEZ multisig program (on the public LEZ testnet at v0.2.4; its v0.3 port
-driven from the room on a local v0.3 zone), and FROST
-(one BIP-340 signature on Bitcoin, or from an untweaked LEZ account). What remains
+(regtest), the LEZ multisig program (its v0.2.4 build ran on the public testnet until
+the testnet was reset to LEZ v0.3 on 2026-09-30; its v0.3 port is driven from the room on
+a local v0.3 zone), and FROST
+(one BIP-340 signature on Bitcoin, or from an untweaked LEZ account). Since then:
+lez-msig (RFP-005, `src/drivers/lez_msig.nim`), a LEZ program that checks M-of-N approvals
+itself, public and private, on LEZ v0.3 and v0.4 (0.4.0); the coordinated Monero multisig
+(`src/drivers/xmr_msig.nim`, ADR-020, stagenet); and FileShare over `storage_module`
+(`src/storage/`). What remains
 is the multi-party runs across two machines. Author-bearing log events (chat,
 declines, material shares, account disclosures, FROST joins) are signed by their author,
-and the room reads only those that verify (exo-f76).
+and the room reads only those that verify (exo-f76). Since 0.5.0 every room grant and
+message frame is signed too ([`../docs/design/signed-room-wire.md`](../docs/design/signed-room-wire.md)).
 
 **The XMR payment request (epic exo-dcc, ADR-018).** Family `monero.split` in
 `src/drivers/split.nim`: one debtor pays the requester from any wallet through a
@@ -114,23 +121,27 @@ src/
   intents/      lifecycle (F-3) · materialization · signing_payload · provenance · disclosure
   drivers/      driver interface (inv 6) · manifest (per-action provenance/permissions/
                 disclosure) · profile (the multisig family) · conformance · safe ·
-                btc_multisig · lez_multisig · frost / btc_frost / lez_frost · threshold ·
+                btc_multisig · lez_multisig · lez_msig (RFP-005) · xmr_msig (the members' own
+                Monero multisig wallets) · frost / btc_frost / lez_frost · threshold ·
                 invoke (any module action) · eip191 · split (a bill split, each pays their
-                own part: evm / lez / btc / monero)
+                own part: evm / lez / btc / monero) · charter
   crypto/       two bound identities (secp256k1 auth + Ed25519/X25519 enc),
-                signed binding, keystore seam, epoch crypto (F-14/F-16)
+                signed binding, keystore seam, epoch crypto with signed grants (F-14/F-16; 0.5.0)
   transport/    Transport interface + local/delivery transports (inv 8) · the opt-in mix setting
   coordination/ multi-party session · intent lifecycle = reduce(log) · authorship (author-
                 signed events, the room's authentic view) · readiness ·
                 information-flow view · offers/material folds · parts (settlement in parts:
                 EVM, LEZ, Bitcoin, Monero) · module_registry (installed / running)
   wallet/       chain-agnostic wallet: EVM + Bitcoin Core + mock + real LEZ adapters, verified reads;
-                eth_rpc_module + tx_sender_module under Basecamp; monero_backend (read and mint only)
+                eth_rpc_module + tx_sender_module under Basecamp; monero_backend (read and mint only);
+                lez-msig's chain and prover seams; the member's own monero-wallet-rpc (xmr_msig_wallet)
   settlement/   the settlement seam, chosen by the driver's profile: Safe · Bitcoin · LEZ multisig · LEZ FROST
   bitcoin/      Bitcoin primitives + PSBT, pinned to the BIP vectors
   frost/        FROST (BIP-445) + ChillDKG, held to every draft vector; round secrets as keystore ops
-  lez/          the LEZ multisig program model + LEZ public transactions
+  lez/          the LEZ multisig program model + LEZ public transactions + lez-msig's bytes
   monero/       Monero addresses and the monero: payment URI, held to monero-project's vectors; pure, no keys
+  storage/      the storage seam (F-17) for FileShare: BlobStore, storage_module over lp_*
+  security/     the null ladder's levels, private files beside the keystore, peer text made safe to show
   plugins/      plugin sandbox (inv 3)
 nim-lib/        muster_gen.nim (generated) + muster_module.nim (hosted surface)
 tools/          regen.sh (fetches the SDK's lidl-gen + regenerates muster_gen.nim) · nim-closure.sh
@@ -148,4 +159,4 @@ tests/          unit tests · run-suite.sh (all of them, one command) · vectors
 - Invariant tests are append-only. Extend, don't weaken.
 - The module imports nothing from `../ui/`; it reaches other modules only through logos-core.
 
-<!-- rot-check: current-phase=CLAUDE.md sha256=dabc23069590aa5fd7905874c7c19a1c4be0f4466a660e48dedd54796240834f -->
+<!-- rot-check: current-phase=CLAUDE.md sha256=cda227b8b4e416ed7f41c42cee8093436d462cf12a2b2e2c706700fe1a2fe912 -->

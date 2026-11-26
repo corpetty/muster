@@ -1,6 +1,6 @@
 # Build and check Muster on macOS (Apple Silicon)
 
-**As of 2026-10-16, on macOS 26.5 on Apple Silicon with Logos Basecamp 0.3.2 (the `aarch64` DMG), Muster 0.3.0 (`15f7dc2`) and 0.3.1.** Muster builds and runs on macOS from the same sources as on Linux. This page is how to build the two packages on a Mac and run them in a Basecamp profile, for maintainers and acceptance; what was checked is in [`docs/design/platforms.md`](../design/platforms.md). A person who just wants Muster installs it from the catalogue ([`install-from-catalogue.md`](install-from-catalogue.md)) once a release carries `darwin-arm64`. The code wins over this page.
+**As of 2026-10-16, on macOS 26.5 on Apple Silicon with Logos Basecamp 0.3.2 (the `aarch64` DMG), Muster 0.3.0 (`15f7dc2`) and 0.3.1.** Muster builds and runs on macOS from the same sources as on Linux. This page is how to build the two packages on a Mac and run them in a Basecamp profile, for maintainers and acceptance; what was checked is in [`docs/design/platforms.md`](../design/platforms.md). A person who just wants Muster installs it from the catalogue ([`install-from-catalogue.md`](install-from-catalogue.md)): every release since 0.3.4 carries `darwin-arm64`. The code wins over this page.
 
 ## What you need
 
@@ -78,7 +78,7 @@ logosctl module load muster_module && logosctl call muster_module health     # "
 logosctl daemon stop
 ```
 
-Pass `--version` for `delivery_module`: installed by name, it takes the catalogue's newest (0.4.0), not the `~0.3.2` Muster declares.
+Pass `--version` for `delivery_module`, to get the one this page was checked with. Muster declares `>=0.3.2`. On 2026-10-16 the catalogue's newest was 0.4.0, which Logos Official has since withdrawn.
 
 ## Tests and releases on a Mac
 
@@ -88,6 +88,6 @@ Pass `--version` for `delivery_module`: installed by name, it takes the catalogu
 
 ## Known rough edges
 
-- **A second Basecamp's storage node.** With another Basecamp running, the profile's `storage_module` failed to start ("Failed to create Storage: Should create metadata store!"). Muster does not use it, and nothing else was affected. The cause was not looked into.
-- **Not yet run on macOS:** the catalogue install (no release carries the variant), `scripts/ui-parity.sh` and the other offscreen self-tests (they use Xvfb), two instances in one room, and the Monero and chain-bound flows.
+- **A second Basecamp's storage node.** With another Basecamp running, the profile's `storage_module` failed to start ("Failed to create Storage: Should create metadata store!"). The cause, found on Linux, is LevelDB's lock: both nodes opened `~/.logos_storage/data`. Since `ae4e62eb` (exo-4d0.2), where Muster has to start a storage node itself it keeps it to its own data folder. FileShare uses `storage_module`, and `muster_ui` lists it as a dependency since FileShare landed. The fix has not been re-checked on macOS.
+- **Not yet run on macOS:** the catalogue install (releases carry the variant since 0.3.4; an install from it on a Mac is not recorded here), `scripts/ui-parity.sh` and the other offscreen self-tests (they use Xvfb), two instances in one room, and the Monero and chain-bound flows.
 - **No macOS download-and-run bundle.** The AppImage has no DMG counterpart; `scripts/release-appimage.sh`, `make appimage` and `scripts/basecamp-profile.sh` are Linux only on purpose (`docs/design/platforms.md`).

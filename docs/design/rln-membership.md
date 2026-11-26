@@ -1,8 +1,11 @@
 # RLN membership for logos.test (exo-eb6.3)
 
-Status: **two of four decided (2026-10-01); R1 built and checked live (2026-10-01).**
-§6 records the decisions, the design they lead to, and what R1 found; §5's questions 1
-and 3 are still open.
+Status: **three of four decided (2026-10-01; Q1 on 2026-10-08); R1 built and checked live (2026-10-01).**
+§6 records the decisions, the design they lead to, and what R1 found; §7 settles question 1
+(`logos.dev` for now, `logos.test` with a gifter we run once R4 lands). Question 3, who funds
+the first payer or gifter, is still open as of 2026-11-26 (exo-dcc.2).
+Since delivery 0.3.3 (2026-10-23) the registry is on the LEZ v0.3.1 testnet (§2); where a
+passage below names "LEZ classic" or `209.38.241.182:3240`, it describes the earlier registry.
 
 ## 1. Why it is needed
 
@@ -169,7 +172,7 @@ What that flow already does by itself, from the modules' contracts (`liblogos_rl
 - **R4:** switch the default fleet to `logos.test` (Q1) once a membership has gone active
   end to end.
 
-**Still open:** Q1, the default fleet, stays `logos.dev` until R4. Q3 asks who funds the
+**Still open:** Q1, the default fleet, stays `logos.dev` until R4 (decided in §7). Q3 asks who funds the
 first payer or gifter: a funded native-LEZ account on the registry's zone, the bridge, or a
 public gifter.
 

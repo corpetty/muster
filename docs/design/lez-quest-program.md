@@ -113,9 +113,9 @@ decision for Jarrad (plan §Decisions); escrow is the default here.
    a shard, not an event.
 3. **Expiry.** A validity window on Accept and Confirm, so a quest nobody finishes can be cancelled
    by anyone after its deadline, not only by the issuer.
-4. **Where it lives.** In this repo at `programs/lez-quest/` (a Rust workspace beside the module,
-   built with the risc0 toolchain like the multisig port) until it has a second user, then in its
-   own repository.
+4. **Where it lives — settled.** In this repo at `programs/lez-quest/` (a Rust workspace beside the
+   module, built with the risc0 toolchain like the multisig port; exo-267.7, closed) until it has a
+   second user, then in its own repository.
 
 ## 7. Acceptance
 

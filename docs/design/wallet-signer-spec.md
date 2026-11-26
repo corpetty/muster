@@ -316,8 +316,9 @@ Muster's side so far (exo-833.3):
    keys) without a prompt per message, and revokes them.
 4. **Hardware signers.** Which schemes a Keycard can do (secp256k1 ECDSA and BIP-340 yes; Ed25519
    and FROST state?), and how the module degrades when a scheme is missing.
-5. **Proving location.** LEZ proofs take minutes on a laptop CPU (lez-msig: about 136 s plus 15 s
-   per approval, 150.7 s at one, `programs/lez-msig/BENCHMARKS.md`). Is a remote prover in scope, and how would it
+5. **Proving location.** LEZ proofs take minutes on a CPU prover (lez-msig on a 64-core AMD EPYC:
+   about 111 s + 12.0 s per approval on LEZ v0.3, and 182 s + 11.5 s per approval on v0.4,
+   `programs/lez-msig/BENCHMARKS.md`). Is a remote prover in scope, and how would it
    avoid seeing the witness?
 6. **Wallet history.** Which app reference a send carries back (`refs`), so the wallet's history
    joins Muster's rooms without the wallet learning what the room is.

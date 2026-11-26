@@ -1,6 +1,6 @@
 # Muster's UI on nim-seaqt: no C++ in the repo
 
-**Status:** T0–T4 landed 2026-09-29 (§9). The gate was decided on 2026-10-14: a standalone app (option B), on the newest Qt and seaqt, with the Basecamp UI kept until Basecamp can take a Nim one (§8, ADR-019). On branch `feat/seaqt-app`, which carries the work until it merges: T1b (Qt 6.11), T5–T6 and T7 landed the same day. The Nim app runs the whole backend, the parity suite is 11/11 green on it as on C++, and outside the frozen `ui/` and `demo/` the repo holds no C or C++, under a pre-commit gate (§9). The SDK change it rests on is [corpetty/logos-nim-sdk#7](https://github.com/corpetty/logos-nim-sdk/pull/7). Next is T8, which waits on Jacek's Q5. Code: branch `feat/seaqt-ui`, [corpetty/muster#181](https://github.com/corpetty/muster/pull/181). Epic `exo-607` (pebbles; `pb dep tree exo-607` for live status).
+**Status:** T0–T4 landed 2026-09-29 (§9). The gate was decided on 2026-10-14: a standalone app (option B), on the newest Qt and seaqt, with the Basecamp UI kept until Basecamp can take a Nim one (§8, ADR-019). T1b (Qt 6.11), T5–T6 and T7 landed the same day on branch `feat/seaqt-app`, merged in [corpetty/muster#298](https://github.com/corpetty/muster/pull/298) (2026-10-15). The Nim app runs the whole backend, the parity suite is 11/11 green on it as on C++, and outside the frozen `ui/` and `demo/` the repo holds no C or C++, under a pre-commit gate (§9). The SDK change it rests on is [corpetty/logos-nim-sdk#7](https://github.com/corpetty/logos-nim-sdk/pull/7). Next is T8, which waits on Jacek's Q5. Code: T0–T4 merged in [corpetty/muster#181](https://github.com/corpetty/muster/pull/181) (2026-09-29), the rest in #298. Epic `exo-607` (pebbles; `pb dep tree exo-607` for live status).
 **Reads with:** `docs/02-implementation-plan.md` (ADR-008 builder, ADR-013 the coherent UI builder, ADR-014 Nimbus/Status Nim reuse), `CLAUDE.md` working agreements (the UI reaches the module only through the logos API), `ui/tests/README.md`.
 **Reference projects:** [`seaqt/nim-seaqt`](https://github.com/seaqt/nim-seaqt) (Qt bindings), `seaqt/nimside` (the `qobject:` DSL and plugin macros), [`arnetheduck/nora-poc`](https://github.com/arnetheduck/nora-poc) (the pilot where nimside's DSL was designed), `status-im/status-desktop` (the production consumer).
 
@@ -493,7 +493,7 @@ Both runs were on `logos.dev`, minutes apart, on the same machine, with foundry 
 
 **Not yet:**
 
-- **Not standalone yet.** The Nim runner borrows the C++ runner's modules dir (`make build` first). A Nim build of its own module set is for when the branch merges, as is an AppImage of the Nim app.
+- **Not standalone yet.** The Nim runner borrows the C++ runner's modules dir (`make build` first). The branch has merged (#298); a Nim build of its own module set and an AppImage of the Nim app are still open (exo-607.14, as of 2026-11-26).
 - **The token handshake is raw `lp_*`.** Registering the view's token with `capability_module` is done as in T4a, because that module's contract is not one the app generates a client from.
 
 ### T7: the C++ with no Basecamp role, gone (exo-607.10, 2026-10-14)

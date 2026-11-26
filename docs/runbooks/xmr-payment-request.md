@@ -9,7 +9,7 @@
 ## 0. Set up, on each of two machines
 
 1. **Get Muster**, either way:
-   - **The AppImage** from the [`muster-v0.3.1` release](https://github.com/corpetty/muster/releases/tag/muster-v0.3.1). Run `chmod +x Muster-0.3.1-Basecamp-0.3.2-linux-x86_64.AppImage`, run it, and click **Muster** in the sidebar.
+   - **The AppImage** from the [latest release](https://github.com/corpetty/muster/releases/latest) (written for 0.3.1; 0.5.0 on 2026-11-26). Run `chmod +x Muster-<version>-Basecamp-0.3.2-linux-x86_64.AppImage`, run it, and click **Muster** in the sidebar. Both machines must run the same release: 0.5.0 cannot read rooms made by 0.4.x or earlier.
    - **Or**, in an existing Basecamp 0.3.2, install from Muster's catalogue ([`install-from-catalogue.md`](install-from-catalogue.md)).
 2. **Open Muster before any other messaging app** (Chat, for instance). Basecamp runs one messaging node, and the first app to start it picks the network. Both of you should be on Muster's default, `logos.dev`. Check under **Settings → Advanced**.
 3. **The payee's Monero wallet.** In Muster, go to **Wallet → Monero → Install**, then confirm Basecamp's *Use this app?* prompt, then **Install** in Package Manager. You can untick the optional *Monero Node* to use a remote node. Then open **Monero Wallet** from the sidebar and **Create** a wallet on stagenet (or **Restore phrase**). Back in Muster's **Wallet**, it shows as *Monero · stagenet* with its address.
@@ -74,7 +74,7 @@ On the final card, **Details → Download audit trail**. The file verifies from 
 
 - **The Monero chain** shows no sender, receiver or amount, and a subaddress cannot be linked to the payee's other addresses.
 - **The room** holds the request, the people, and any txid reported. None of it leaves the room.
-- **A remote node** sees when a wallet syncs and the transactions it broadcasts, unless you run your own (Monero Wallet's optional *Monero Node*). From the next release, Muster's **Connections** row says which one the payee's wallet uses.
+- **A remote node** sees when a wallet syncs and the transactions it broadcasts, unless you run your own (Monero Wallet's optional *Monero Node*). Muster's **Connections** row says which one the payee's wallet uses (since 0.3.2, #308).
 - **Any module loaded beside Muster in Basecamp** can read the payee's wallet history while it is open. The action's manifest discloses this.
 
 ## Send back: what I need verified (exo-dcc.19)
