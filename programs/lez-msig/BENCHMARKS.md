@@ -72,8 +72,7 @@ peak resident memory of 9.6 GB.
 A least-squares fit through M = 1–10 gives about **111 s + 12.0 s · M**. M = 5 proves in
 under 3 minutes. M = 32, the members limit, extrapolates to about 8 minutes; it has not been
 measured. These figures replace the shared-machine ones below for P.2, which were about 15 s per
-approval. Still to come for P.1: a laptop-class machine, a GPU prover, and LEZ 0.4 (roadmap M1
-and M3).
+approval.
 
 ## 2026-10-23: AMD EPYC, 64 cores, 503 GB. The guest uses RISC Zero's accelerated k256
 
@@ -96,19 +95,29 @@ Peak resident memory: 9.6 GB. The whole run took 28 min 40 s.
 The same 1-signature payment with stock (unaccelerated) k256 took **439.0 s**. Acceleration
 cuts it by 2.9×.
 
-## What the numbers say (from the 2026-10-23 run; the idle run above lowers the per-approval cost to ~12 s)
+## What the numbers say
+
+From the two idle runs above, both on the same 64-core machine.
 
 - **P.2 (approval verification as a function of M).**
-  - Each further approval adds about 15 s of proving. A fit through M = 1–10 gives roughly
-    136 s + 15 s · M.
-  - **M ≥ 5 is viable:** M = 5 proves in 3.5 minutes.
-  - A private transaction has no cycle cap, and the transaction does not grow with M (below),
-    so the ceiling is the members limit (32), not the block. At about 15 s per signature,
-    M = 32 is extrapolated at about 10.5 minutes; it has not been measured.
-- **P.1 (transaction size).** Every private transaction is about 228 KB: the succinct proof,
-  plus notes padded to a fixed size. It does not grow with M, because the approvals are
-  inside the proof. About 4 fit in a 1 MiB block (LEZ PR #949's own count).
-- **Compute.** Private transactions are not metered on v0.3, and are fee-exempt there; PR #949
-  would charge them.
+  - Each further approval adds about 12 s of proving on v0.3 and about 11.5 s on v0.4.
+  - A payment proves in about **111 s + 12.0 s · M** on v0.3 and **182 s + 11.5 s · M** on v0.4.
+    The v0.4 base is higher because each step proves a second private account, the group's fee
+    account (D17), which costs about 95 s.
+  - **M ≥ 5 is viable:** M = 5 proves in about 3 minutes on v0.3 and 4 minutes on v0.4.
+  - A private transaction does not grow with M (below), so the ceiling is the members limit (32),
+    not the block. M = 32 extrapolates to about 8 minutes on v0.3 and 9 on v0.4; it has not been
+    measured.
+- **P.1 (transaction size and cost).**
+  - Every private transaction is about 228 KB on v0.3 and 229–238 KB on v0.4: the succinct
+    proof, plus notes padded to a fixed size. It does not grow with M, because the approvals are
+    inside the proof.
+  - On v0.3, private transactions are neither metered nor charged.
+  - On v0.4 each pays a flat fee inside its proof: about 5.07M at base fee 8, whatever M
+    (`docs/upstream/lez-v04-field-report.md`).
+- **Memory.** Peak resident memory is 9.6 GB on both lines.
+- **Not yet measured:** a laptop-class machine (exo-0d3.15) and a GPU prover. Every figure here is
+  from a 64-core server.
 - **The public posture.** These figures do not apply to it: the sequencer executes the program
-  without proving.
+  without proving. On v0.4 its fees are metered per step (`v04_gas.rs`,
+  `module/tests/vectors/lez-msig/v04-gas.json`).

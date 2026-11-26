@@ -1,7 +1,8 @@
 # Field report: an M-of-N multisig on LEZ 0.4.0-rc3
 
 **To:** the LEZ team (`logos-blockchain/logos-execution-zone`).
-**From:** the Muster team (`corpetty/muster`), building RFP-005's multisig (`lez-msig`).
+**From:** the Muster team (`corpetty/muster`), building RFP-005's multisig (`lez-msig`; the proposal,
+[logos-co/rfp#299](https://github.com/logos-co/rfp/issues/299), was accepted on 2026-11-26).
 **Date:** 2026-11-20. **Status:** notes and asks, kept current as we go. Nothing here is built on
 your side.
 

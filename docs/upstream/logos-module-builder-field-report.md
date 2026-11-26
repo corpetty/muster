@@ -11,6 +11,12 @@ dependency graphs cannot coexist), share a crate of rules that lives outside eit
 builder compiles only the package directory, so the second build needed a staged source. That
 works, but it costs import-from-derivation and a Cargo workspace trap.
 
+**Update, 2026-11-23.** The v0.4 build is now its own module, `lez_msig_v04_module` (0.2.x), beside
+`lez_msig_module` (0.1.x). A dependency resolves by name: one name meant a host, a catalogue or the
+runner's module set could hold one line's build or the other, never both. With two names,
+`muster_module` declares both as optional and calls the one its zone needs. Muster 0.4.0 ships
+both. The shared-source issue below is unchanged: the v0.4 module still stages `../core`.
+
 ## What we hit
 
 How to read this: **[measured]** means we ran it; **[from source]** means we read it in

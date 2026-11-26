@@ -313,7 +313,7 @@
           "step": "settle",
           "who": "any member — Settle on-chain",
           "does": "coordinate_submit: settlement reads the multisig's state from the user's sequencer (the program's own copy is the one that counts), then sends ONE public transaction from the member's own funded LEZ account (lez-member/0), which pays its fee: Execute with the driver-verified approvals; or, under a time lock, Queue (landing no later than its claimed time, so the ETA is never early) and later ExecuteQueued. It refuses, by name, a stale epoch, a spent nonce, an expired proposal, a missing proposer signature, or too little weight. The program pays through the native token, granted the multisig's own seed and nothing else.",
-          "signs": "the settling member's LEZ account signs the public transaction (BIP-340 over the v0.3 message hash) as its fee payer; the multisig's account signs nothing",
+          "signs": "the settling member's LEZ account signs the public transaction (BIP-340 over the zone line's public message hash, v0.3 or v0.4) as its fee payer; the multisig's account signs nothing",
           "reveals": [
             {
               "field": "the proposal, every approval and its key",
@@ -515,7 +515,7 @@
           "step": "settle",
           "who": "any member — Settle on-chain",
           "does": "coordinate_submit: settlement reads the multisig's state from the user's sequencer (the program's own copy is the one that counts), then sends ONE public transaction from the member's own funded LEZ account (lez-member/0), which pays its fee: Execute with the driver-verified approvals; or, under a time lock, Queue (landing no later than its claimed time, so the ETA is never early) and later ExecuteQueued. It refuses, by name, a stale epoch, a spent nonce, an expired proposal, a missing proposer signature, or too little weight. apply runs every change, refuses the whole change if the result is invalid (a threshold its approvers cannot reach; a member who still signs for a spending limit), and bumps the epoch.",
-          "signs": "the settling member's LEZ account signs the public transaction (BIP-340 over the v0.3 message hash) as its fee payer; the multisig's account signs nothing",
+          "signs": "the settling member's LEZ account signs the public transaction (BIP-340 over the zone line's public message hash, v0.3 or v0.4) as its fee payer; the multisig's account signs nothing",
           "reveals": [
             {
               "field": "the proposal, every approval and its key",
@@ -618,9 +618,7 @@
           "what": "BIP-340: the approval signature the program checks"
         }
       ],
-      "unverified": [
-        "The room does not yet re-key out a removed member automatically when the change executes (§8 reconcile)."
-      ],
+      "unverified": [],
       "try": []
     }
   ]

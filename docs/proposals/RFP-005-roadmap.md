@@ -1,344 +1,199 @@
-# RFP-005 roadmap: the multisig, the program and the room
+# RFP-005: progress against the accepted proposal
 
-*Draft, 2026-11-17; revised 2026-11-20 after the team's feedback (§0). For Franck, the EcoDev engineer who will dogfood it, and IFT-QA. Owner:
-Corey Petty. Tracked as exo-0d3 (epic) and exo-0d3.19 (this document); new items exo-0d3.20 (Ed25519 members), .21 (T1), .22 and .23 (T2).*
+*Updated 2026-11-26. Owner: Corey Petty. Epic exo-0d3; this document is exo-0d3.19.*
 
-Muster takes RFP-005 ([the spec](https://github.com/logos-co/rfp/blob/master/RFPs/RFP-005-multisig-and-coordination.md))
-under the usual RFP process. A dedicated EcoDev engineer drives each milestone: they announce it,
-dogfood it, give feedback and sign it off. IFT-QA runs the acceptance scripts, the R&D Program team
-reviews the program, and the program goes on the audit track. This document lists what is done,
-what comes next, and the two scope changes agreed since 2026-11-11.
+**The reference is the accepted proposal,** [`RFP-005-lez-msig.md`](RFP-005-lez-msig.md)
+([logos-co/rfp#299](https://github.com/logos-co/rfp/issues/299), accepted 2026-11-26). It fixes
+the scope and the five milestones. This document tracks what has been built against them since,
+and what is left. Each item left has an issue under exo-0d3.
 
-The program was the RFP's largest unknown, and it is already written and measured. The work left is
-mostly productising it: the LEZ 0.4 port, a standalone module and CLI for integrators, the registry
-and the documentation, and the audit.
+Design and decision log (D1–D19): [`docs/design/lez-msig.md`](../design/lez-msig.md). Signing
+spec: [`docs/design/lez-msig-signing.md`](../design/lez-msig-signing.md). Benchmarks:
+[`programs/lez-msig/BENCHMARKS.md`](../../programs/lez-msig/BENCHMARKS.md). Reports to the module
+teams: [`docs/upstream/`](../upstream/).
 
-## 0. Feedback, 2026-11-20, and what changed
+**How a milestone is signed off.** Each ends with:
+- an acceptance script IFT-QA can run;
+- a dogfood journey that a dedicated EcoDev engineer does by hand.
 
-| Point raised | Answer, and what this revision changes |
-|---|---|
-| The devnet is LEZ **0.4.0-rc3** (`46.225.45.199:3040`–`3043`, channel `d616cc09…615d`) | It answers from the build host. The 0.4 port is therefore no longer a later milestone: it **is** M1. The public posture already runs on a local 0.4.0-rc3 zone (PR #387). A devnet funder account is made and waits for funds (Q2). |
-| The registry program (F.4) has no taker on the LP: are we blocked? | **No.** Our F.4 is a registry of program descriptors in Muster's signed package, each keyed by program and image id and cross-checked against the chain's deployment header. It needs no on-chain registry. Decode-before-sign already covers the multisig's own actions. An on-chain registry, if the LP lands, becomes a second source the client reads. |
-| The `chat_module` binding waits on member removal; do it earlier to de-risk | Removal is in review (logos-chat PR #357, GroupV3 removals). The binding moves from M6 to **M3** as a limited integration first: each multisig's **deliberation** runs over a `chat_module` group whose membership follows the program's, while proposals and approvals stay on Muster's room until the binding reaches parity. Known limits are in §5. |
-| The L1 multisig: David to define the plan | §1.2 and §4 no longer propose a mechanism. The channel-as-treasury questions are removed: we wait for the Blockchain team's strategy, likely programmable UTXOs in 0.5 (possibly 0.4). T1 stays tentative. |
-| The shared secret can't be revoked: is migration the accepted practice? (James Zaki, zone team) | James's 0.4 multisig (`jzaki/jz-progs`, `example_progs/multisig`) rotates **in the program**. The approval that removes a member retires the vault, hands its config to a successor at a new PDA from a new group secret, and moves the whole balance there, all in one transaction. `lez-msig` adopts the same on 0.4 (D19): removal becomes one approved action, never a separate migration. |
-| Seats or signatures | The LEZ book (`catalog/multisig.md`, branch `moudy/lez-books`) lists "signatures instead of seats" as the alternative: one transaction per action, at the price of signature checks in the guest. `lez-msig` keeps signatures, because seats cost k private transactions, each a proof of minutes. It takes rotation from the seat design. |
+The R&D Program team reviews the program before the external audit.
 
-## 1. Scope, as changed
+## At a glance
 
-### 1.1 Three layers, each usable without the others
+| Milestone | Built | Left | Issues |
+|---|---|---|---|
+| M1 The multisig on LEZ 0.4 | Most of it: both postures on the 0.4 devnet with real proving, from Muster's UI | Rotation on removal, a private Call from the room, the fee balance, a laptop benchmark, the dogfood journey | exo-3dc, exo-0db, exo-8ef, exo-0d3.15, exo-d4b |
+| M2 The program stands alone | The signing spec; key-free public-posture operations in the module and CLI | The full module API for both postures, a CLI over `logoscore`, the integration guide, Ed25519 members if needed | exo-dbd3, exo-c3b, exo-0d3.20 |
+| M3 Decode, disclose, document | Decode-before-sign for the multisig's own actions | The registry and arbitrary targets, the disclosure tiers, the mini-app view, the documentation, a pilot | exo-ac1, exo-4cd4, exo-93b, exo-05d |
+| M4 The chat binding and the IDL | Deliberation in a `chat_module` group that follows the members | The full binding, the IDL, CI on a 0.4 zone | exo-13f, exo-7610 |
+| M5 Audit | — | Review, audit, fixes, report | exo-a80 |
 
-Integrators want different subsets (fryorcraken, 0xGunner, 2026-11-16). BitGo uses a chain's own
-multisig program where one exists. Finoa and the large custodians (Fireblocks, Copper, Anchorage)
-put one key on chain and run approvals in their own MPC. Our own treasury and community wallets
-go through Muster. So the deliverable is split into three layers with documented seams:
+Released: [muster-v0.4.0](https://github.com/corpetty/muster/releases/tag/muster-v0.4.0)
+(2026-11-23) carries both postures on LEZ 0.4 and both provers. `lez_msig_module` 0.1.1 is the
+LEZ v0.3 prover and `lez_msig_v04_module` 0.2.0 the v0.4 one; Muster calls the one its zone
+needs. [muster-v0.5.0](https://github.com/corpetty/muster/releases/tag/muster-v0.5.0) (2026-11-24)
+is the security release that followed an outside review of 0.4.0.
 
-| Layer | What it is | Who uses only this layer |
+## M1: the multisig on LEZ 0.4
+
+**Built.**
+- The actor adapter over the same `msig_core`, in its own workspace (`programs/lez-msig/lez04`, PR #387).
+- Deployed immutable on the 0.4.0-rc3 devnet at
+  `2tTh5nUpBxtTAoQBCQbzmG32JGapm2KaEpH9oxktGanG`. On it:
+  - **Public posture:** create on a fresh PDA, a refusal below threshold, a 2-of-3 payment.
+    Muster's own room flow passed 7/7.
+  - **Private posture, real proving:** fee-account top-up, Create, deposit and a 2-of-3 payment.
+    Each proved in 104 s, 257 s, 233 s and 292 s, and paid a fee of about 5.7M.
+  - **Through Muster's UI:** two runners opened a private 2-of-2, topped it up, created and funded
+    it, approved on the card and settled, in 925 s end to end.
+- **D17, decided and built.** Every private transaction pays its fee inside its proof, from a
+  group fee account derived from the group secret and witnessed `FeeOnly`. Members top it up from
+  a public account, and the top-up pays its own fee out of the credit.
+- **D18, decided and built.** The program is proved undisclosed, so a transaction names no program.
+- **Private payees** (exo-ea3) and **deposits from outside the group** (exo-05f).
+  - A payment to a private payee is sealed to its `Recipient` and claimed by it alone.
+  - Anyone can pay the vault's address from a public account, and the next transaction collects
+    up to four deposits.
+  - Both ran on LEE's 0.4 state and on a local 0.4 zone (`lez_msig_private_e2e`, `live_exec04`).
+- **Per-step gas limits** (exo-50c). On 0.4 a refused transaction burns its whole declared limit.
+- **Recovery** of a lost note by scanning the chain with the group's viewing keys.
+- **The room follows the program's members** (#382), and **spending limits** run from the room (#383).
+- **The 0.4 prover as a Logos module,** `lez_msig_v04_module`, beside the v0.3 one, in Muster's
+  catalogue and AppImage.
+- **P.1/P.2 on 0.4,** real proving on a 64-core EPYC:
+  - a payment proves in about 182 s + 11.5 s per approval;
+  - the transaction is 229–238 KB whatever M is;
+  - peak memory is about 9.6 GB.
+
+**Left.**
+- **In-program rotation on removal, D19** (exo-3dc). The approval that removes a member, in the
+  same transaction:
+  - retires the vault;
+  - hands its configuration to a successor at a new PDA from a new group secret;
+  - moves the balance there.
+
+  Deposits that reach a retired vault are swept forward. This is James Zaki's 0.4 pattern.
+- A private Call from the room (exo-0db). It already runs on LEE's 0.4 state.
+- The fee account's balance on the card (exo-8ef).
+- A laptop-class benchmark (exo-0d3.15).
+- **Acceptance:** the dogfood journey in Basecamp (exo-d4b). A 2-of-3 private multisig on the
+  devnet is opened, funded and paid out; a member is added and one removed, the vault rotates,
+  and the removed member loses the room.
+
+## M2: the program stands alone
+
+**Built.**
+- The signing spec with test vectors (PR #384): what an approval signs, for integrators without Muster.
+- Key-free public-posture operations in `lez_msig_module` and `msig_exec` (PR #385): state,
+  propose, spend, check, prepare and send. The README documents the no-Muster journey, run
+  against a real sequencer with every key outside the module.
+
+**Left.**
+- `lez_msig_module` as the full multisig module (U.1, exo-dbd3): create, propose, approve, reject,
+  execute, configuration and limits, for both postures and both LEZ lines, with progress events.
+- A CLI over `logoscore` (U.3) and a bring-your-own-transport guide (S.9, S.10), in exo-c3b.
+- Ed25519 member keys beside BIP-340 (exo-0d3.20), if integrators confirm they need them.
+  Fireblocks and Fordefi sign Ed25519 and ECDSA secp256k1, not BIP-340 (see "Integrators" below).
+- **Acceptance:** the full journey from the CLI alone, with one approval produced outside Muster
+  from the spec.
+
+## M3: decode, disclose, document
+
+**Built.** The card decodes the exact bytes each approval signs, for every action the multisig
+itself takes: create, transfer, call, configuration, spend and a private payee.
+
+**Left.**
+- The target-program registry and decode-before-sign for any target (F.4, U.6; exo-ac1).
+  - Descriptors ship in Muster's signed package, keyed by program and image id, and are
+    cross-checked against the deployment header. No on-chain registry is needed.
+  - An unregistered target shows its raw bytes, with a warning and a second confirmation.
+- The selective-disclosure tiers (F.10, exo-4cd4).
+- A multisig view in the mini-app and an error pass (U.2, U.7; exo-93b).
+- Documentation (exo-05d):
+  - the per-action public/private table (U.5);
+  - the cross-layer correlations (Privacy 3);
+  - the README (S.8);
+  - designs (S.11);
+  - the requirement-to-test map (S.7).
+- **Acceptance:** a dogfood pilot, a real group running a small treasury on testnet.
+
+## M4: the chat-module binding and the IDL
+
+**Built.** Each multisig's deliberation runs in a `chat_module` group whose membership follows the
+program's (PR #388). Removal was proven on the live fleet with a patched module exposing
+`remove_group_member`.
+
+**Left.**
+- The full binding behind `ConversationCrypto` (S.2, exo-13f). Proposals and approvals move there
+  once `chat_module` reaches parity:
+  - forward secrecy on removal;
+  - a store node that cannot read membership;
+  - an exportable proof.
+- The IDL (U.4) through SPEL or its 0.4 successor, and the lez-msig end-to-end tests in CI on a
+  0.4 zone (S.5, S.6; exo-7610). CI runs a v0.3 zone today.
+
+## M5: audit
+
+exo-a80. First a review by the R&D Program team, then a tier-1 audit of:
+- the program;
+- approval verification;
+- configuration change and the time lock;
+- spending limits;
+- rotation on removal.
+
+Then a fix round, and the report is published with the code. Book it early: the code freeze
+follows M1 and M2.
+
+## Requirement by requirement
+
+✅ done · 🟡 partial · ⬜ not started · ↪ deliberate deviation. Milestone in brackets.
+
+| Req | | Where it stands |
 |---|---|---|
-| **1. The program** | `lez-msig`: M-of-N enforced by the LEZ program, which verifies BIP-340 approvals at execution. It has no opinion on how approvals were collected. | Integrators with their own transport and signing (option 2: BitGo) |
-| **2. The signing seam** | A written spec of what an approval signs (a tagged digest committing to zone, account, config epoch, nonce, action and expiry), with test vectors. A signature from an HSM, an MPC cluster or a keystore all count the same. | Anyone who brings their own signers |
-| **3. The coordination room** | Muster: an encrypted room where members deliberate, the card decodes the exact bytes before signing, and approvals are collected off-chain. | Logos treasury and community wallets, DAOs, circles, Monero groups |
-
-Option 1 (one key on chain, MPC elsewhere) needs no multisig program. It needs LEZ and L1 account
-schemes that custodians' MPC stacks can sign. Those stacks sign Ed25519 and ECDSA, while LEZ
-accounts and `lez-msig` approvals use BIP-340 (§4.3). That gap matters more than any other for
-integrators. Muster already has the in-house version of option 1: a FROST group owns a plain LEZ
-public account with one aggregate key (`drivers/lez_frost.nim`, `lez_frost_room_e2e`).
-
-Today layers 1 and 3 are separate code (`programs/lez-msig/`, `module/`), but the only full client
-of the program is Muster's room. Milestone 2 makes the program usable on its own.
-
-### 1.2 The Logos blockchain (L1) multisig: added, owned by the Blockchain team
-
-The Blockchain team builds the L1 multisig (Ksr, 2026-11-16), and David will share its plan. The
-likely basis is the programmable UTXOs coming with 0.5 (possibly 0.4).
-
-Muster's part is coordination: a driver family for whatever they build, the same room, the same
-decode-before-sign card. It is a **tentative milestone** (T1), and it starts once their design is
-fixed. §4 keeps only what bears on integrators' key schemes.
-
-## 2. Where it stands
-
-Built on `main` (PR #344 and follow-ups), released as Muster 0.3.3 with `lez_msig_module` 0.1.0 in
-Muster's own catalogue. Design and decision log: `docs/design/lez-msig.md`.
-
-- **The program** (`programs/lez-msig/`, LEZ v0.3 `run_program(plan, apply)`). The rules live in
-  `msig_core`, a pure crate with thin runtime adapters. One program serves both postures: over a
-  public PDA, or over a group-owned private PDA. It has been run on a live v0.3 sequencer: a
-  private multisig was created, funded and paid out 2-of-3, and nothing public exists at its id.
-- **The room flow.** A multisig is opened from a Muster room. A ceremony binds each member's
-  approval key to their room identity. Proposals, approvals and execution happen in the room. The
-  card decodes the exact bytes each approval signs. This was run end to end against the deployed
-  program and through two real Muster clients on screen. The private posture also runs from the
-  room: the prover is the `lez_msig_module` Rust module, the group secret is sealed per member,
-  and lost notes are recovered by scan. So far this has run in dev mode only.
-- **The cost question is answered** (`programs/lez-msig/BENCHMARKS.md`, real proving, 64 cores).
-  A private payment with M approvals proves in 151 s at M=1, 209 s at M=5 and 288 s at M=10,
-  about 15 s per approval. The transaction stays a constant 228 KB. M ≥ 5 is viable.
-- **The same client already coordinates other multisigs:** a Safe on Sepolia, Bitcoin through
-  PSBT, the vote-locus LEZ multisig, FROST on Bitcoin and LEZ, and Monero multisig.
-
-### 2.1 Requirement by requirement
-
-✅ done · 🟡 partial · ⬜ not started · ↪ deliberate deviation
-
-| Req | | Status |
-|---|---|---|
-| F.1 M-of-N, configurable members, threshold, action set | ✅ | `msig_core`, `rules.rs` tests |
-| F.2 lifecycle, expiry, off-chain collection, no payload in the clear | ✅ | approvals are collected in the room and verified in-program |
-| F.3 arbitrary program calls | ✅ | `Call` action; the room composer proposes calls |
-| F.4 proposal/target registry | ⬜ | designed (descriptors in Muster's signed package, keyed by program + image id); not blocked on an on-chain registry; M4 |
-| F.5 config changes through the quorum | ✅ | program ✅; the room follows the program's members and config (exo-0d3.13, PR #382) |
-| F.6 role separation | ✅ | PROPOSE / APPROVE / EXECUTE, guarantees in the design |
-| F.7 time lock | ✅ | validity windows; ETA is pessimistic |
-| F.8 spending limits | ✅ | program ✅; adding a limit and spending under it from the room (exo-0d3.12, PR #383, e2e against the real program) |
-| F.9 E2EE room per multisig, LEZ↔chat binding | ✅↪ | Muster's room, not `chat_module` (S.2 below) |
-| F.10 private default, public posture, selective disclosure | 🟡 | both postures ✅; disclosure tiers designed, not built (M4) |
-| U.1 a module other modules call | 🟡 | `lez_msig_module`: the prover plus the public posture's key-free operations (PR #385); the private posture's full API is still Muster's |
-| U.2 QML mini-app in Basecamp, room beside proposals | 🟡 | Muster in Basecamp via its catalogue; a dedicated multisig view is M4 |
-| U.3 CLI on the headless core | 🟡 | `msig_exec` covers the public journey (PR #385, README); a `logoscore` wrapper is still to do |
-| U.4 IDL via SPEL | ⬜ | SPEL is thinning under 0.4; M3 decides SPEL or its successor |
-| U.5 per-action public/private documentation | 🟡 | design §7; the operator-facing table is M4 |
-| U.6 decode before signing | 🟡 | ✅ for the multisig's own actions; arbitrary targets wait on F.4 |
-| U.7 actionable errors | 🟡 | refusal codes exist; a UI pass in M4 |
-| R.1 M distinct current members, exactly this action, no replay | ✅ | `rules.rs`, `v03_state.rs` |
-| R.2 config change invalidates old approvals, cutoff defined | ✅ | config epoch; the cutoff is the queue; immediate cancel |
-| P.1 CU, size, proving time per operation | 🟡 | measured on v0.3 on a shared machine; rerun idle, on a laptop, and on 0.4 (M1, M3) |
-| P.2 cost as a function of M, M ≥ 5 viable | ✅ | ~12 s per approval on an idle 64-core machine (PR #385); rerun on 0.4 |
+| F.1 M-of-N, members, threshold, action set | ✅ | `msig_core`, `rules.rs` |
+| F.2 lifecycle, expiry, off-chain collection | ✅ | approvals collected in the room, verified in the program |
+| F.3 arbitrary program calls | ✅ | `Call`; private Call from the room is exo-0db (M1) |
+| F.4 target registry | ⬜ | exo-ac1 (M3) |
+| F.5 configuration through the quorum | ✅ | the room follows the program's members (#382) |
+| F.6 role separation | ✅ | PROPOSE / APPROVE / EXECUTE |
+| F.7 time lock | ✅ | validity windows; a pessimistic ETA |
+| F.8 spending limits | ✅ | from the room (#383) |
+| F.9 E2EE room per multisig | ✅↪ | Muster's room; the chat module carries deliberation (S.2) |
+| F.10 private default, public posture, disclosure | 🟡 | both postures ✅; disclosure tiers exo-4cd4 (M3) |
+| U.1 a module other modules call | 🟡 | prover and public-posture operations ✅; the full API exo-dbd3 (M2) |
+| U.2 QML mini-app | 🟡 | Muster in Basecamp; a multisig view exo-93b (M3) |
+| U.3 CLI on the headless core | 🟡 | `msig_exec`; over `logoscore` exo-c3b (M2) |
+| U.4 IDL | ⬜ | exo-7610 (M4) |
+| U.5 per-action public/private | 🟡 | design §7; the table exo-05d (M3) |
+| U.6 decode before signing | 🟡 | own actions ✅; any target exo-ac1 (M3) |
+| U.7 actionable errors | 🟡 | refusal codes ✅; UI pass exo-93b (M3) |
+| R.1 distinct current members, exactly this action, no replay | ✅ | `rules.rs`, `v03_state.rs`, `v04_state.rs` |
+| R.2 configuration change voids old approvals | ✅ | the epoch; the cutoff is the queue |
+| P.1 cost, size, proving time | 🟡 | 64-core, v0.3 and v0.4 ✅; laptop exo-0d3.15 (M1) |
+| P.2 cost against M, M ≥ 5 viable | ✅ | about 11.5 s per approval on 0.4 |
 | S.1 LEZ, private accounts | ✅ | |
-| S.2 the room on `chat_module` | ↪ | removal is in review (logos-chat #357); a limited integration (deliberation) is M3, the full binding M6 |
-| S.3/S.4 testnet 0.4, deployed there | 🟡 | deployed on the 0.4.0-rc3 devnet; the public posture runs there (PR #387); the private posture is M1 |
-| S.5/S.6 e2e against a standalone sequencer in CI, green | 🟡 | a workflow runs them on a local v0.3 zone (PR #386); 0.4 follows the port |
-| S.7 a test per hard requirement | 🟡 | below-threshold, R.2 and drain-before-create are covered; the full mapping is M4 |
-| S.8–S.10 README, API, CLI docs | 🟡 | M2 (API, CLI), M4 (README) |
-| S.11 designs | 🟡 | `ui/prototype/desktop-v3.html`; M4 |
-| S.12 own catalogue | ✅ | `catalog/`, `lez_msig_module` 0.1.0 |
-| S.13 audit programme | ⬜ | M5 |
-| S.14 decision log | ✅ | design §9, D1–D12 |
-| Privacy 1–3 | 🟡 | documented in design §7; checked on chain for the private payment; the cross-layer correlation write-up is M4 |
+| S.2 the room on `chat_module` | ↪ | deliberation ✅ (#388); full binding exo-13f (M4) |
+| S.3/S.4 testnet 0.4, deployed | ✅ | the 0.4.0-rc3 devnet, both postures |
+| S.5/S.6 e2e in CI, green | 🟡 | a local v0.3 zone in CI ✅; 0.4 exo-7610 (M4) |
+| S.7 a test per hard requirement | 🟡 | the mapping exo-05d (M3) |
+| S.8–S.10 README, API, CLI docs | 🟡 | exo-05d (M3), exo-c3b (M2) |
+| S.11 designs | 🟡 | exo-05d (M3) |
+| S.12 own catalogue | ✅ | both provers in Muster's catalogue |
+| S.13 audit | ⬜ | exo-a80 (M5) |
+| S.14 decision log | ✅ | design §9, D1–D19 |
+| Privacy 1–3 | 🟡 | design §7; correlations write-up exo-05d (M3) |
 | Soft: weighted approvals | ✅ | |
-| Soft: proof of holding | ⬜ | out of scope unless funded as research |
-| Soft: mixed postures | ⬜ | not planned |
+| Soft: proof of holding, mixed postures | ⬜ | not in the proposal |
 
-## 2.2 Progress since this draft
+## Integrators
 
-Work done while waiting for feedback, each item in its own draft PR:
-- **M1: the room follows the program's member set** (exo-0d3.13, PR #382).
-  - The room's copy of the config folds executed config changes.
-  - A removed member is re-keyed out, once.
-  - A private multisig's added member gets the group secret.
-  - Queued actions by a removed member are flagged beside their cancel.
-- **M1: spending limits from the room** (exo-0d3.12, PR #383). A limit is added through the
-  quorum, and a spend under it goes as one Spend, with no quorum and no time lock. It was run
-  against the real program on a local LEZ v0.3 zone.
-- **M2: the signing spec** (PR #384, `docs/design/lez-msig-signing.md`). It says what an
-  approval signs, for integrators without Muster.
-- **M2: the program stands alone** (PR #385). `lez_msig_module` and the `msig_exec` CLI gain
-  key-free public-posture operations: state, propose, spend, check, prepare and send. The
-  program's README documents the whole no-Muster journey. It ran against a real sequencer with
-  every key outside the module.
-- **M1: the benchmark rerun on an idle machine** (PR #385, `BENCHMARKS.md`), with real proving:
-  - a private payment proves in 125.5 s at M=1, 170.6 s at M=5 and 232.0 s at M=10;
-  - that is about 111 s + 12.0 s per approval;
-  - the transaction is a constant 228 KB.
-- **M1: a private multisig with real proving, from a room** (PR #386). `localnet.sh` starts a zone
-  that verifies real receipts. On it, all nine sections of the private-room e2e passed, with every
-  transaction really proved (765 s on 64 cores). The same PR adds the lez-msig e2e to CI
-  (S.5, S.6).
-- **M1: lez-msig on LEZ 0.4** (exo-0d3.9, PR #387).
-  - The actor adapter runs over the same `msig_core`, in its own workspace.
-  - Public posture: 5/5 on LEE's v0.4 state, and a live run on a local 0.4.0-rc3 zone (create,
-    2-of-3 pay, every transaction paying its fee).
-  - `localnet.sh` runs 0.4 zones.
-  - Decisions D13–D16 are taken; D17 and D18 are proposed.
-- **M1: on the 0.4 devnet** (2026-11-20, PR #387).
-  - lez-msig deployed immutable at `2tTh5nUpBxtTAoQBCQbzmG32JGapm2KaEpH9oxktGanG`.
-  - The public posture passed there: create on a fresh PDA, a refusal below threshold, a 2-of-3
-    payment.
-  - Muster's own client drives the multisig on a local 0.4 zone, 7/7.
-  - Measured at base fee 8: Create ≈ 0.83M, a 2-of-3 Execute ≈ 4.7M. **A refused transaction
-    burns its whole declared gas limit**, so Muster's sends need per-step limits (exo-50c).
-- **M3: chat_module, limited** (PR #388). Each multisig's discussion runs in a chat group that
-  follows its members. With a patched module exposing `remove_group_member`, removal was proven
-  on the live fleet: the removed member reads nothing after.
-- **M1: Muster's own client on the devnet** (exo-50c, PR #387). Every step declares a gas limit
-  fitted to what it meters, so a refusal no longer costs about 16M. Muster's three-member room
-  flow passed 7/7 against the devnet program.
-- **M1: the private posture on 0.4** (exo-05f, PR #387), 2026-11-21:
-  - **D17 decided:** every private transaction pays its fee inside its proof from a group fee
-    account derived from the GMS, witnessed `FeeOnly`. Members top it up from a public account in
-    one proof that pays its own fee out of the credit, so a group needs no funds to start.
-  - **D18 decided:** the program is deployed immutable and proved undisclosed; a transaction
-    names no program.
-  - On the devnet with real proofs: top-up, Create, deposit and a 2-of-3 payment (104 s, 257 s,
-    233 s and 292 s to prove), each fee about 5.7M.
-  - **Through Muster's real UI on the devnet** (two runners, real proofs): a private 2-of-2 was
-    opened, topped up, created, funded, approved on the card and settled, in 925 s end to end.
-- **M1: the 0.4 prover as a Logos module** (exo-cc7, PR #387). `lez_msig_module` 0.2.0 is built
-  from the 0.4 workspace and loads in `logoscore`. Muster takes the prover that matches the zone's
-  line and names the version to install when it doesn't. The UI has "Top up the fee account".
-- **M1: P.1/P.2 on 0.4 with real proving** (`BENCHMARKS.md`, 64-core EPYC):
-  - a payment proves in about 182 s + 11.5 s per approval (v0.3 on the same idle machine: 111 s +
-    12.0 s), so about 70 s more at the base and the same per approval;
-  - paying the fee inside the proof costs about 95 s on every step;
-  - the transaction is 229–238 KB, flat in M.
-- **M1: a private payee and a private Call** (PR #387). Both run on LEE's 0.4 state, and the private
-  payee also on a local zone. A private payee's credit is sealed to it, and it alone opens and
-  claims it. A Call runs with the vault's seed inside the proof.
-- **Reports to the teams** (`docs/upstream/`): LEZ (costs, latency, and nine findings with asks),
-  chat (removal, addresses, membership timing), and the module builder (packaging).
-- **Not done:**
-  - D19, in-program rotation (exo-3dc);
-  - a private payee from the room (exo-ea3);
-  - deposits from outside the group arriving as sealed messages;
-  - a laptop-class benchmark;
-  - the Basecamp dogfood journey;
-  - `lez_msig_module` 0.2.0 in the catalogue.
+Integrators use different layers: BitGo uses a chain's own multisig program, while custodians
+(Fireblocks, Copper, Anchorage) put one key on chain and run approvals in their own MPC. The
+proposal's three layers, the program, the signing seam and the room, serve each.
 
-## 3. Milestones
-
-Each milestone ends with an **acceptance script** IFT-QA can run, and a **dogfood journey** the
-EcoDev engineer does by hand. Sign-off is on both. Week estimates assume one engineer (Corey),
-starting 2026-11-23. Milestones 2 and 3 can overlap.
-
-### M1: on the 0.4 devnet (4 weeks, to ~2026-12-18)
-
-The devnet runs LEZ 0.4.0-rc3, so M1 is the 0.4 port (exo-0d3.9), deployed where people can reach
-it.
-- **Public posture on 0.4:** done, on the devnet, and from Muster's room (PR #387).
-- **Private posture on 0.4**, on top of the decisions in `docs/design/lez-msig.md` §9:
-  - **D17:** the fee every private execution now pays inside the proof. Decided and done.
-  - **D18:** the program deployed immutable and proved undisclosed. Decided and done.
-  - Deposits from outside the group, arriving as sealed messages that the next execution
-    collects. Not done; members deposit inside the proof today.
-  - The new private addresses. Done.
-- **In-program rotation (D19):** removing a member is one approved action. In that transaction the
-  vault moves to a successor under a new group secret, carrying its config and balance. A retired
-  vault forwards late deposits (a sweep). This is James Zaki's pattern, and it answers the
-  revocation question.
-- **Muster's client on 0.4:** the transaction codec, the chain seam and the prover module. Done,
-  and run through the real UI on the devnet.
-- **Already done for v0.3:**
-  - the room follows the program's members (#382);
-  - spending limits from the room (#383);
-  - real proving from a room (#386);
-  - the idle benchmark (#385).
-- P.1/P.2 rerun on 0.4 with real proving (done, 64-core EPYC), and on a laptop-class machine (not
-  yet).
-- **Dogfood:** install Muster in Basecamp. Two people open a 2-of-3 private multisig on the
-  devnet, fund it, pay out, add a member, remove one (the vault rotates), and watch the removed
-  member lose the room.
-
-### M2: the program stands alone (3 weeks, to ~2026-12-23)
-
-This is the program/protocol separation.
-- `lez_msig_module` grows from a prover into the multisig module (U.1): create, propose, approve,
-  reject, execute, config changes and limits, with progress events while a proof runs. It needs
-  no Muster room. Muster becomes one client of it.
-- A CLI over `logoscore` (U.3) covers the operator journey.
-- **The signing spec:** the approval digest, the encoding of proposals, and test vectors
-  (`msig_vectors`). An external signer (an HSM, an MPC cluster, a hardware wallet) can produce a
-  valid approval from it without our code.
-- A "bring your own transport" integration guide (S.9, S.10). Approvals travel however the
-  integrator likes; the program is the only authority.
-- If Q6 confirms it: **Ed25519 member keys** alongside BIP-340, each member declaring its scheme,
-  so a Fireblocks- or Fordefi-held key can approve (§4.3). Its cost per approval is benchmarked
-  with real proving.
-- **Dogfood:** the full journey from the CLI alone, with one approval produced by a script outside
-  Muster from the spec.
-
-### M3: `chat_module`, early and limited (2 weeks, overlapping M1)
-
-Moved up from M6, to de-risk S.2.
-- **Deliberation first.** Each multisig's discussion runs over a `chat_module` group conversation,
-  whose membership follows the program's. Adds and removals use logos-chat PR #357.
-- **Machine coordination stays on Muster's room for now.** Proposals and approvals stay there until
-  the binding behind `ConversationCrypto` reaches parity: forward secrecy on removal, a store node
-  that cannot read membership, and an exportable proof.
-- What the spike measures:
-  - removal end to end, including what a removed member still sees;
-  - the room id on the wire;
-  - the key-package service.
-
-  Each gap is reported to the chat team with a test.
-- **Dogfood:** the devnet multisig's members talk in its chat group, and a removed member drops out
-  of it.
-
-The IDL (U.4) and the 0.4 CI move with the 0.4 work. The IDL comes through SPEL if it still makes
-sense under 0.4, otherwise through James Zaki's tooling. The audit's code freeze follows M1 and M2.
-
-### M4: decode, disclose, document (3 weeks, to ~early February)
-
-- The target-program registry (F.4): descriptors in Muster's signed package, keyed by program and
-  image id, cross-checked against the chain's deployment header. It is not blocked on an on-chain
-  registry, and it reads one if the LP lands.
-- Decode-before-sign for arbitrary targets (U.6), with an explicit warning and a second
-  confirmation for an unregistered one.
-- The selective-disclosure tiers (F.10): a viewing key for a narrow audience, the self-verifying
-  audit export for a wide one, and re-disclosure for ongoing assurance.
-- A multisig view in the mini-app: the proposal list beside the room, queue and ETA, limits, and
-  an error-message pass (U.2, U.7).
-- Docs: the per-action public/private table (U.5), the cross-layer correlations (Privacy 3), the
-  README (S.8), designs (S.11), and the requirement→test map (S.7).
-- **Dogfood pilot:** a real group runs a small treasury on testnet: a Logos community wallet, or a
-  circle from Jarrad's Logos-world work (exo-267).
-
-### M5: audit (6–8 weeks calendar, external)
-
-- Scope: the program, the approval-verification path, config change and time lock, spending
-  limits (S.13).
-- First, a review by the R&D Program team. Then a tier-1 firm; Franck books it. Lead times are
-  long, so the booking should start now, against the M3 freeze.
-- A fix round, then the report is published with the code.
-
-### M6: the full `chat_module` binding
-
-- The room behind `ConversationCrypto` moves onto `chat_module` once M3 shows parity. Proposals and
-  approvals then travel there too.
-
-### Tentative
-
-- **T1: the L1 multisig in Muster.** A driver family for the Blockchain team's L1 multisig, once
-  their design is fixed (likely programmable UTXOs, 0.5). It would decode the transaction on the
-  card, collect approvals in the room, and submit through `logos_blockchain_module`. Also: the integrator signature-scheme matrix, completed
-  for BitGo, Finoa, Copper and Anchorage (§4.3).
-- **T2: onboarding across L1 and LEZ** (action items from 2026-11-11):
-  - PoW rewards moving to a LEZ account automatically once a threshold is reached: keep the first
-    reward on L1 for gas, then send each later one straight to LEZ;
-  - a note on where bridging to a zone account ends and cross-zone messaging begins;
-  - why bridge finalization is reported as ~8 hours.
-- **T3: personal user mapping across zones.** Recorded, not prioritised.
-
-## 4. The L1 multisig and integrators
-
-Sources:
-- [marclawclaw/research-mpc-custody](https://github.com/marclawclaw/research-mpc-custody) (MC),
-  2026-11-08 to 11-10. It was checked against `logos-blockchain` @ `ce15ec1`, with the PoCs
-  running inside the ledger crate.
-- [research-multisig-sovereign](https://github.com/marclawclaw/research-multisig-sovereign) (MS),
-  a survey written for RFP-005.
-
-What follows restates them; where a line is our inference, it says so.
-
-### 4.1 The L1 has its own key schemes
-
-- There are two key types on Bedrock: **Ed25519** and **ZkSign**. ZkSign is a Groth16 proof that
-  the prover knows the secrets behind the note keys. There is **no secp256k1** (MC
-  `patterns/bedrock-key-types.md`).
-- ZkSign's 32-key form is aggregation, not a threshold: one prover needs every key.
-- The ledger's real K-of-N is the **channel**. `ChannelConfig`, `ChannelTransfer` and
-  `ChannelWithdraw` take a proof of exactly k Ed25519 signatures from the channel's accredited
-  keys. A config change must name the current config as its parent and be signed by the current
-  key set.
-
-### 4.2 The L1 multisig's mechanism
-
-Removed in the 2026-11-20 revision: the Blockchain team defines it. The research above
-(channels, FROST and co-proving on Bedrock) stays in the sources for reference.
-
-### 4.3 What integrators' signers can produce
-
-MC `metrics/signer-compat-matrix.md`:
+The signers they run produce these schemes, per
+[research-mpc-custody](https://github.com/marclawclaw/research-mpc-custody)
+`metrics/signer-compat-matrix.md`:
 
 | Vendor | Raw signing schemes |
 |---|---|
@@ -346,78 +201,51 @@ MC `metrics/signer-compat-matrix.md`:
 | Fordefi (Paxos) | EdDSA Ed25519, ECDSA secp256k1, ECDSA Stark; signs blind |
 | Dfns | EdDSA, ECDSA, Schnorr |
 
-BitGo, Finoa (and its MPC provider), Copper and Anchorage are not covered yet; 0xGunner's deal
-reviews this week can fill them in. No vendor output was tested against Bedrock. No vendor can
-produce a ZkSign, so a custodian can hold channel keys but not plain notes, and cannot pay fees.
+`lez-msig` approvals and LEZ public-account witnesses are BIP-340. That choice is D3, made on proving
+cost. So Fireblocks and Fordefi can be neither a member nor a LEZ account's single key, unless
+the program also accepts Ed25519 members (exo-0d3.20, in M2 if confirmed) or LEZ accounts accept
+another witness scheme, which is the LEZ team's decision.
 
-**The consequence for LEZ (our inference).**
-- `lez-msig` approvals are BIP-340 Schnorr on secp256k1 (decision D3: the cheapest to verify in
-  the zkVM, about 0.28M cycles with RISC Zero's accelerated k256), and so are LEZ public-account
-  witnesses.
-- Fireblocks and Fordefi cannot produce BIP-340.
-- So a custodian can be neither a `lez-msig` member nor the single key of a LEZ account, unless:
-  - the program also accepts **Ed25519** approvals. D3 rejected Ed25519 on cost (several million
-    cycles unaccelerated on v0.3), but a mixed member set, where each member declares a scheme,
-    keeps BIP-340 cheap for everyone else;
-  - or LEZ accounts accept another witness scheme, which is the LEZ team's decision;
-  - or the vendor adds BIP-340.
+A private multisig needs every member to hold the group secret, which an MPC custodian does not.
+So custodians use the public posture, or join as a member whose approvals another member's client
+proves.
 
-M2 adds Ed25519 member keys to the program, with the cost per approval measured, if Q6 confirms
-that integrators need it. That is the change that makes "the program alone" usable by the
-custodians named so far.
+## Outside the proposal
 
-**The private posture and custodians.**
-- A private `lez-msig` needs every member to hold the group secret (to prove), and an MPC
-  custodian holds no such thing. So integrators will use the public posture, or be a member whose
-  approvals another member's client proves.
-- MS notes that a bare LEZ shared private account makes spending effectively 1-of-N, because every
-  member holds the spending key. `lez-msig` closes exactly that gap: the program, not the key, is
-  the gate (design §2).
+- **The Logos blockchain (L1) multisig** is the Blockchain team's to design, likely on the
+  programmable UTXOs of 0.5. Muster's part would be a driver family for it, which would collect
+  approvals in the room and decode the transaction on the card. Tracked as exo-0d3.21, and it
+  starts once their design is fixed.
+- **Onboarding across L1 and LEZ** (exo-0d3.22, exo-0d3.23):
+  - moving PoW rewards to a LEZ account automatically;
+  - where bridging ends and cross-zone messaging begins.
+- **LEZ Wallet accounts approving a lez-msig** (exo-0d3.18). This waits on
+  `sign_message` upstream (logos-execution-zone-module#73).
 
-## 5. Risks and dependencies
+## Risks
 
-- **LEZ 0.4 is still moving.** rc3 was tagged 2026-11-11. The adapter split keeps a port to one
-  thin layer, but M3's dates follow the 0.4 testnet's.
-- **Proving on consumer hardware.** 15 s per approval is a 64-core figure. Laptop numbers in M1
-  decide how the UI presents a 5–10 minute background job.
-- **Fees on private transactions.** 0.4 shipped them (LEZ PR #985). Each private execution pays in
-  the proof, from a private account with an authorization key, and the multisig's own account
-  cannot pay. D17 proposes a group fee account; the alternative is the executor's own account,
-  presented under a one-time alias.
-- **Funding test networks.** The devnet funder account is made; it needs devnet LEZ (Q2). After
-  that, testers fund from it.
-- **`chat_module` removal (PR #357)** comes with limits:
-  - a member cannot remove themself;
-  - every member is an admin (the ASTRO security level);
-  - it needs real-world testing.
+- **LEZ 0.4 is a release candidate.** The core/adapter split keeps a runtime port to one thin
+  adapter, and both lines' provers ship side by side.
+- **Proving on consumer hardware.** Every figure so far is 64-core. The laptop benchmark decides
+  how the UI presents a proof of several minutes.
+- **A refused 0.4 transaction burns its whole gas limit,** and nothing estimates one. Every step
+  declares a limit fitted to what it meters (exo-50c), and the LEZ team has the ask
+  (`docs/upstream/lez-v04-field-report.md`).
+- **The chat module's removal** is not in a release yet, and needs real-world testing. Its key
+  service and the room id on the wire still have to be checked against Privacy-2.
+- **Building the provers needs risc0's recursion circuit.** risc0's own URL has answered 403 since
+  2026-11-23. Muster's flakes and CI fall back to the Logos nix cache and a copy on muster-v0.4.0
+  (exo-ba5), and the LEZ team has the ask.
+- **Audit lead time** is the long pole.
+- **One engineer.** EcoDev, IFT-QA and the R&D review are the second pair of eyes. The acceptance
+  scripts are written so they can run them alone.
+- **The published `lez-multisig`** passes seeds unchecked (exo-325): one quorum may move another
+  multisig's vault. `lez-msig` re-derives its account and is not affected; the bug goes upstream.
 
-  The room id on the wire and the central key-package service still need checking against
-  Privacy-2.
-- **Audit lead time.** This is the long pole; book it early.
-- **One engineer.** EcoDev and QA review are how quality gets a second pair of eyes; the acceptance
-  scripts are written so they can run them without me.
-- **The published `lez-multisig`** has an unchecked-seeds bug (exo-325). Its quorum may move
-  another multisig's vault. `lez-msig` re-derives its account in the plan and is not affected.
-  The bug should go upstream regardless.
+## Decisions still open
 
-## 6. Open questions
-
-1. **The L1 boundary.** Muster coordinates and the Blockchain team builds the mechanism; is that
-   the agreed split? Who is Muster's contact there (0xGunner)?
-2. **Devnet funds: answered.** The funder was funded and the program is deployed. More will be
-   needed for Muster's room runs there.
-   M1 targets the 0.4.0-rc3 devnet. Its funder account is
-   `Public/A7D1JP1LZv9WnCuSZ5y89by5BvgbWJ7m4gUPzVM7KWDZ`, public key `ec559533fa2159ddc87e6b3486cfe3b72c18bc142ce1f509a79ccd73629d63db`; on 0.4 a
-   fresh account is funded by its key. Who can send it devnet LEZ (James's prog-tui, or the L1
-   bridge)?
-3. **D17:** a group fee account derived from the group secret, or the executor's own private
-   account? Both work on 0.4. The first keeps every member's account off chain; the second needs
-   no shared balance.
-4. **U.4:** is a SPEL IDL still required now that SPEL is thinning under 0.4?
-5. **Audit:** which firm, budget and slot? And who besides Corey (the "other CC") reviews code?
-6. **Integrators:** which schemes can BitGo and Finoa's MPC provider sign? Fireblocks and Fordefi
-   offer Ed25519 and ECDSA secp256k1, but not BIP-340, which LEZ accounts and `lez-msig` approvals
-   use (§4.3). Should the program accept Ed25519 members (M2)? And should the LEZ team consider a
-   second account witness scheme?
-7. **Rotation (D19):** does the zone team see any problem with rotating in the program on
-   removal, as James's multisig does? (James is reviewing it with them.)
+Each is named as open in the accepted proposal:
+1. **Payouts,** to be agreed with Logos: the author is a core contributor.
+2. **The audit firm and slot** (M5).
+3. **Ed25519 members** (M2): do integrators need them? That is for the integrators to answer.
+4. **The IDL route** (M4): SPEL, or its successor under 0.4.

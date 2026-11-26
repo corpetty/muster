@@ -1,9 +1,15 @@
 # lez-msig: an M-of-N multisig on LEZ, private by default, run from a muster room
 
-Status: **design, 2026-10-23** (epic exo-0d3; RFP-005, `logos-co/rfp`
-`RFPs/RFP-005-multisig-and-coordination.md`). Read against LEZ v0.3.1 (`1a003bf`, = `main`) and
-`dev` @ `7cba743a` (the actor model, PR #935). Every LEZ fact below was read in that source; the
-citations are in the research notes this was written from (§9).
+Status: **built and released** for LEZ v0.3 and v0.4 (muster-v0.4.0, 2026-11-23); updated
+2026-11-26. Epic exo-0d3; RFP-005, `logos-co/rfp` `RFPs/RFP-005-multisig-and-coordination.md`.
+Scope and milestones are the accepted proposal
+([`docs/proposals/RFP-005-lez-msig.md`](../proposals/RFP-005-lez-msig.md), logos-co/rfp#299), and
+progress against it is [`RFP-005-roadmap.md`](../proposals/RFP-005-roadmap.md). This document is
+the design and its decision log (§9).
+
+It was first written on 2026-10-23 against LEZ v0.3.1 (`1a003bf`) and `dev` @ `7cba743a` (the
+actor model, PR #935), and every LEZ fact in it was read in that source. The 0.4 port read
+LEZ v0.4.0-rc3 (D13–D19, and `docs/labbook/lez-v04-port.md`).
 
 This supersedes the vote-locus program (`lez.multisig-program`, `docs/design/lez-multisig-v03.md`)
 for new multisigs. That program stays readable, but it is public by construction: every vote is
@@ -22,11 +28,13 @@ a public transaction naming its member.
   signatures one.
 - **Posture is placement, not a program fork.** The same program runs over a **public** PDA (the
   public posture) or a **group-owned private PDA** (the private posture, the default). A private
-  execution is one privacy-preserving transaction: fee-exempt on v0.3, no public signer, the
-  program's image undisclosed.
-- **Rules in a core crate.** `msig_core` holds every rule and depends on no LEZ crate. A thin
-  adapter maps it onto v0.3's `run_program(plan, apply)` (deployable today; the testnet runs
-  v0.3). A second adapter maps it onto `dev`'s actor handler when that settles (exo-1e7).
+  execution is one privacy-preserving transaction with no public signer and the program's image
+  undisclosed. It is fee-exempt on v0.3; on v0.4 it pays its fee inside the proof, from the
+  group's fee account (D17).
+- **Rules in a core crate.** `msig_core` holds every rule and depends on no LEZ crate. Thin
+  adapters map it onto a runtime: v0.3's `run_program(plan, apply)` (`programs/lez-msig`), and
+  v0.4's transactional actors in their own workspace (`programs/lez-msig/lez04`, D13). Both are
+  built; the v0.4 one is deployed on the 0.4.0-rc3 devnet.
 
 ## 2. The account
 
@@ -186,8 +194,12 @@ the program locally before proving (§6), so a refusal shows up in seconds, not 
   minutes and runs in the background with visible progress. Every execution consumes `A`, so
   executions serialise, and a proof built against a stale `A` is rebuilt.
 
-**The prover is a Logos module, `lez_msig_module`** (`programs/lez-msig/module`, built — exo-efa).
-It wraps `msig_host::exec::exec_request`, the same function the `msig_exec` CLI runs, so the two
+**The prover is a Logos module, one per LEZ line** (exo-efa, exo-cc7). The two lines cannot share
+one build, so a host may hold both, and muster calls the one its zone needs:
+- `lez_msig_module` (0.1.x, `programs/lez-msig/module`) for v0.3;
+- `lez_msig_v04_module` (0.2.x, `programs/lez-msig/lez04/module`) for v0.4.
+
+Each wraps its line's `exec_request`, the same function its `msig_exec` CLI runs, so the two
 cannot drift. It holds no key:
 - `exec` takes the program's instruction (`msig_core::Instruction`, borsh), the group secret and
   `A`'s current note. It reads the note's membership proof from the user's sequencer, proves,
@@ -197,6 +209,13 @@ cannot drift. It holds no key:
   signs it, and `send` checks the signature against the message, then sends.
 - One proof runs at a time on its own thread. A job is readable only by the caller that
   submitted it, and `forget` drops its decrypted note.
+- `scan` recovers the newest note from the chain with the group's viewing keys, for a member whose
+  room never received it.
+- On v0.4, every request also carries the fee account's note (`feeNote`) and answers with its new
+  one, and `topup` funds that account from a member's public account (D17).
+  - `recipients` seals a payment to a private payee's `Recipient`.
+  - `collectFrom` collects deposits paid to the vault from outside the group, from a cursor the
+    room keeps beside each note.
 
 In muster, `wallet/msig_prover.nim` is the seam (`MsigProver`), `msig_prover_lp.nim` reaches the
 module over `lp_*`, and `CliMsigProver` runs `msig_exec` for tests without a host.
@@ -215,22 +234,23 @@ postures. A refusal surfaces while proving, and nothing is sent.
 | item | chain | store node / fleet | room member | removed member |
 |---|---|---|---|---|
 | existence | no (a nullifier and a commitment per execution) | no | yes | yes |
-| member set, threshold | no | no | yes | until migration (state is readable with the GMS) |
-| who approved | no | no | yes (signed in the room) | until migration |
+| member set, threshold | no | no | yes | until rotation or migration (state is readable with the GMS) |
+| who approved | no | no | yes (signed in the room) | until rotation or migration |
 | pending proposals | no | no | yes | until the room re-keys them out (immediately, F-16) |
-| action payload | no; a public payee's credit shows payee and amount | no | yes | until migration |
-| vault balance | no | no | yes | until migration |
+| action payload | no; a public payee's credit shows payee and amount, a private payee's (v0.4) is sealed to it | no | yes | until rotation or migration |
+| vault balance | no | no | yes | until rotation or migration |
 | execution linkage | unlinkable notes; window bounds are public | timing of room traffic | yes | — |
 | coordination content | no | no (sealed) | yes | no, from the epoch after removal (F-16) |
 | co-signing graph | no | room traffic metadata; mixnet is opt-in (`mix`) | yes | what they saw |
 
 - **Removal.** Removing a member re-keys the room forward at once (F-16). The GMS cannot be
   revoked, so the removed member can still *read* the multisig's state, and can *stall* it by
-  consuming `A`, until the remaining members **migrate**:
-  1. create a new multisig under a new GMS;
-  2. move the vault to it with a `Transfer` the old quorum approves.
-
-  They can never *spend*.
+  consuming `A`. They can never *spend*. How the others leave them behind depends on the line:
+  - **v0.4, rotation (D19, to build: exo-3dc).** The approval that removes a member also retires
+    the vault, hands its configuration to a successor at a new PDA under a new GMS, and moves the
+    balance there, in the same transaction.
+  - **v0.3, migration (D11).** The remaining members create a new multisig under a new GMS, then
+    move the vault to it with a `Transfer` the old quorum approves.
 - **Correlation across layers (Privacy-3).**
   - Room messages and executions are separate traffic. An observer of both sees the room's sends,
     which the store node sees as sealed envelopes on one topic, and executions at about the same
@@ -365,8 +385,12 @@ Every view of the room is the fold over its signed log.
 - **What remains is liveness.** A member can withhold their own approval, which is their right,
   or refuse to relay.
 
-**S.2 says the chat module; this is a deliberate deviation.**
-- Chat 0.3.0 has no member removal, so the reconciliation above cannot be done.
+**S.2 says the chat module; this is a deliberate deviation, narrowed since.** Each multisig's
+deliberation now runs in a `chat_module` group that follows the program's members (PR #388;
+removal proven on the live fleet with a patched module). Proposals and approvals stay on Muster's
+room until the chat module reaches parity; that full binding is the accepted proposal's M4
+(exo-13f). Why they stay:
+- Chat 0.3.0 has no member removal in a release, so the reconciliation above cannot be done on it.
 - It sends the room id in the clear.
 - It registers key packages with a central HTTP service.
 - Muster's room has forward re-keying on admission (F-16), a sealed topic the store node cannot
@@ -391,24 +415,27 @@ The `ConversationCrypto` seam is where a chat-module binding goes once chat ship
 | D10 | counterfeit state | trust the state row; re-derive `A` from the placement in the plan | re-derive, refusing any other row (§2) |
 | D11 | removal | revoke (impossible, there is no key revocation); migrate | migrate, with the GMS's limits documented (§7) |
 | D12 | spending limits | any asset; native only | native first; a token limit is a `Call` whose decoded amount the limit would have to trust, which waits on the registry (U.6) |
-| D13 | the LEZ 0.4 port (roadmap M3) | port in place; a second program beside the first | a second adapter in its own workspace (`programs/lez-msig/lez04`) over the SAME `msig_core`: v0.3 and v0.4 cannot share a dependency graph, and v0.3 is what runs today. The new image id gives a new program id and new private addresses, so v0.3 multisigs move by the migrate path (D11), never in place |
+| D13 | the LEZ 0.4 port (proposal M1) | port in place; a second program beside the first | a second adapter in its own workspace (`programs/lez-msig/lez04`) over the SAME `msig_core`: v0.3 and v0.4 cannot share a dependency graph, and v0.3 is what runs today. The new image id gives a new program id and new private addresses, so v0.3 multisigs move by the migrate path (D11), never in place |
 | D14 | who may call the multisig on 0.4 | any sender; root calls only | root calls only (`from` is None): v0.4 lets another program, or a cross-zone message, send to `(A, P)`. The approvals would still bind, but nothing needs that path, and refusing it keeps the attack surface v0.3's |
 | D15 | a `Call` on 0.4, where a message goes to one actor | a core change (`to: Row`); an adapter convention | the convention: `rows[0]` is the target, an account of the called program; the transaction declares the other rows. The digest already commits to every row, so members approve the full list, and the core stays as audited |
 | D16 | inherited seed authority on 0.4 | forbid `Call`; allow it and say what it means | allow it and say so: on 0.4 a seed granted to a call's target reaches everything the target calls, so a `Call` hands the vault to that whole call tree. The `targets` allowlist is the guard, and the card must name it. Spending limits never bound a `Call` |
 | D17 | the fee on a private execution (0.4: no longer exempt, paid in the proof by a private account with an authorization key; a PDA cannot) | the executor's own private account; a group fee account from the GMS (`FeeOnly`); the vault through a program-sent credit (unverified, a core change) | **decided 2026-11-20:** a group fee account derived from the GMS (LEE's `derive_regular_shared_account_keys`, id `SHA-256("lez-msig/v1/fee-account" ‖ create_key)`, `msig_host04::fee_derivation_id`), witnessed `FeeOnly`, so no member's account appears and the module still receives no key. Shown on LEE 0.4.0-rc3 state with dev-mode proofs (`lez04/host/tests/v04_private_fee.rs`): it pays a private Create's fee, a nullifier-key witness cannot pay (`FeePayerWithoutAuthorization`), and the PDA cannot pay its own. Its cost: members top it up (`Msig::top_up_fee_tx`: a public account's transfer promoted into the fee account, which pays that transaction's own fee out of the credit, so a group starts with no funds), and anyone holding the GMS (a removed member included) can drain it. D19's rotation moves to a new GMS, hence a new fee account; the rotation should sweep the old one in the same transaction |
 | D18 | the program's identity on a private execution (0.4 discloses it by default) | disclosed; deployed immutable and proved undisclosed; a shadow program | **decided 2026-11-20:** deploy immutable and prove with an undisclosed image claim (`Msig::with_undisclosed`, LEE's `ProgramCatalog::with_undisclosed`), which keeps v0.3's property and lets the public posture exist at the same program. Shown on LEE 0.4.0-rc3 state (`lez04/host/tests/v04_undisclosed.rs`): a default proof names the program; an undisclosed one carries only a commitment-set root, the program's account appears nowhere in the transaction, and the zone accepts it; a claim against a header the zone never saw is refused. The devnet program is already immutable |
-| D19 | removing a member when the group secret cannot be revoked (0.4) | migrate in a separate flow (D11); rotate in the program | **proposed:** rotate in the program, after James Zaki's 0.4 multisig (`jzaki/jz-progs`, `example_progs/multisig`). The approved removal retires the vault and hands its config to a successor at a new PDA under a new group secret, moving the whole balance, in the same transaction. A retired vault refuses everything but a sweep that forwards late deposits. This is a core change, so the tags move to `v2`. It replaces D11's separate migration on 0.4; the zone team is reviewing it (roadmap Q7) |
+| D19 | removing a member when the group secret cannot be revoked (0.4) | migrate in a separate flow (D11); rotate in the program | **decided 2026-11-26** (the accepted proposal; to build: exo-3dc): rotate in the program, after James Zaki's 0.4 multisig (`jzaki/jz-progs`, `example_progs/multisig`). The approved removal retires the vault and hands its config to a successor at a new PDA under a new group secret, moving the whole balance, in the same transaction. A retired vault refuses everything but a sweep that forwards late deposits. This is a core change, so the tags move to `v2`. It replaces D11's separate migration on 0.4 |
 
 ## 10. Measured (RFP P.1, P.2)
 
-`programs/lez-msig/BENCHMARKS.md`, real proving, 2026-10-23, on a 64-core CPU:
+`programs/lez-msig/BENCHMARKS.md`, real proving on an idle 64-core EPYC:
 
-- A private payment carrying M approvals proves in 150.7 s at M = 1, 208.5 s at M = 5, and
-  288.1 s at M = 10: about 15 s per approval.
-- The transaction is a constant 228 KB.
-- RISC Zero's accelerated k256 is 2.9× faster than stock (439 s at M = 1).
+- A private payment carrying M approvals proves in about **111 s + 12.0 s · M** on v0.3
+  (2026-11-19) and **182 s + 11.5 s · M** on v0.4 (2026-11-20). On v0.4 the extra base is the
+  fee account's witness (D17).
+- The transaction is about 228 KB on v0.3 and 229–238 KB on v0.4, flat in M.
+- On v0.4 a private transaction's fee is flat in M too: about 5.07M at base fee 8.
+- RISC Zero's accelerated k256 is 2.9× faster than stock (439 s for one signature, unaccelerated).
 
-M ≥ 5 is viable. The ceiling is the 32-member limit, not the block.
+M ≥ 5 is viable. The ceiling is the 32-member limit, not the block. A laptop-class figure is
+still to come (exo-0d3.15).
 
 ## 11. Sources
 
