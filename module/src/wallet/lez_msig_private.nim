@@ -22,6 +22,7 @@
 import std/[json, options, sequtils, strutils, tables]
 import stint
 import ../lez/msig
+import ../lez/msig_gas        # the fee account's status against the next reserve (exo-8ef)
 import ../lez/tx as leztx     # LezShard
 import ../crypto/keystore
 import ./types
@@ -72,6 +73,13 @@ proc learnFee*(c: MsigPrivate, n: int, note: seq[byte]) =
   if n > c.feeNoteN and note.len > 0:
     c.feeNote = note
     c.feeNoteN = n
+
+proc feeStatus*(c: MsigPrivate): FeeAccountStatus =
+  ## The group's fee account (v0.4, D17, exo-8ef): its balance from the newest note of it the room
+  ## carries for this member, against what the next private transaction reserves at the zone's
+  ## fee state (getFeeState). Raises when the zone's fee state cannot be read.
+  let f = c.rpc.feeCeilings()
+  feeAccountStatus(c.feeNote, privateReserve(f.exec, f.stor))
 
 proc unz(h: string): seq[byte] =
   for i in 0 ..< h.len div 2: result.add byte(parseHexInt(h[2*i .. 2*i+1]))

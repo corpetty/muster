@@ -91,6 +91,46 @@ let gas = gasLimitFor(instruction("execute-transfer", 3, 2), 3)
 check(maxFeeFor(gas, 830, 9) >= (gas + 830) * 9, "covers the reserve at the next block's ceiling")
 check(maxFeeFor(gas, 830, 9) < 134_400_000'u64, "far below the v0.3 wallet default's cap")
 
+echo "4. a private multisig's fee account against the next reserve (exo-8ef)"
+# fee_core's private_fee_required(0, 8, 8) at v0.4.0-rc3: (409_764)·8 + (223_551 + 512)·8, the
+# "about 5.07M at base fee 8" programs/lez-msig/BENCHMARKS.md measured on every private transaction
+check(privateReserve(8, 8) == 5_070_616.u128, "the reserve at base fees 8/8 is LEZ's private fee: " & $privateReserve(8, 8))
+check(privateReserve(10, 3) == (409_764 * 10 + 224_063 * 3).u128, "exec and storage priced apart")
+check(privateReserve(8, 8, effectCycles = 1000) == 5_070_616.u128 + 8_000.u128, "effect cycles at the exec fee")
+proc feeNote(balance: UInt128, other = false): seq[byte] =
+  ## lee_core's Account, borsh: nonce u128, then {program: shard} (u32 count, each a key and a u32-sized vec)
+  result = @(7.u128.toBytesLE())
+  let shards = (if other: 2 else: 1)
+  result.add @[byte(shards), 0, 0, 0]
+  result.add newSeq[byte](32)                         # the native token program: all zero
+  result.add @[16'u8, 0, 0, 0]
+  result.add @(balance.toBytesLE())
+  if other:
+    result.add key(901)
+    result.add @[3'u8, 0, 0, 0, 1, 2, 3]
+let reserve = privateReserve(8, 8)
+block:
+  let s = feeAccountStatus(feeNote(50_000_000.u128), reserve)
+  check(s.funded and s.balance == 50_000_000.u128 and not s.low and s.covers == 9.u128,
+        "a topped-up account: its balance from the note, enough for 9 transactions")
+block:
+  let s = feeAccountStatus(feeNote(5_070_615.u128), reserve)
+  check(s.low and s.covers == 0.u128, "one short of the reserve is low: the next proof would fail")
+block:
+  let s = feeAccountStatus(feeNote(reserve), reserve)
+  check(not s.low and s.covers == 1.u128, "exactly the reserve pays the next transaction")
+block:
+  let s = feeAccountStatus(feeNote(6_000_000.u128, other = true), reserve)
+  check(s.balance == 6_000_000.u128, "the balance is the native shard, whatever else the note holds")
+block:
+  let s = feeAccountStatus(newSeq[byte](), reserve)
+  check(not s.funded and s.balance == 0.u128 and s.low, "no note yet: an empty account, low")
+block:
+  var raisedN = false
+  try: discard feeAccountStatus(feeNote(1.u128) & @[0'u8], reserve)
+  except MsigDecodeError: raisedN = true
+  check(raisedN, "a note that does not decode raises, never reads as zero")
+
 if fails > 0:
   echo fails, " failed"
   quit 1

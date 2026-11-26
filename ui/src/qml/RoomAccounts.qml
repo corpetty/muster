@@ -123,6 +123,19 @@ Item {
         var whole = t.slice(0, t.length - 9), frac = t.slice(t.length - 9).replace(/0+$/, "");
         return frac.length > 0 ? whole + "." + frac : whole;
     }
+    // a private lez-msig's group fee account on LEZ v0.4 (D17, exo-8ef): lez_msig_state's and
+    // lez_msig_ceremonies' `fee`, against what the next private transaction takes from it
+    function feeLine(f) {
+        if (!f) return "";
+        if (f.error) return "⚠ " + qsTr("Fee account: the zone's fees could not be read") + (f.detail ? " — " + String(f.detail) : "");
+        if (!f.funded)
+            return qsTr("Fee account: empty. Every private transaction pays its fee from it, %1 LEZ now; top it up first.")
+                   .arg(acc.lezText(f.reserve));
+        return (f.low ? "⚠ " : "")
+               + qsTr("Fee account %1 LEZ  ·  the next private transaction takes %2 LEZ").arg(acc.lezText(f.balance)).arg(acc.lezText(f.reserve))
+               + "  ·  " + (f.low ? qsTr("too low: it would fail while proving, top it up")
+                                  : qsTr("enough for %1 more").arg(String(f.covers)));
+    }
     // LEZ in base units (9 decimals), "" for anything else
     function lezBase(text) {
         var t = String(text || "").trim();
@@ -1263,6 +1276,17 @@ Item {
                     }
                     // LEZ v0.4 (D17): Create itself pays its fee from the group's fee account, so a
                     // private multisig needs a top-up before it exists
+                    LogosText {
+                        textFormat: Text.PlainText
+                        objectName: "msigCeremonyFeeBalance"
+                        Layout.fillWidth: true
+                        readonly property var f: cer.modelData.fee || null
+                        visible: cer.modelData.private === true && String(cer.modelData.account || "").length === 0 && f !== null
+                        text: acc.feeLine(f)
+                        color: f && (f.error || f.low) ? Theme.palette.warning : Theme.palette.textSecondary
+                        font.pixelSize: MusterStyle.caption
+                        wrapMode: Text.WordWrap
+                    }
                     RowLayout {
                         Layout.fillWidth: true
                         visible: cer.modelData.private === true && String(cer.modelData.account || "").length === 0
@@ -1374,6 +1398,17 @@ Item {
                         variant: LogosButton.Variant.Secondary
                         onClicked: acc.lezMsigFundRequested(String(acc.msigAccount.id), base)
                     }
+                }
+                LogosText {
+                    textFormat: Text.PlainText
+                    objectName: "msigFeeBalance"
+                    Layout.fillWidth: true
+                    readonly property var f: parent.st.fee || null
+                    visible: parent.st.private === true && f !== null
+                    text: acc.feeLine(f)
+                    color: f && (f.error || f.low) ? Theme.palette.warning : Theme.palette.textSecondary
+                    font.pixelSize: MusterStyle.caption
+                    wrapMode: Text.WordWrap
                 }
                 RowLayout {
                     Layout.fillWidth: true

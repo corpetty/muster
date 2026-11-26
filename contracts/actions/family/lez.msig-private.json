@@ -396,6 +396,10 @@
             {
               "field": "the fee account's new balance",
               "observer": "room-member"
+            },
+            {
+              "field": "the fee account's balance, and whether it pays the next transaction",
+              "observer": "room-member"
             }
           ],
           "evidence": [
@@ -417,7 +421,7 @@
         "lez_msig_topup",
         "lez_msig_state"
       ],
-      "ui": "Room \u2192 accounts \u2192 the private multisig: \"Top up the fee account\" (LEZ v0.4), before Create through the ceremony's create key; run through two Muster clients on the 0.4 devnet with real proofs (scripts/lez-msig-private-self-test.sh).",
+      "ui": "Room → accounts → the private multisig: \"Top up the fee account\" (LEZ v0.4), before Create through the ceremony's create key; beside it the fee account's balance (from the newest fee note the room carries) and what the next private transaction takes from it at the zone's fee state, with a warning when it cannot pay it (lez_msig_state / lez_msig_ceremonies `fee`, exo-8ef); run through two Muster clients on the 0.4 devnet with real proofs (scripts/lez-msig-private-self-test.sh).",
       "invariants": [
         3,
         8
@@ -503,6 +507,10 @@
         {
           "kind": "test",
           "path": "programs/lez-msig/module/tests/module.rs"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/msig_gas_test.nim"
         }
       ],
       "unverified": [
