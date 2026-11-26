@@ -1,0 +1,738 @@
+{
+  "version": "2",
+  "name": "lez_msig",
+  "messages": [
+    {
+      "name": "Create",
+      "tag": 0,
+      "fields": [
+        {
+          "name": "zone",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "config",
+          "type": {
+            "defined": "Config"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Execute",
+      "tag": 1,
+      "fields": [
+        {
+          "name": "proposal",
+          "type": {
+            "defined": "Proposal"
+          }
+        },
+        {
+          "name": "approvals",
+          "type": {
+            "vec": {
+              "defined": "Signed"
+            }
+          }
+        },
+        {
+          "name": "executor",
+          "type": {
+            "option": {
+              "defined": "Signed"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Queue",
+      "tag": 2,
+      "docs": "`at_ms` is the latest time the transaction may land: the queue's ETA counts from it.",
+      "fields": [
+        {
+          "name": "proposal",
+          "type": {
+            "defined": "Proposal"
+          }
+        },
+        {
+          "name": "approvals",
+          "type": {
+            "vec": {
+              "defined": "Signed"
+            }
+          }
+        },
+        {
+          "name": "executor",
+          "type": {
+            "option": {
+              "defined": "Signed"
+            }
+          }
+        },
+        {
+          "name": "at_ms",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "ExecuteQueued",
+      "tag": 3,
+      "docs": "`at_ms` is the earliest time the transaction may land; it must be at least the ETA.",
+      "fields": [
+        {
+          "name": "proposal",
+          "type": {
+            "defined": "Proposal"
+          }
+        },
+        {
+          "name": "executor",
+          "type": {
+            "option": {
+              "defined": "Signed"
+            }
+          }
+        },
+        {
+          "name": "at_ms",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "Spend",
+      "tag": 4,
+      "docs": "`period` is the limit's period index the spend counts against, `period_ms` the length the\nspender read from the limit: the program checks it, the plan turns both into a window.",
+      "fields": [
+        {
+          "name": "spend",
+          "type": {
+            "defined": "Spend"
+          }
+        },
+        {
+          "name": "approvals",
+          "type": {
+            "vec": {
+              "defined": "Signed"
+            }
+          }
+        },
+        {
+          "name": "period",
+          "type": "u64"
+        },
+        {
+          "name": "period_ms",
+          "type": "u64"
+        }
+      ]
+    }
+  ],
+  "state_types": [
+    "State"
+  ],
+  "types": [
+    {
+      "name": "Action",
+      "kind": "enum",
+      "variants": [
+        {
+          "name": "Transfer",
+          "fields": [
+            {
+              "name": "to",
+              "type": {
+                "array": [
+                  "u8",
+                  32
+                ]
+              }
+            },
+            {
+              "name": "amount",
+              "type": "u128"
+            }
+          ]
+        },
+        {
+          "name": "Call",
+          "fields": [
+            {
+              "name": "program",
+              "type": {
+                "array": [
+                  "u8",
+                  32
+                ]
+              }
+            },
+            {
+              "name": "rows",
+              "type": {
+                "vec": {
+                  "defined": "Row"
+                }
+              }
+            },
+            {
+              "name": "data",
+              "type": {
+                "vec": "u8"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Config",
+          "fields": [
+            {
+              "name": "0",
+              "type": {
+                "vec": {
+                  "defined": "ConfigChange"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cancel",
+          "fields": [
+            {
+              "name": "0",
+              "type": {
+                "vec": "u64"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Config",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "members",
+          "type": {
+            "vec": {
+              "defined": "Member"
+            }
+          }
+        },
+        {
+          "name": "threshold",
+          "type": "u32",
+          "docs": "The total weight of distinct APPROVE signers an action needs."
+        },
+        {
+          "name": "timelock_ms",
+          "type": "u64"
+        },
+        {
+          "name": "open_execution",
+          "type": "bool",
+          "docs": "Anyone may execute (true), or an EXECUTE member must sign the execution (false)."
+        },
+        {
+          "name": "actions",
+          "type": "u8",
+          "docs": "`action_kind` bits."
+        },
+        {
+          "name": "targets",
+          "type": {
+            "vec": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          "docs": "If non-empty, the only programs a `Call` may target."
+        },
+        {
+          "name": "limits",
+          "type": {
+            "vec": {
+              "defined": "SpendingLimit"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "ConfigChange",
+      "kind": "enum",
+      "variants": [
+        {
+          "name": "AddMember",
+          "fields": [
+            {
+              "name": "0",
+              "type": {
+                "defined": "Member"
+              }
+            }
+          ]
+        },
+        {
+          "name": "RemoveMember",
+          "fields": [
+            {
+              "name": "0",
+              "type": {
+                "array": [
+                  "u8",
+                  32
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "SetRoles",
+          "fields": [
+            {
+              "name": "key",
+              "type": {
+                "array": [
+                  "u8",
+                  32
+                ]
+              }
+            },
+            {
+              "name": "roles",
+              "type": "u8"
+            }
+          ]
+        },
+        {
+          "name": "SetWeight",
+          "fields": [
+            {
+              "name": "key",
+              "type": {
+                "array": [
+                  "u8",
+                  32
+                ]
+              }
+            },
+            {
+              "name": "weight",
+              "type": "u16"
+            }
+          ]
+        },
+        {
+          "name": "SetThreshold",
+          "fields": [
+            {
+              "name": "0",
+              "type": "u32"
+            }
+          ]
+        },
+        {
+          "name": "SetTimelock",
+          "fields": [
+            {
+              "name": "0",
+              "type": "u64"
+            }
+          ]
+        },
+        {
+          "name": "SetOpenExecution",
+          "fields": [
+            {
+              "name": "0",
+              "type": "bool"
+            }
+          ]
+        },
+        {
+          "name": "SetActions",
+          "fields": [
+            {
+              "name": "0",
+              "type": "u8"
+            }
+          ]
+        },
+        {
+          "name": "SetTargets",
+          "fields": [
+            {
+              "name": "0",
+              "type": {
+                "vec": {
+                  "array": [
+                    "u8",
+                    32
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "AddLimit",
+          "fields": [
+            {
+              "name": "0",
+              "type": {
+                "defined": "SpendingLimit"
+              }
+            }
+          ]
+        },
+        {
+          "name": "RemoveLimit",
+          "fields": [
+            {
+              "name": "0",
+              "type": "u32"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "LimitUsage",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "id",
+          "type": "u32"
+        },
+        {
+          "name": "period",
+          "type": "u64"
+        },
+        {
+          "name": "used",
+          "type": "u128"
+        }
+      ]
+    },
+    {
+      "name": "Member",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "key",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "roles",
+          "type": "u8"
+        },
+        {
+          "name": "weight",
+          "type": "u16"
+        }
+      ]
+    },
+    {
+      "name": "Proposal",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "multisig",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "zone",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "epoch",
+          "type": "u64"
+        },
+        {
+          "name": "nonce",
+          "type": "u64"
+        },
+        {
+          "name": "action",
+          "type": {
+            "defined": "Action"
+          }
+        },
+        {
+          "name": "expires_ms",
+          "type": "u64"
+        },
+        {
+          "name": "proposer",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Queued",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "nonce",
+          "type": "u64"
+        },
+        {
+          "name": "proposal_id",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "eta_ms",
+          "type": "u64"
+        },
+        {
+          "name": "expires_ms",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "Row",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "account",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "program",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Signed",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "key",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "sig",
+          "type": {
+            "array": [
+              "u8",
+              64
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Spend",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "multisig",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "zone",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "epoch",
+          "type": "u64"
+        },
+        {
+          "name": "limit",
+          "type": "u32"
+        },
+        {
+          "name": "nonce",
+          "type": "u64"
+        },
+        {
+          "name": "to",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "amount",
+          "type": "u128"
+        },
+        {
+          "name": "expires_ms",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "SpendingLimit",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "id",
+          "type": "u32"
+        },
+        {
+          "name": "signers",
+          "type": {
+            "vec": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          "docs": "Members' keys who may sign a spend under this limit."
+        },
+        {
+          "name": "threshold",
+          "type": "u8",
+          "docs": "How many of them must."
+        },
+        {
+          "name": "amount",
+          "type": "u128",
+          "docs": "Native base units per period."
+        },
+        {
+          "name": "period_ms",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "State",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "version",
+          "type": "u8"
+        },
+        {
+          "name": "zone",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "create_key",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "epoch",
+          "type": "u64"
+        },
+        {
+          "name": "config",
+          "type": {
+            "defined": "Config"
+          }
+        },
+        {
+          "name": "usage",
+          "type": {
+            "vec": {
+              "defined": "LimitUsage"
+            }
+          }
+        },
+        {
+          "name": "nonce_base",
+          "type": "u64"
+        },
+        {
+          "name": "consumed",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "queue",
+          "type": {
+            "vec": {
+              "defined": "Queued"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

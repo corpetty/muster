@@ -12,6 +12,8 @@ LEZ v0.3 and v0.4 cannot share one dependency graph. The rules are the same `../
   module package: `metadata.json`, `lez_msig_v04_module.lidl` (v0.3's contract plus `topup` and the fee
   account's notes), `generated/` (`tools/regen.sh`), `flake.nix` (`nix build .#lgx-portable`), which
   stages `../core` inside its source since the builder compiles only this directory.
+- `idl/lez_msig.json`: the IDL, `spel generate-idl` over `../core` with the types named in `spel.toml`
+  (msig_core stays free of SPEL); `tools/idl.sh` regenerates it, `--check` is CI's (exo-7610, README "IDL").
 - `artifacts/msig.bin`: the deployed v0.4 guest (the devnet's program, image id checked), embedded by
   `methods/build.rs`; `MSIG_BUILD_GUEST=1` rebuilds it.
 - `artifacts/msig-next.bin`: the next guest, NOT deployed: the current core and adapter, with D19's

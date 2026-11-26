@@ -45,6 +45,33 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # RFP-005 U.4 (exo-7610): the committed IDL is what SPEL generates from msig_core, and it
+  # decodes Muster's State vector. SPEL is pinned in lez04/tools/idl.sh; its build is cached.
+  lez-msig-idl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: logos-co/setup-nix-cache-action@781f072122f4df6af0e33a7d355ebd20283e019e # v1.2.0
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/muster/spel-*
+          key: spel-${{ hashFiles('programs/lez-msig/lez04/tools/idl.sh') }}
+      - name: risc0's recursion circuit (spel's LEZ dependencies build risc0, exo-ba5)
+        run: |
+          sum=744b999f0a35b3c86753311c7efb2a0054be21727095cf105af6ee7d3f4d8849
+          zkr=/nix/store/2dd045zdaad44awdpscjw5fdw97bvpcb-$sum.zip
+          if ! nix-store --realise "$zkr" >/dev/null; then
+            zkr=$RUNNER_TEMP/$sum.zip
+            curl -fsSL -o "$zkr" "https://github.com/corpetty/muster/releases/download/muster-v0.4.0/$sum.zip"
+          fi
+          echo "$sum  $zkr" | sha256sum -c
+          echo "RECURSION_SRC_PATH=$zkr" >> "$GITHUB_ENV"
+      - name: libpcsclite (spel's LEZ wallet links Keycard support)
+        run: sudo apt-get install -y --no-install-recommends libpcsclite-dev
+      - name: The IDL is SPEL's, and decodes a real State
+        run: programs/lez-msig/lez04/tools/idl.sh --check
+
   lez-msig:
     runs-on: ubuntu-latest
     timeout-minutes: 150
@@ -141,15 +168,18 @@ jobs:
           df -h /
       - uses: logos-co/setup-nix-cache-action@781f072122f4df6af0e33a7d355ebd20283e019e # v1.2.0
       # The zone's clone and build, its own key: the cache keeps ~/.cache/muster/lez-<version> but
-      # never /nix/store, and localnet.sh re-links the nix libraries a restore lost (exo-98e)
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      # never /nix/store, and localnet.sh re-links the nix libraries a restore lost (exo-98e).
+      # Restored here and saved as soon as each build is done, so a later failing step keeps them.
+      - id: zone-cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
             ~/.cache/muster/lez-v0.4.0-rc3
             ~/.cache/muster/risc0
           key: lez-zone-v0.4.0-rc3-${{ hashFiles('infra/lez/localnet.sh') }}
           restore-keys: lez-zone-v0.4.0-rc3-
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      - id: host-cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
             ~/.cargo/registry
@@ -184,11 +214,26 @@ jobs:
           prog=$(grep -o 'hex [0-9a-f]\{64\}' "$RUNNER_TEMP/deploy.txt" | cut -d' ' -f2)
           test -n "$prog"
           echo "PROGRAM=$prog" >> "$GITHUB_ENV"
+      - if: steps.zone-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.cache/muster/lez-v0.4.0-rc3
+            ~/.cache/muster/risc0
+          key: lez-zone-v0.4.0-rc3-${{ hashFiles('infra/lez/localnet.sh') }}
       - name: The host tests and msig_exec04, built once (release, debug assertions on)
         working-directory: programs/lez-msig/lez04
         # integration tests build the package's binaries with the tests' features, so this also
         # leaves target/release/msig_exec04 for lez_msig_private_e2e
         run: cargo test --release -p msig_host04 --locked --no-run
+      - if: steps.host-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            programs/lez-msig/lez04/target
+          key: lez-msig-host04-${{ hashFiles('programs/lez-msig/lez04/Cargo.lock') }}
       - name: The program alone, public posture (live_public04)
         working-directory: programs/lez-msig/lez04
         env:

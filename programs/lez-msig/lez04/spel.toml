@@ -1,0 +1,19 @@
+# lez-msig for SPEL (logos-co/spel, branch refactor/lez-v0.4.x; RFP-005 U.4, exo-7610).
+# The IDL is generated from msig_core's own types, named here rather than marked in the source,
+# so msig_core keeps no LEZ or SPEL dependency (../CLAUDE.md). Regenerate with tools/idl.sh;
+# tools/idl.sh --check fails when the committed IDL is not what SPEL generates.
+#
+# The IDL describes the instruction (`messages` = msig_core::Instruction) and the state
+# (msig_core::State). The guest's message is msig_v04::ProgramInstruction, the envelope
+# create_key ‖ placement ‖ Instruction, which SPEL's IDL v2 cannot describe (a message is an
+# enum whose tag is the first byte): see ../README.md, "IDL". So `spel send` cannot build a
+# lez-msig message from this IDL; `spel inspect` decodes the multisig's state with it.
+
+[programs.lez_msig]
+idl  = "idl/lez_msig.json"
+core = "../core"
+
+[programs.lez_msig.idl-gen]
+message   = "Instruction"
+state     = "State"
+namespace = "lez_msig"
