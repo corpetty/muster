@@ -150,7 +150,7 @@ See [`docs/02-implementation-plan.md`](docs/02-implementation-plan.md) for per-p
 
 ## License
 
-Dual MIT / Apache-2.0, matching the Logos platform repos.
+Dual-licensed under either of [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option, matching the Logos platform repos. Unless you state otherwise, any contribution you submit for inclusion is licensed the same way, with no additional terms.
 
 ## Disclaimer
 
