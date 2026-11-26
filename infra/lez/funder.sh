@@ -134,17 +134,23 @@ print(-(-ulen // (96 * 1024)))
 EOF
 ) || exit 1
     payer=$(funder_id)
-    newacct() { w account new public 2>&1 | grep -oE 'Public/[1-9A-HJ-NP-Za-km-z]{32,44}' | head -1; }
-    header=$(newacct); segs=()
-    for _ in $(seq 1 "$n"); do segs+=("$(newacct)"); done
-    [ -n "$header" ] && [ ${#segs[@]} -eq "$n" ] || { echo "could not make the deploy accounts" >&2; exit 1; }
+    # each account made loudly: a failing CLI prints why, never a silent exit under set -e
+    newacct() {
+      local out id
+      out=$(w account new public 2>&1) || { echo "the wallet CLI could not make a deploy account: $out" >&2; return 1; }
+      id=$(echo "$out" | grep -oE 'Public/[1-9A-HJ-NP-Za-km-z]{32,44}' | head -1)
+      [ -n "$id" ] || { echo "no account in the wallet CLI's answer: $out" >&2; return 1; }
+      echo "$id"
+    }
+    header=$(newacct) || exit 1; segs=()
+    for _ in $(seq 1 "$n"); do seg=$(newacct) || exit 1; segs+=("$seg"); done
     # v0.4: an immutable header, so a private execution can prove the program undisclosed (D18)
     imm=(); w program-loader deploy --help 2>/dev/null | grep -q -- --immutable && imm=(--immutable)
     w program-loader deploy --elf "$2" --header "$header" --segments "${segs[@]}" --payer "Public/$payer" "${imm[@]}" >&2 || exit 1
     id="${header#Public/}"
     echo "program account: $id (hex $(hex "$id"))" ;;
   new-account)
-    out=$(w account new public 2>&1) || { echo "$out" >&2; exit 1; }
+    out=$(w account new public 2>&1) || { echo "the wallet CLI could not make an account: $out" >&2; exit 1; }
     id=$(echo "$out" | grep -oE 'Public/[1-9A-HJ-NP-Za-km-z]{32,44}' | head -1)
     pk=$(echo "$out" | grep -oE 'With pk [0-9a-f]{64}' | head -1 | cut -d' ' -f3)
     [ -n "$id" ] && [ -n "$pk" ] || { echo "could not make an account: $out" >&2; exit 1; }
