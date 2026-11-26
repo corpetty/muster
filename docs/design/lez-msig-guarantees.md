@@ -283,9 +283,11 @@ mini-app view and the `logoscore` CLI.
 change, a Queue/ExecuteQueued, a Cancel or a Spend. The rules are the shared `msig_core`, so they
 hold, but no test proves that these actions' private transactions build and land.
 
-## 4. Where the code and the design doc disagree
+## 4. Where the code and the design doc disagreed
 
-These were found while writing this page. Each is left as it is, for a decision.
+These were found while writing this page (2026-11-26). Points 1 and 2 are the code falling short of
+the design and the accepted proposal; each is an issue, and the design stands. Points 3–5 were the
+design doc overstating; `lez-msig.md` §7 is corrected.
 
 1. **"Clients round [windows] to the minute"** (`lez-msig.md` §5). They do not:
    - `musterCoordinateProposeLezMsig` and `musterLezMsigSpend` set the expiry as
@@ -293,23 +295,25 @@ These were found while writing this page. Each is left as it is, for a decision.
    - settlement sets Queue's `at_ms` as `now + QueueSlackMs`;
    - `msig_core::claims` passes both through unchanged.
 
-   C2 follows from this.
+   C2 follows from this. **To fix in the code: exo-a99.**
 2. **"Private by default"** (proposal; `lez-msig.md` §1: "the private posture, the default"). In
    the code the default is public:
    - `lez_msig_open` reads `private` with a default of `false` (`muster_module.nim`);
    - the room panel's first button, "Create a k-of-n LEZ multisig", opens a public one, and the
      private one is offered below it as "Or keep it private" (`ui/src/qml/RoomAccounts.qml`).
+
+   **To fix in the code: exo-c0c.**
 3. **§7's removal rows** say a removed member loses pending proposals "immediately". Two things
    qualify that:
    - a removed member still in another lez-msig of the room keeps the room (`msig_members.nim`,
      `msigExecutedRemovals`; `msig_members_test` §5). §8 says so; §7 does not;
    - the re-key waits for the room to see the change final, and the removed member's frames are
      still accepted for five minutes (C6).
+
+   **Corrected in §7.**
 4. **§7's "existence: no" on chain.** On v0.4 a private Create publishes the vault's address as a
    recovery binding, and outside deposits name it (C5). The chain cannot tell it is a multisig, but
-   it can tell that this private account exists and receives deposits.
+   it can tell that this private account exists and receives deposits. **Corrected in §7.**
 5. **D18 against the RPC.** D18 hides the program from the chain. The v0.4 executor reads the
    program's account and its mirror commitment from the RPC before every private transaction, so
-   the RPC learns it (C7). `lez-msig.md` has no RPC column.
-6. **An issue id.** `programs/lez-msig/lez04/CLAUDE.md` cites "exo-0d3.36" for the private Call
-   from the room. No such issue exists. The roadmap names it exo-0db.
+   the RPC learns it (C7). **§7 now says so.**
