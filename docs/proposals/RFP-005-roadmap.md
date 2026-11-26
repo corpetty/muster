@@ -129,8 +129,13 @@ program's (PR #388). Removal was proven on the live fleet with a patched module 
   - forward secrecy on removal;
   - a store node that cannot read membership;
   - an exportable proof.
-- The IDL (U.4) through SPEL or its 0.4 successor, and the lez-msig end-to-end tests in CI on a
-  0.4 zone (S.5, S.6; exo-7610). CI runs a v0.3 zone today.
+- The IDL (U.4) and the lez-msig end-to-end tests in CI on a 0.4 zone (S.5, S.6), in exo-7610.
+  - **The IDL is still required, through SPEL's v0.4.x branch** (r4bbit, 2026-11-26). SPEL takes
+    the state types in one of three ways: `#[state]` annotations, type names in `spel.toml`, or
+    names passed to `spel-cli idl-generate`.
+  - lez-msig names its borsh instruction and state types in `spel.toml`, so `msig_core` keeps
+    no LEZ or SPEL dependency.
+  - CI runs a v0.3 zone today.
 
 ## M5: audit
 
@@ -163,7 +168,7 @@ follows M1 and M2.
 | U.1 a module other modules call | 🟡 | prover and public-posture operations ✅; the full API exo-dbd3 (M2) |
 | U.2 QML mini-app | 🟡 | Muster in Basecamp; a multisig view exo-93b (M3) |
 | U.3 CLI on the headless core | 🟡 | `msig_exec`; over `logoscore` exo-c3b (M2) |
-| U.4 IDL | ⬜ | exo-7610 (M4) |
+| U.4 IDL | ⬜ | through SPEL's v0.4.x branch, types named in `spel.toml`; exo-7610 (M4) |
 | U.5 per-action public/private | 🟡 | design §7; the table exo-05d (M3) |
 | U.6 decode before signing | 🟡 | own actions ✅; any target exo-ac1 (M3) |
 | U.7 actionable errors | 🟡 | refusal codes ✅; UI pass exo-93b (M3) |
@@ -244,8 +249,10 @@ proves.
 
 ## Decisions still open
 
-Each is named as open in the accepted proposal:
+Each was named as open in the accepted proposal:
 1. **Payouts,** to be agreed with Logos: the author is a core contributor.
 2. **The audit firm and slot** (M5).
 3. **Ed25519 members** (M2): do integrators need them? That is for the integrators to answer.
-4. **The IDL route** (M4): SPEL, or its successor under 0.4.
+
+**Answered since:** the IDL route (M4). An IDL is still required, through SPEL's v0.4.x branch
+(r4bbit, 2026-11-26); lez-msig names its types in `spel.toml`.
