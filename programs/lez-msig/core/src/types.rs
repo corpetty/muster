@@ -9,6 +9,8 @@ pub type Key = [u8; 32];
 pub type Sig = [u8; 64];
 
 pub const VERSION: u8 = 1;
+/// The first byte of a retired multisig's record (D19), where an active one stores `VERSION`.
+pub const RETIRED: u8 = 0x52;
 pub const MAX_MEMBERS: usize = 32;
 pub const MAX_LIMITS: usize = 8;
 pub const MAX_TARGETS: usize = 16;
@@ -129,6 +131,10 @@ pub enum Action {
     Config(Vec<ConfigChange>),
     /// Unqueue these nonces and spend them. Never time-locked.
     Cancel(Vec<u64>),
+    /// D19: apply `changes`, then hand the result to a successor multisig at `successor`, whose
+    /// create key is `create_key`, and move the whole balance there. This account retires.
+    /// Appended, so every earlier variant keeps its bytes.
+    Rotate { create_key: Key, successor: Key, changes: Vec<ConfigChange> },
 }
 
 /// What the members sign (§4). `proposal_id` is its tagged hash.
@@ -173,6 +179,66 @@ pub enum Instruction {
     /// `period` is the limit's period index the spend counts against, `period_ms` the length the
     /// spender read from the limit: the program checks it, the plan turns both into a window.
     Spend { spend: Spend, approvals: Vec<Signed>, period: u64, period_ms: u64 },
+    /// D19: at a retired multisig, forward its whole balance to its successor. Unsigned: the
+    /// successor is the one the quorum approved, so this only finishes the move.
+    Sweep,
+}
+
+/// A retired multisig's record (D19), stored in place of its `State`. `mark` is `RETIRED`.
+#[derive(Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
+pub struct Retired {
+    pub mark: u8,
+    pub create_key: Key,
+    /// The epoch the successor started at.
+    pub epoch: u64,
+    /// The successor's account: every balance found here goes there.
+    pub successor: Key,
+}
+
+/// What the program's shard of a multisig's account holds: an active multisig, or a retired one.
+/// Encoded as the bare `State` or `Retired`, told apart by the first byte, so `State`'s layout is
+/// the one every multisig created before D19 stores.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Stored {
+    Active(State),
+    Retired(Retired),
+}
+
+impl Stored {
+    pub fn encode(&self) -> Vec<u8> {
+        match self {
+            Stored::Active(s) => borsh::to_vec(s),
+            Stored::Retired(r) => borsh::to_vec(r),
+        }
+        .expect("borsh")
+    }
+
+    /// `None` when the bytes are neither record.
+    pub fn decode(bytes: &[u8]) -> Option<Self> {
+        match *bytes.first()? {
+            VERSION => borsh::from_slice(bytes).ok().map(Stored::Active),
+            RETIRED => borsh::from_slice(bytes).ok().map(Stored::Retired),
+            _ => None,
+        }
+    }
+}
+
+/// What a rotating multisig sends its successor (D19): the state the successor starts with. A
+/// message from the program to itself, never signed.
+#[derive(Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
+pub struct Handover {
+    pub to: Key,
+    pub state: State,
+}
+
+/// Everything an instruction does to a stored multisig: its new record, and what an actor adapter
+/// must also send. `handover`: the successor's state, delivered to `to` granting the seed of
+/// `state.create_key`. `sweep_to`: read this account's balance and move all of it there.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Applied {
+    pub post: Stored,
+    pub handover: Option<Handover>,
+    pub sweep_to: Option<Key>,
 }
 
 /// Where value leaves the multisig, as the plan must route it: the adapter turns this into a

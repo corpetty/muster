@@ -12,5 +12,5 @@ pub mod sign;
 
 pub use digest::*;
 pub use error::MsigError;
-pub use rules::{apply, claims, validate_config};
+pub use rules::{adopt, apply, apply_stored, claims, forward, validate_config};
 pub use types::*;

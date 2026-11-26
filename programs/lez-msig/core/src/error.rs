@@ -39,6 +39,11 @@ pub enum MsigError {
     InvalidConfig(&'static str),
     MemberInLimit(Key),
     Decode,
+    Retired(Key),
+    NotRetired,
+    BadRotation(&'static str),
+    BadHandover(&'static str),
+    RotationUnsupported,
 }
 
 impl MsigError {
@@ -79,6 +84,11 @@ impl MsigError {
             InvalidConfig(_) => "invalid-config",
             MemberInLimit(_) => "member-in-limit",
             Decode => "decode",
+            Retired(_) => "retired",
+            NotRetired => "not-retired",
+            BadRotation(_) => "bad-rotation",
+            BadHandover(_) => "bad-handover",
+            RotationUnsupported => "rotation-unsupported",
         }
     }
 }
@@ -130,6 +140,12 @@ impl fmt::Display for MsigError {
             MemberInLimit(k) => format!(
                 "member {} signs for a spending limit: remove or change the limit in the same change", short(k)),
             Decode => "the instruction or the state does not decode".into(),
+            Retired(k) => format!(
+                "this multisig is retired, succeeded by {}: act there; here only a sweep forwards funds", short(k)),
+            NotRetired => "only a retired multisig sweeps its balance to a successor".into(),
+            BadRotation(why) => format!("the rotation is invalid: {why}"),
+            BadHandover(why) => format!("the handover is refused: {why}"),
+            RotationUnsupported => "this runtime does not rotate a multisig: migrate it instead (D11)".into(),
         };
         write!(f, "{}: {why}", self.code())
     }
