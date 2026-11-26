@@ -249,7 +249,7 @@ postures. A refusal surfaces while proving, and nothing is sent.
 - **Removal.** Removing a member re-keys the room forward at once (F-16). The GMS cannot be
   revoked, so the removed member can still *read* the multisig's state, and can *stall* it by
   consuming `A`. They can never *spend*. How the others leave them behind depends on the line:
-  - **v0.4, rotation (D19, to build: exo-3dc).** The approval that removes a member also retires
+  - **v0.4, rotation (D19, exo-3dc; the program side is built, the room's flow is not).** The approval that removes a member also retires
     the vault, hands its configuration to a successor at a new PDA under a new GMS, and moves the
     balance there, in the same transaction.
   - **v0.3, migration (D11).** The remaining members create a new multisig under a new GMS, then
@@ -259,6 +259,11 @@ postures. A refusal surfaces while proving, and nothing is sent.
 
 After James Zaki's 0.4 multisig (`jzaki/jz-progs`, `example_progs/multisig/src/rotate.rs`), mapped
 onto signatures instead of seats.
+
+**Built (program side, 2026-11-26).** The rules are in `msig_core` (`apply_stored`, `adopt`,
+`forward`; `core/tests/rotation.rs`). The v0.4 guest and host are in `lez04` (`rotate_tx`, `sweep_tx`,
+`fee_sweep_tx`; `host/tests/v04_rotation.rs`, on LEE's own state with dev-mode proofs). The guest is
+built into `lez04/artifacts/msig-next.bin` and is **not deployed**. Muster's room flow is still to do.
 
 **The action.** One new `Action` variant, appended (borsh tag 4):
 
