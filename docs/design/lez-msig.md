@@ -232,6 +232,10 @@ postures. A refusal surfaces while proving, and nothing is sent.
 
 ## 7. What each observer sees (U.5, Privacy 1–3)
 
+The full per-action table for both postures and both LEZ lines, the cross-layer correlations,
+and the requirement-to-test map are in [`lez-msig-guarantees.md`](lez-msig-guarantees.md). This
+section is the summary.
+
 **Private posture.**
 
 | item | chain | store node / fleet | room member | removed member |
