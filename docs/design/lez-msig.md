@@ -4,7 +4,7 @@ Status: **built and released** for LEZ v0.3 and v0.4 (muster-v0.4.0, 2026-11-23)
 2026-11-26. Epic exo-0d3; RFP-005, `logos-co/rfp` `RFPs/RFP-005-multisig-and-coordination.md`.
 Scope and milestones are the accepted proposal
 ([`docs/proposals/RFP-005-lez-msig.md`](../proposals/RFP-005-lez-msig.md), logos-co/rfp#299), and
-progress against it is [`RFP-005-roadmap.md`](../proposals/RFP-005-roadmap.md). This document is
+progress against it is kept on the issue (its Progress section), with the engineering detail in [`RFP-005-roadmap.md`](../proposals/RFP-005-roadmap.md). This document is
 the design and its decision log (§9).
 
 It was first written on 2026-10-23 against LEZ v0.3.1 (`1a003bf`) and `dev` @ `7cba743a` (the

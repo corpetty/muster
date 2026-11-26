@@ -159,4 +159,4 @@ tests/          unit tests · run-suite.sh (all of them, one command) · vectors
 - Invariant tests are append-only. Extend, don't weaken.
 - The module imports nothing from `../ui/`; it reaches other modules only through logos-core.
 
-<!-- rot-check: current-phase=CLAUDE.md sha256=939f560a9d3782a3765604d9b09718ac92d12d6f00f4018eb5e1feacbd604856 -->
+<!-- rot-check: current-phase=CLAUDE.md sha256=cda227b8b4e416ed7f41c42cee8093436d462cf12a2b2e2c706700fe1a2fe912 -->

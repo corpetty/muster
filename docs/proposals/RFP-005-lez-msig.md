@@ -1,21 +1,21 @@
 # RFP-005 proposal: lez-msig (accepted)
 
-**This is the reference** for the lez-msig work's scope, milestones and state. It is the proposal
-filed as [logos-co/rfp#299](https://github.com/logos-co/rfp/issues/299) on 2026-11-25 and
-**accepted** on 2026-11-26. It is copied verbatim below, with the email addresses left in the
-issue. The form's RFP ID dropdown had no RFP-005 option, so it reads RFP-017; the RFP team moved
-the issue to RFP-005.
+**This is the reference** for the lez-msig work's scope and milestones. It is the proposal filed
+as [logos-co/rfp#299](https://github.com/logos-co/rfp/issues/299) on 2026-11-25 and **accepted**
+on 2026-11-26. It is copied below as accepted, with the email addresses left in the issue. The one
+change: the RFP ID, which the form could only fill with a placeholder (RFP-017), reads RFP-005 as
+it does on the issue.
 
-Progress against these milestones is tracked in [`RFP-005-roadmap.md`](RFP-005-roadmap.md). The
-design and decision log is [`docs/design/lez-msig.md`](../design/lez-msig.md). If this proposal
-and another document disagree on scope, this one wins; on what has been built since 2026-11-25,
-the roadmap does.
+**Progress is kept on the issue itself:** its Progress section, at the top of #299, says what is
+built and what is left under each milestone, updated as work lands. Muster's engineering detail
+behind it (issue ids, evidence, PRs) is [`RFP-005-roadmap.md`](RFP-005-roadmap.md); the design
+and decision log is [`docs/design/lez-msig.md`](../design/lez-msig.md).
 
 ---
 
 ## RFP ID
 
-RFP-017 — Privacy-Preserving Token Vesting
+RFP-005 — Multisig and Coordination
 
 ## Your Project Name
 
@@ -39,7 +39,7 @@ Status: full-time (tech evangelist)
 
 ## Project Summary
 
-This proposal is for **RFP-005 (Multisig and Coordination)**. The form lists no RFP-005 option, so another RFP was picked as a placeholder, as we were told to do.
+This proposal is for **RFP-005 (Multisig and Coordination)**. The form listed no RFP-005 option when this was filed, so a placeholder was picked; the RFP ID above was corrected after acceptance.
 
 A multisig has two halves:
 - the program that enforces M-of-N;

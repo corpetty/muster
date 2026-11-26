@@ -254,7 +254,7 @@ It cuts across the phases rather than adding one:
 **Status (2026-11-26): the RFP-005 proposal was accepted.** lez-msig is Muster's own M-of-N program on the LEZ, private by default (`programs/lez-msig/`). Approvals are collected in a room and verified inside the program at execution. It runs on LEZ v0.3 and v0.4, and is deployed on the 0.4.0-rc3 devnet, where both postures ran with real proving. Like the Monero work, it sits beside the phases rather than in one: it is a driver family (invariant 6), and its private posture reuses the room's sealed epochs (F-16) to carry the group secret and notes.
 
 - **The reference** for its scope and milestones is the accepted proposal, [`docs/proposals/RFP-005-lez-msig.md`](proposals/RFP-005-lez-msig.md) (logos-co/rfp#299).
-- **Progress against it** is [`docs/proposals/RFP-005-roadmap.md`](proposals/RFP-005-roadmap.md), milestone by milestone, with an issue for each item left.
+- **Progress against it** is kept in the Progress section of [logos-co/rfp#299](https://github.com/logos-co/rfp/issues/299); the engineering detail, milestone by milestone with an issue for each item left, is [`docs/proposals/RFP-005-roadmap.md`](proposals/RFP-005-roadmap.md).
 - **The design and decision log (D1–D19)** is [`docs/design/lez-msig.md`](design/lez-msig.md).
 
 ## Decision gates (ADRs)

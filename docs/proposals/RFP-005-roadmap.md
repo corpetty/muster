@@ -2,10 +2,12 @@
 
 *Updated 2026-11-26. Owner: Corey Petty. Epic exo-0d3; this document is exo-0d3.19.*
 
-**The reference is the accepted proposal,** [`RFP-005-lez-msig.md`](RFP-005-lez-msig.md)
-([logos-co/rfp#299](https://github.com/logos-co/rfp/issues/299), accepted 2026-11-26). It fixes
-the scope and the five milestones. This document tracks what has been built against them since,
-and what is left. Each item left has an issue under exo-0d3.
+**The reference is the accepted proposal,** [logos-co/rfp#299](https://github.com/logos-co/rfp/issues/299)
+(accepted 2026-11-26; copied in [`RFP-005-lez-msig.md`](RFP-005-lez-msig.md)). It fixes the scope
+and the five milestones, and **its Progress section is the canonical record of progress**. This
+document is the engineering detail behind that section: what has been built, with its evidence,
+and what is left, each with an issue under exo-0d3. When something lands, update both: the Progress
+section on #299 in brief, this document in full.
 
 Design and decision log (D1–D19): [`docs/design/lez-msig.md`](../design/lez-msig.md). Signing
 spec: [`docs/design/lez-msig-signing.md`](../design/lez-msig-signing.md). Benchmarks:
