@@ -8,5 +8,7 @@ The LEZ v0.4 files come from `programs/lez-msig/lez04` (run there, never edited 
   (`cargo run -p msig_host04 --bin msig_vectors04`).
 - `v04-recipients.json`: a private payee as borsh and the address it derives, for
   `lez_msig_recipient_test` (`cargo run -p msig_host04 --bin msig_recipient_vectors04`).
+- `v04-rotation.json`: D19's bytes (exo-3dc), for the Nim port that follows
+  (`cargo run -p msig_host04 --bin msig_rotation_vectors04`); no Nim test reads it yet.
 - `v04-gas.json`: the gas each lez-msig step used on LEE's state, for `msig_gas_test`
   (`MSIG_GAS_OUT=… cargo test -p msig_host04 --test v04_gas`).

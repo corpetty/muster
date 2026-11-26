@@ -14,6 +14,9 @@ LEZ v0.3 and v0.4 cannot share one dependency graph. The rules are the same `../
   stages `../core` inside its source since the builder compiles only this directory.
 - `artifacts/msig.bin`: the deployed v0.4 guest (the devnet's program, image id checked), embedded by
   `methods/build.rs`; `MSIG_BUILD_GUEST=1` rebuilds it.
+- `artifacts/msig-next.bin`: the next guest, NOT deployed: the current core and adapter, with D19's
+  in-program rotation (exo-3dc). A new image, so a new program id. Tests of rotation run it
+  (`next_program()`, `Msig::with_guest`); the devnet keeps the deployed one until it is redeployed.
 
 Pins: LEZ `v0.4.0-rc3`. Both `Cargo.lock` files are seeded from LEZ rc3's own lockfile, because
 risc0-zkvm 3.0.5 is yanked and a fresh resolve picks 3.1.0, which does not build with LEZ.

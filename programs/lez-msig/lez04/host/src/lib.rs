@@ -35,7 +35,7 @@ use lee_core::{
     RegularKey, SharedSecretKey, WitnessKind, DUMMY_COMMITMENT_HASH,
 };
 pub use msig_core;
-use msig_core::{Instruction, Key, Outflow, State};
+use msig_core::{Instruction, Key, Outflow, State, Stored};
 pub use msig_v04::{self, Placement, ProgramInstruction};
 use msig_v04::{key_of, multisig_account, seed};
 use sha2::{Digest, Sha256};
@@ -53,11 +53,19 @@ pub fn program() -> Program {
     Program::new(msig_methods04::MSIG_ELF.into()).expect("a valid program")
 }
 
+/// The next guest (`artifacts/msig-next.bin`): built from the current core and adapter, NOT
+/// deployed. It is a different image, so a different program, with D19's rotation. Tests of what
+/// the deployed program lacks run it (`Msig::with_guest`).
+pub fn next_program() -> Program {
+    Program::new(msig_methods04::MSIG_NEXT_ELF.into()).expect("a valid program")
+}
+
 /// The embedded program's image id, hex (its words little-endian, as risc0 prints a digest).
 pub fn image_id_hex() -> String {
     program().id().iter().flat_map(|w| w.to_le_bytes()).map(|b| format!("{b:02x}")).collect()
 }
 
+#[derive(Clone)]
 pub struct Msig {
     pub program: AccountId,
     pub create_key: Key,
@@ -67,8 +75,11 @@ pub struct Msig {
     /// D18: prove private executions without disclosing which program ran, against this
     /// immutable header and a membership proof of its mirror commitment.
     undisclosed: Option<(ProgramHeader, MembershipProof)>,
+    /// The guest this client proves with: the deployed program unless `with_guest` says otherwise.
+    guest: Program,
 }
 
+#[derive(Clone)]
 struct GroupKeys {
     pda: PrivateKeyHolder,
     fee: PrivateKeyHolder,
@@ -91,12 +102,24 @@ pub struct Proven {
     pub proof: Proof,
     pub post: Option<Account>,
     pub fee_post: Option<Account>,
+    /// Every private action, for notes besides these two (a rotation's successor, D19).
+    pub actions: Vec<PrivateAction>,
 }
 
 impl Proven {
     /// What each signer signs: the message's hash.
     pub fn hash(&self) -> [u8; 32] {
         self.message.hash()
+    }
+
+    /// `m`'s new note in this transaction, if it wrote one: a rotation's successor (D19).
+    pub fn note_of(&self, m: &Msig) -> Option<Account> {
+        m.decrypt(&self.actions)
+    }
+
+    /// `m`'s fee account's new note in this transaction: the old fee account after a fee sweep.
+    pub fn fee_note_of(&self, m: &Msig) -> Option<Account> {
+        m.decrypt_fee(&self.actions)
     }
 
     /// The transaction, signed here by `keys` (none for an execution: the multisig signs nothing).
@@ -148,7 +171,7 @@ fn seal_for(seals: &[Recipient], body: &MessageBody) -> Result<RecipientEncrypti
 impl Msig {
     /// A multisig over a public PDA.
     pub fn public(program: AccountId, create_key: Key) -> Self {
-        Self { program, create_key, placement: Placement::Public, keys: None, undisclosed: None }
+        Self { program, create_key, placement: Placement::Public, keys: None, undisclosed: None, guest: crate::program() }
     }
 
     /// A multisig over a group-owned private PDA. Every member derives the same keys from the
@@ -158,7 +181,26 @@ impl Msig {
         let pda = group.derive_keys_for_pda(image, &seed(&create_key));
         let fee = group.derive_regular_shared_account_keys(&fee_derivation_id(&create_key));
         let placement = Placement::Private { npk: pda.generate_nullifier_public_key(), vpk: pda.generate_viewing_public_key() };
-        Self { program, create_key, placement, keys: Some(GroupKeys { pda, fee }), undisclosed: None }
+        Self { program, create_key, placement, keys: Some(GroupKeys { pda, fee }), undisclosed: None, guest: crate::program() }
+    }
+
+    /// Prove with `guest` instead of the deployed program (the next one, `next_program`, for D19).
+    /// A private multisig's keys derive from the image id the caller passed to `private`, so pass
+    /// this guest's.
+    pub fn with_guest(mut self, guest: Program) -> Self {
+        self.guest = guest;
+        self
+    }
+
+    /// This multisig, its fees paid from `payer`'s fee account. After a rotation (D19) the old
+    /// account's transactions (the rotation itself, a sweep, a late deposit) are paid from the
+    /// successor's fee account: the old one is swept first and may be drained by a removed member.
+    pub fn paying_fees_of(&self, payer: &Msig) -> Msig {
+        let mut m = self.clone();
+        if let (Some(k), Some(p)) = (m.keys.as_mut(), payer.keys.as_ref()) {
+            k.fee = p.fee.clone();
+        }
+        m
     }
 
     /// D18: private executions claim only that SOME immutable program ran (its header's mirror
@@ -429,6 +471,95 @@ impl Msig {
                    public_states, BTreeMap::from([(from, Nonce(from_nonce))]), to, &Extras::default())
     }
 
+    /// D19: proves a rotation, `op` an `Execute` or `ExecuteQueued` of an approved `Rotate` naming
+    /// `next`'s create key and account. One proof over both private PDAs: this one's note (`pre`)
+    /// is updated to its retired record, `next`'s is created (Init) with the handed-over state and
+    /// the whole balance, promoted from this account's transfer. The fee comes from `next`'s fee
+    /// account (`fee` is its note): sweep the old one first (`fee_sweep_tx`). The successor's
+    /// recovery binding is registered, so it can be paid from outside the group. `next` must prove
+    /// with this guest (`with_guest`). Read `next`'s note back with `Proven::note_of(next)`.
+    pub fn rotate_tx(
+        &self,
+        next: &Msig,
+        op: Instruction,
+        pre: (Account, MembershipProof),
+        fee: Option<PrivateFee>,
+        public_states: HashMap<Actor, ActorState>,
+    ) -> Result<Proven, lee::error::LeeError> {
+        self.successor_tx(next, op, pre, None, fee, public_states)
+    }
+
+    /// D19: proves a `Sweep` at this retired multisig: everything it holds (a deposit that reached
+    /// it after the rotation) goes to `next`, whose note (`next_pre`) takes the credit. Fee from
+    /// `next`'s fee account.
+    pub fn sweep_tx(
+        &self,
+        next: &Msig,
+        pre: (Account, MembershipProof),
+        next_pre: (Account, MembershipProof),
+        fee: Option<PrivateFee>,
+        public_states: HashMap<Actor, ActorState>,
+    ) -> Result<Proven, lee::error::LeeError> {
+        self.successor_tx(next, Instruction::Sweep, pre, Some(next_pre), fee, public_states)
+    }
+
+    fn successor_tx(
+        &self,
+        next: &Msig,
+        op: Instruction,
+        pre: (Account, MembershipProof),
+        next_pre: Option<(Account, MembershipProof)>,
+        fee: Option<PrivateFee>,
+        public_states: HashMap<Actor, ActorState>,
+    ) -> Result<Proven, lee::error::LeeError> {
+        let old = self.paying_fees_of(next);
+        let mut actors = old.private_public_actors(&op);
+        let message = Program::serialize_message(old.envelope(op))?;
+        let root = TransactionEntry::Sync(RootCall { to: old.root(), message });
+        // The successor's recovery binding is registered once, when it is created (a binding exists
+        // once per account).
+        let recoveries = if next_pre.is_none() { vec![next.vault_binding()] } else { vec![] };
+        let witnesses = vec![old.pda_witness(Some(pre)), next.pda_witness(next_pre)];
+        let extras = Extras { recoveries, ..Default::default() };
+        old.prove(root, &mut actors, vec![], witnesses, fee.map(Fee::Note), public_states, BTreeMap::new(),
+                  next.account(), &extras)
+    }
+
+    /// D19: before a rotation, moves the old fee account's whole balance (`amount`, its note
+    /// `old_note`) into this successor's fee account, which pays this transaction's fee out of the
+    /// credit, as a top-up does. Separate from the rotation because a transaction has one root
+    /// call and the program does not hold the fee account. `pre` is this fee account's note, None
+    /// the first time. The old fee account's new note: `Proven::fee_note_of(old)`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn fee_sweep_tx(
+        &self,
+        old: &Msig,
+        old_note: (Account, MembershipProof),
+        amount: u128,
+        pre: Option<(Account, MembershipProof)>,
+        fee_amount: u128,
+        inbox: AccountId,
+        public_states: HashMap<Actor, ActorState>,
+    ) -> Result<Proven, lee::error::LeeError> {
+        let from = old.fee_account().expect("a private multisig has a fee account");
+        let to = self.fee_account().expect("a private multisig has a fee account");
+        let message = borsh::to_vec(&NativeMessage::Transfer { to, amount }).expect("borsh");
+        let root = TransactionEntry::Sync(RootCall { to: Actor::native_balance(from), message });
+        let authorized = |k: &PrivateKeyHolder, pre: Option<(Account, MembershipProof)>| PrivateWitness {
+            vpk: k.generate_viewing_public_key(),
+            random_seed: random32(),
+            kind: WitnessKind::Regular(RegularKey::Authorized(k.authorization_secret_key)),
+            nullifier: match pre {
+                None => NullifierWitness::Init { commitment_root: DUMMY_COMMITMENT_HASH },
+                Some((account, membership_proof)) => NullifierWitness::Update { account, membership_proof },
+            },
+            address_openings: Default::default(),
+        };
+        let witnesses = vec![authorized(&old.keys().fee, Some(old_note)), authorized(&self.keys().fee, pre)];
+        self.prove(root, &mut vec![], vec![], witnesses, Some(Fee::Credit { amount: fee_amount, inbox }), public_states,
+                   BTreeMap::new(), to, &Extras::default())
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn prove(
         &self,
@@ -466,7 +597,7 @@ impl Msig {
             fee: transfer,
         };
         let simulation = Simulation { public_actor_states: public_states, admitted_accounts: None };
-        let mut programs = ProgramCatalog::from([(self.program, program())]);
+        let mut programs = ProgramCatalog::from([(self.program, self.guest.clone())]);
         if let Some((header, proof)) = &self.undisclosed {
             programs = programs.with_undisclosed(self.program, *header, proof.clone());
         }
@@ -478,11 +609,11 @@ impl Msig {
             |_, body: &MessageBody| body.to.account_id == promote,
             |body: &MessageBody| seal_for(&extras.seals, body),
         )?;
-        let actions = &output.execution.private_actions;
-        let post = self.decrypt(actions);
-        let fee_post = self.decrypt_fee(actions);
+        let actions = output.execution.private_actions.clone();
+        let post = self.decrypt(&actions);
+        let fee_post = self.decrypt_fee(&actions);
         let message = PpMessage::from_circuit_output(nonces, output);
-        Ok(Proven { message, proof, post, fee_post })
+        Ok(Proven { message, proof, post, fee_post, actions })
     }
 
     /// The multisig's note among a transaction's private actions, as a member decrypts it.
@@ -495,7 +626,13 @@ impl Msig {
         decrypt_with(&self.keys.as_ref()?.fee, self.fee_account()?, actions)
     }
 
-    /// The multisig's state from its account: the program's own actor state.
+    /// What the program's shard holds (D19): an active multisig, or a retired one naming its
+    /// successor.
+    pub fn stored_of(&self, account: &Account) -> Option<Stored> {
+        Stored::decode(account.data.actor_state(self.program).as_ref())
+    }
+
+    /// The multisig's state from its account: the program's own actor state (None once retired).
     pub fn state_of(&self, account: &Account) -> Option<State> {
         let data: &[u8] = account.data.actor_state(self.program).as_ref();
         if data.is_empty() {

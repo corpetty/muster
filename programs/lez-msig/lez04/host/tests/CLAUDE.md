@@ -26,6 +26,13 @@ refused while proving.
 header); a private Create proved undisclosed names no program and lands; a claim against a header the
 zone never saw is refused.
 
+`v04_rotation.rs`: D19 (exo-3dc), with the next guest (`artifacts/msig-next.bin`), dev-mode proofs. A
+2-of-3 removes carol: the old fee account swept to the successor's (a transaction before), then ONE
+transaction retires the vault, the successor (new create key, new group secret) adopts the config
+without her and receives the whole balance; carol cannot derive or decrypt the successor; the retired
+vault refuses a payment; a late deposit is swept forward; carol cannot spend at either vault; the
+remaining two pay; an outsider can pay the successor's address (its binding registered).
+
 `v04_gas.rs`: what every step meters (Create, Execute of a transfer or a config change, Queue,
 ExecuteQueued, Spend; across members and approvals), as the sequencer meters it. `MSIG_GAS_OUT`
 writes `module/tests/vectors/lez-msig/v04-gas.json`, which Muster's per-step gas limits are held to.

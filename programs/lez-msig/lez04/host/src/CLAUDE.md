@@ -23,6 +23,12 @@
   `signed(keys)` / `with_signatures(sigs)` make the transaction.
 - `fee_inbox`, `private_reserve` (LEZ's private fee at the next block's ceilings),
   `vault_balance`, `native_state`.
+- D19 (exo-3dc): `rotate_tx` proves a rotation over both private PDAs (the old retired, the successor
+  created with the balance), `sweep_tx` forwards a late deposit, `fee_sweep_tx` moves the old fee
+  account into the successor's first. `paying_fees_of` pays an old account's transactions from the
+  successor's fee account; `with_guest(next_program())` proves with the undeployed next guest;
+  `stored_of` reads a retired record; `Proven::note_of` reads the successor's note. `exec.rs` has no
+  rotation mode yet (Muster's follow-up).
 - `exec.rs`: `exec_request(json) -> json`, the executor on 0.4. It has v0.3's surface (derive / exec /
   fund / scan / send) plus `feeNote` → `feePost` and a `topup` mode; it prices the fee from
   `getFeeState` and proves undisclosed when the program is immutable. An exec reads the zone's state
