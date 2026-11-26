@@ -6,6 +6,11 @@ no environment variables, no anvil, no keys muster made. Every label below was r
 screen in the release on 2026-10-03; the code wins over this page. Steps not yet run by two
 people on two machines are marked **first run**.
 
+> **Since then (2026-11-26).** Muster's releases run on Basecamp 0.3.2, and the UI was
+> redesigned (exo-720, 2026-10-14): what this page calls Home is **Needs you** in the
+> sidebar, and other labels may differ. An invitation now admits the person invited, with no
+> ask to join (exo-dcc.29). The steps below have not been re-read on screen since.
+
 Muster is pre-release: a split with no chain named settles on a test chain (Sepolia first).
 Do not put real money on it.
 
@@ -43,7 +48,7 @@ Open **Muster**. Home says **Set up an Ethereum account** until you have one.
 ## 2. A room
 
 Alice: **Start something** → **Split a bill** → people → (the invite reaches Bob's inbox).
-Bob: Home → the invitation → **Join**. Alice admits him. **first run** across two machines
+Bob: Home → the invitation → **Join**. The invite already admitted him: no one has to admit him (exo-dcc.29, 2026-10-09). **first run** across two machines
 on the platform build; the same steps ran on one machine over the fleet (`client-tour.md` §1).
 
 ## 3. The split

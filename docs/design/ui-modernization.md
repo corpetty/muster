@@ -1,6 +1,6 @@
 # Modernizing Muster's UI: a chat client first, the lifecycle on demand
 
-**Status:** plan agreed 2026-10-09 (§6). U0b–U8 built (2026-10-09/11), each checked in the gallery and, for what the gallery cannot show, in the real runner; U0a done in the runner, with Basecamp 0.3.2 and the Nim host still to check. §7–§9 record what each slice found and what was deferred.
+**Status:** plan agreed 2026-10-09 (§6). U0b–U8 built (2026-10-09/11), each checked in the gallery and, for what the gallery cannot show, in the real runner; U0a done in the runner, then in Basecamp 0.3.2 (`ea2d1bc9`, 2026-10-12: Muster launches there after one fix). Epic `exo-720` and U0a (`exo-720.1`, whose scope named the Nim host too) are closed; the Nim UI runs the same QML through `scripts/ui-parity.sh` (`MUSTER_UI=nim`). Still deferred: the U-6 membership seams (`exo-c15`). §7–§9 record what each slice found and what was deferred.
 **Reads with:** `docs/01-furps.md` (U-1 to U-10), `ui/prototype/coordination-prototype-v2.html` (the reference build), `docs/labbook/qml-errors-are-invisible-to-nix-build.md`, `docs/design/seaqt-ui.md` (the QML is kept when the backend moves to Nim, so this work carries over).
 
 ## 1. What was asked
@@ -249,7 +249,7 @@ Details, and the traps behind them: `docs/labbook/screenshots-of-the-qml-that-ho
   - membership seams in the thread (U-6);
   - Privacy filtered to one proposal, and a card's own "Who sees this?" (U6);
   - which labels are monospace (the surface slices decide).
-- **Not yet checked:** all of this in Basecamp 0.3.2, and in the Nim host.
+- **Checked since:** Basecamp 0.3.2 (`ea2d1bc9`, 2026-10-12); `exo-720.1` closed.
 
 ## 9. U5–U8 as built (2026-10-11), and where today's right panel went
 
@@ -277,7 +277,8 @@ Details, and the traps behind them: `docs/labbook/screenshots-of-the-qml-that-ho
 | The room code, Rename, Leave | Invite; a click on the title; ⋯ |
 
 **Still deferred:**
-- membership seams in the thread (U-6);
-- checking all of this in Basecamp 0.3.2 and in the Nim host.
+- membership seams in the thread (U-6, `exo-c15`: membership events need a time).
+
+Checking this in Basecamp 0.3.2 was done on 2026-10-12 (`ea2d1bc9`).
 
 Since done: Privacy filtered to one proposal (`FlowView.intentFilter`, from a card's "Who sees this?"); the compact card (U6 above); `exo-c4f` (the form names what Propose waits on).

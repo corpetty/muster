@@ -1,11 +1,13 @@
 # Installing Muster from a catalogue (exo-dcc.3)
 
-Status: **steps 2 and 3 done, 2026-10-08** (exo-dcc.3). §1–§6 came from reading; §7 records the acceptance run on screen. *(unverified)* marks what still needs checking. Part of the Monero plan (`docs/design/monero-in-rooms.md`, Phase 1).
+Status: **done** (exo-dcc.3, closed 2026-10-09). The catalogue is live on `main`; the current release is [`muster-v0.5.0`](https://github.com/corpetty/muster/releases/tag/muster-v0.5.0) (2026-11-24), and how to cut one is `RELEASING.md`. §1–§6 came from reading before the build; §7 records the acceptance run on screen. *(unverified)* marks what was not checked at the time. Part of the Monero plan (`docs/design/monero-in-rooms.md`, Phase 1).
 
-The goal: a stranger adds a catalogue, installs Muster, and its dependencies resolve. Today none of that is possible:
-- there is no current public binary (the v0.2.0-demo AppImage is wire-incompatible);
-- Muster is in no catalogue;
-- a local `.lgx` install resolves no dependencies, so about 13 packages are installed by hand first.
+The goal: a stranger adds a catalogue, installs Muster, and its dependencies resolve. When this was written (2026-10-08) none of that was possible:
+- there was no current public binary (the v0.2.0-demo AppImage is wire-incompatible);
+- Muster was in no catalogue;
+- a local `.lgx` install resolved no dependencies, so about 13 packages were installed by hand first.
+
+Since then Muster's own catalogue (`catalog/`) lists every `muster-v<version>` release.
 
 ## 1. How catalogues work in Basecamp 0.3.2
 
@@ -33,7 +35,7 @@ The goal: a stranger adds a catalogue, installs Muster, and its dependencies res
 
 **Adding our catalogue asks a stranger for trust:**
 - Its code runs inside their Basecamp session with no sandbox.
-- Because the highest version wins across catalogues, a catalogue could shadow an official package. Ours must publish only `muster_*` names, and the install page says so.
+- Because the highest version wins across catalogues, a catalogue could shadow an official package. Ours publishes only its own names (`muster_*`, and since 0.3.3 the provers `lez_msig_*`), and the install page says so.
 - Signatures add nothing until a client acts on them.
 
 ## 3. Recommended path
@@ -47,18 +49,18 @@ Run our own catalogue now, for linux-amd64. **The forked builder does not block 
 | # | Step | Effort | Blocked by |
 |---|---|---|---|
 | 1 | **Metadata.** <br>• A version range on every dependency (`delivery_module ~0.3.2`, `lez_core ~0.5.0`, the EVM modules `~0.1.0`, the RLN modules at their tested versions). <br>• `muster_ui` depends on the exact `muster_module` release, so the pair can't drift apart. <br>• Bump both versions together. <br>• Replace the "loading spike" descriptions the install dialog shows. | ½ d | Whether the fork embeds dependency objects and the 0.3.2 gate reads them *(unverified)* |
-| 2 | **The catalogue repo, Forum-style.** <br>• `logos-repo.json` plus an `index.json` built with `logos-modules-release-tool/index.py add --with-local`. <br>• The `.lgx` files as release assets, built locally as `basecamp-profile.sh` builds them. <br>• `run-suite.sh` and `ui-parity.sh` before each release. <br>**Done 2026-10-08:** `scripts/catalog-release.sh` and `catalog/` (in this repo, by the operator's decision); nothing published yet. | ½–1 d | — |
+| 2 | **The catalogue repo, Forum-style.** <br>• `logos-repo.json` plus an `index.json` built with `logos-modules-release-tool/index.py add --with-local`. <br>• The `.lgx` files as release assets, built locally as `basecamp-profile.sh` builds them. <br>• `run-suite.sh` and `ui-parity.sh` before each release. <br>**Done 2026-10-08:** `scripts/catalog-release.sh` and `catalog/` (in this repo, by the operator's decision). Published since `muster-v0.2.0` (2026-10-09). | ½–1 d | — |
 | 3 | **Acceptance.** <br>• Two fresh 0.3.2 profiles: add the URL → install Muster. <br>• Dependencies come from the official catalogue; nothing is installed by hand. <br>• A `--catalog` mode for `basecamp-profile.sh`. <br>**Done 2026-10-08, from a local https server (§7).** The `--catalog` mode is not built. | 1 d | Cross-catalogue resolution: seen on screen (§7) |
-| 4 | **Campaign install page.** <br>• The URL, plus the `basecamp://app/muster_ui` and `basecamp://intent/basecamp.repositories.manage` links. <br>• What to untick. <br>• The trust statement from §2. | ½ d | exo-dcc.2 (which network) |
-| 5 | **CI.** <br>• The release template plus the action. <br>• `modules.txt` naming `module` and `ui`. <br>• linux-amd64 and linux-arm64. <br>• Committed flake locks for release builds. | 1–3 d | exo-1ec.2. Whether a hosted runner can build the forked SDK set *(unverified)* |
+| 4 | **Campaign install page.** <br>• The URL, plus the `basecamp://app/muster_ui` and `basecamp://intent/basecamp.repositories.manage` links. <br>• What to untick. <br>• The trust statement from §2. <br>**Done:** `docs/runbooks/install-from-catalogue.md` and the site's install section. | ½ d | exo-dcc.2 (which network) |
+| 5 | **CI.** <br>• The release template plus the action. <br>• `modules.txt` naming `module` and `ui`. <br>• linux-amd64 and linux-arm64. <br>• Committed flake locks for release builds. <br>**Done:** `.github/workflows/lgx-variants.yml` builds both packages on hosted runners for linux-amd64, linux-arm64 and darwin-arm64 and merges them; `scripts/catalog-release.sh` takes that build (`exo-04f`, still open as of 2026-11-26). The suite itself still has no CI job (exo-1ec.2). | 1–3 d | — |
 | 6 | **exo-d4d.8.** <br>• The current module ABI. <br>• Off the forked builder. <br>• logos-module-builder#226. | 3–5 d + upstream review | #226, open with no review since 2026-09-02 |
-| 7 | **darwin-arm64.** | 2–5 d + a Mac | Step 5. The Nim cdylib has never been built on darwin |
+| 7 | **darwin-arm64.** <br>**Done:** built by the same workflow; releases carry it since `muster-v0.3.4`. | 2–5 d + a Mac | — |
 
-Steps 1–4 give strangers an installable Muster within about a week, whatever happens with steps 5–7.
+Steps 1–4 give strangers an installable Muster within about a week, whatever happens with steps 5–7. As of 2026-11-26 only step 6 (exo-d4d.8) is open.
 
 ## 4. What a stranger still meets
 
-- **Linux x86_64 only.** Elsewhere Muster shows as "Not Available".
+- **Linux and Apple Silicon only.** Until 0.3.4 releases carried only linux-amd64, and elsewhere Muster showed as "Not Available". Since 0.3.4 `muster_module` and `muster_ui` carry linux-amd64, linux-arm64 and darwin-arm64; windows-x86_64 is not built (`docs/design/platforms.md`). The `lez_msig_*` provers are linux-amd64 only.
 - **A paste, then a click.** No deep link carries a repository URL.
 - **Pre-ticked optional packages.** For example, `monero_node_module` brings `monerod_module`, a full node. The page says what to untick.
 - **EVM dependencies arrive even for a Monero-only participant**, unless they become optional.
@@ -69,19 +71,25 @@ Steps 1–4 give strangers an installable Muster within about a week, whatever h
 
 ## 5. Decisions for the operator
 
-1. **Ask Logos to list Muster?** Recommendation: build our own catalogue regardless, and ask only for a link.
+What was built, as of 2026-11-26, follows each item.
+
+1. **Ask Logos to list Muster?** Recommendation: build our own catalogue regardless, and ask only for a link. Built: our own catalogue.
 2. **The catalogue URL.** It is chosen once: strangers save it, and it is the catalogue's identity. **Decided 2026-10-08: this repo.** The catalogue is `catalog/` on `main`, served raw (`https://raw.githubusercontent.com/corpetty/muster/main/catalog/logos-repo.json`), and the `.lgx` files are assets of `muster-v<version>` releases.
-3. **Where releases build.** Recommendation: locally for the campaign, CI afterwards.
-4. **Signing.** Recommendation: unsigned now, like everyone else; choose a publisher key before 1.0.
+3. **Where releases build.** Recommendation: locally for the campaign, CI afterwards. Built: `muster_module` and `muster_ui` from CI's `lgx-variants` run (`--here` builds locally); the provers are built locally (`RELEASING.md`).
+4. **Signing.** Recommendation: unsigned now, like everyone else; choose a publisher key before 1.0. Built: unsigned, `trustedSigners` empty (`catalog/README.md`).
 5. **How the Monero modules are declared.**
    - Try a bundler-only bump to c8c4659, so optional dependencies reach the manifest.
    - Otherwise required: every install pulls them in, and a Monero load failure fails Muster.
    - The card-only install works today, but the modules stay silent (exo-dcc.11).
-6. **EVM dependencies:** optional in the same move, or kept required.
-7. **Platforms promised.** Recommendation: "Linux x86_64".
-8. **Pin our dependencies to the official catalogue** (`repositoryUrl`), so another added catalogue cannot shadow them. Supported by the resolver spec; lgpm and the load gate are *(unverified)*.
+
+   Built: `monero_wallet_backend` is an optional dependency of `muster_module` (`module/metadata.json`).
+6. **EVM dependencies:** optional in the same move, or kept required. Built: kept required (`keystore_module`, `eth_rpc_module`, `tx_sender_module`).
+7. **Platforms promised.** Recommendation: "Linux x86_64". Built: linux-amd64, linux-arm64 and darwin-arm64 since 0.3.4 (step 7).
+8. **Pin our dependencies to the official catalogue** (`repositoryUrl`), so another added catalogue cannot shadow them. Supported by the resolver spec; lgpm and the load gate are *(unverified)*. Not built: no dependency carries a `repositoryUrl`.
 
 ## 6. Fallback if this is blocked past ~2026-11-01
+
+Not needed: the catalogue shipped on 2026-10-09. Kept as written.
 
 The catalogue is ours, so nobody can refuse it. What can fail, and what to do, in order:
 1. **The CI build fails:** publish locally built `.lgx` files. That is already step 2.
@@ -129,12 +137,12 @@ The catalogue is ours, so nobody can refuse it. What can fail, and what to do, i
 - **The link prompt shows the package name**, "muster_ui", not "Muster".
 - **Every package is unsigned, ours and the official ones alike.** The package manager logs `Warning: Package is unsigned: …` for all 15 and installs them.
 
-**What publishing needs.**
+**What publishing needed** (as of 2026-10-08; done for `muster-v0.2.0` on 2026-10-09). The current procedure is `RELEASING.md`.
 1. Run `scripts/catalog-release.sh` on a clean `main`.
 2. `gh release create muster-v0.2.0` with the two `.lgx` files; the script prints the command.
 3. Commit `catalog/index.json` and `catalog/icons/` to `main`.
 
-Until step 3, the committed `catalog/logos-repo.json` points at an index that does not exist. Add still succeeds, because it fetches only `logos-repo.json` (`refreshOne`), but the catalogue then lists no packages.
+Until step 3, the committed `catalog/logos-repo.json` pointed at an index that did not exist. Add still succeeded, because it fetches only `logos-repo.json` (`refreshOne`), but the catalogue then listed no packages.
 
 ## Sources
 

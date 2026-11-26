@@ -5,7 +5,9 @@
 > and muster dropped both. Native LEZ reaches an account at genesis, over the bridge, or by
 > transfer. Read the faucet mentions below as v0.2.x history.
 
-**Status:** design note / plan (2026-09-14). Reintroduces the Logos Execution Zone
+**Status:** design note / plan (2026-09-14); P-L1–P-L4 landed (PR #64 and after: the real
+`LpLezCore`, Mode A's Send λ panel), and Mode B's core and composer landed (exo-45e.9, .7). §8
+marks each phase. Reintroduces the Logos Execution Zone
 (LEZ) into muster as a real `ChainAdapter`, and as a *coordinated* transfer — a room
 deciding to move a shielded asset together. Grounds the earlier mock in the actual
 `lez_core` surface and the traps recorded the expensive way.
@@ -98,8 +100,10 @@ JSON-RPC. It is a note/commitment shielded system (Zcash-lineage), reachable two
   So the adapter must activate a fresh account (and surface "not yet activated" rather
   than a silent black hole). The POC also fixes the config: HTLC program id
   `9eb88f51aae87a58fb74b8d2dc7327b39333585e63280e3f9cf8d86dac0ed702`, explorer
-  `https://explorer.testnet.lez.logos.co/transaction/<hash>`, and the LEZ charges **no
-  fees** (a buyer can start empty).
+  `https://explorer.testnet.lez.logos.co/transaction/<hash>`, and the LEZ charged **no
+  fees** (a buyer could start empty). That was v0.2.x: since v0.3 a public transaction pays a
+  fee up to its declared cap and a private one is fee-exempt, and on v0.4 a private one pays
+  inside its proof.
 
 ## 3. The `lez_core` surface → the `ChainAdapter` seam
 
@@ -186,7 +190,7 @@ This is why the disclosure square (§adapter) lives at the seam and not behind a
 threshold: the rail is decided by the pair (Alice's source form, the form Bob shared),
 and the room shows the honesty before Alice commits.
 
-**Mode B — the room agrees (opt-in). [core landed 2026-09-16, exo-5be]** The generic piece is done: when an invoke effect names a `counterparty` field, `invoke.manifest` declares a COUNTERPARTY address slot bound to that arg, so the room asks the recipient to share their LEZ key-node (`coordinate_share_material`, K5/K6) and the offers machinery fills it from a shielded receive address (`lez_modeb_test`). The k-of-n endorsement + `coordinate_execute` path already exist. Remaining: the composer UI (request-first: propose a lez transfer with an open recipient) and the live shielded settle. Original design below.
+**Mode B — the room agrees (opt-in). [core landed 2026-09-16, exo-5be]** The generic piece is done: when an invoke effect names a `counterparty` field, `invoke.manifest` declares a COUNTERPARTY address slot bound to that arg, so the room asks the recipient to share their LEZ key-node (`coordinate_share_material`, K5/K6) and the offers machinery fills it from a shielded receive address (`lez_modeb_test`). The k-of-n endorsement + `coordinate_execute` path already exist. The composer UI (request-first: propose a lez transfer with an open recipient) has since landed (exo-45e.7). Remaining: the live shielded settle. Original design below.
 
 **Mode B — the room agrees (opt-in).** When the room genuinely wants joint control over
 the funds, a LEZ transfer becomes a coordinated intent like any other:
@@ -223,28 +227,28 @@ by which address form he shares.
 
 ## 8. Plan
 
-- **P-L1 — the `LezAdapter` skeleton + seam mapping.** Implement `ChainAdapter` over a
+- **P-L1 — the `LezAdapter` skeleton + seam mapping. [landed, PR #64]** Implement `ChainAdapter` over a
   small `LezCore` seam (the `lez_core` calls, so tests use a fake and real runs use the
   `lp_*` client). Public accounts + `get_balance` + a public transfer, with the three
   error conventions → raise. No proving path yet. Unit-tested against a fake `LezCore`.
-- **P-L2 — shielded transfer + receive-by-scan.** `transfer_private` (async, 900s),
+- **P-L2 — shielded transfer + receive-by-scan. [landed, PR #64; ran on the testnet 2026-09-28]** `transfer_private` (async, 900s),
   `sync` + `list_accounts` discovery, delayed finality. The public↔private flow end to
   end against a fake, and against the real testnet once infra is wired.
-- **P-L3 — the real `lp_*` `LezCore`.** Consume `lez_core` as a `metadata.json`
+- **P-L3 — the real `lp_*` `LezCore`. [landed: `LpLezCore`, `wallet/lez_lp.nim`; funding and registration later dropped with v0.3]** Consume `lez_core` as a `metadata.json`
   dependency; the real client over `PluginProxy`, async + queued deferral. Wire funding
   (`claim_pinata`) + register-at-creation. Register the adapter in the wallet
   (`gLez = newLezAdapter(...)`).
-- **P-L4 — request → share → send (the default, Mode A, §6).** Extend the existing
+- **P-L4 — request → share → send (the default, Mode A, §6). [landed: `LezSend.qml`]** Extend the existing
   priming so a money verb on a LEZ room asks for the recipient's LEZ address, and
   `address-share` answers with a public account id **or** a shielded key node
   (`get_private_account_keys` → npk/vpk); the sender's `LezAdapter` then sends on the
   rail that pairing implies, showing the disclosure first. **No driver/threshold** —
   the info exchange is the coordination. Mostly reuses the address-request/address-share
   cards already in the build.
-- **P-L4b — agreement, opt-in (Mode B).** For rooms that want joint control: a LEZ
+- **P-L4b — agreement, opt-in (Mode B). [core and composer landed, exo-45e.9, .7; the live shielded settle remains]** For rooms that want joint control: a LEZ
   transfer as a coordinated intent (reuse the invoke driver + `coordinate_execute`), so
   the room approves k-of-n and the core settles via `lez_core`. A later, optional phase.
-- **P-L4c — on-zone enforcement (Mode B, trust-minimized).** An escrow / M-of-N guest
+- **P-L4c — on-zone enforcement (Mode B, trust-minimized).** [Since built as separate families: the LEZ multisig program (exo-a50.3) and lez-msig (exo-0d3).] An escrow / M-of-N guest
   program (`#[lez_program]`, the atomic-swap / `lez-multisig` pattern) the room settles
   against. The heaviest, latest phase; needs program deployment.
 - **P-L5 — the education surface.** The side-by-side (EVM leaks vs LEZ shields) the
@@ -252,6 +256,10 @@ by which address form he shares.
   disclosure choice (which address form they share).
 
 ## 9. Infra needed to run it real (the "point me at it" list)
+
+> As of 2026-11-26 this list is history. `lez_core` is a pinned dependency, the testnet runs
+> LEZ v0.3 with no faucet, and funding goes through `infra/lez/funder.sh` (one account to
+> fund per zone) or a local zone's genesis funder (`infra/lez/localnet.sh`).
 
 To move past the fake `LezCore` and run against the zone:
 - the **`lez_core` module** — repo + rev to add to `module/metadata.json` (owner/repo/

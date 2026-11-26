@@ -2,6 +2,12 @@
 
 2026-11-06, revised 2026-11-09 · Corey Petty · for Jarrad Hope · epic exo-267 · the full mapping: [logos-world.md](logos-world.md)
 
+**Status (2026-11-26).** Phase 1's pieces have landed: the charter, rounds from the pot, member
+changes, the quest record program and quests in the room (exo-267.1, .3, .6, .7, .8). The exit test
+(exo-267.5) passes in process and on a local LEZ v0.3 zone (2026-11-10); the run through the real
+runner and on the testnet are still ahead, the latter waiting on the port going upstream
+(exo-eb6.4.4.5). The sections below are the plan as written on 2026-11-09.
+
 Muster can be the rails for the orgs your world will form. A Muster room is the org, and its log is
 the org's ledger. A LEZ multisig gives the org a shared pot and a public name, and its votes on chain
 are a record anyone can check. The plan builds that in four phases. It starts with what you proposed:
@@ -32,9 +38,10 @@ none of it is a loose analogy. Each row below is a guarantee with tests behind i
 | A city gate at every border | Every proposal card answers what it does, what it needs, what it touches and who will see what |
 | An honest trade with a real counterparty | A split's payment counts only when the payee's own read of the chain confirms it |
 
-What Muster lacks is everything past the room's wall: a record of a quest that the chain itself
-keeps, a feed for records to land on, and the machinery (charter, roles, succession, federation) that
-turns a room into an org. The phases below build those.
+What Muster lacked on 2026-11-09 was everything past the room's wall: a record of a quest that the
+chain itself keeps, a feed for records to land on, and the machinery (charter, roles, succession,
+federation) that turns a room into an org. The phases below build those; the quest record and the
+charter have since landed (Phase 1).
 
 ## The plan at a glance
 
@@ -218,8 +225,9 @@ invariant with tests. Everything else stays legal and lands in the log with name
 | An outsider learning who is in a room from the store node | — |
 | Moving the pot without enough current members' votes (the chain enforces it) | — |
 
-Phase 1 adds two rows the chain will enforce once the quest program exists: naming someone as a
-quest's taker without their signature, and marking a quest confirmed without the confirmer's.
+Phase 1 adds two rows the chain enforces now that the quest program exists (exo-267.7): naming
+someone as a quest's taker without their signature, and marking a quest confirmed without the
+confirmer's.
 
 What an act meant is not Muster's to decide. The audit file can settle a dispute about evidence; it
 never says who was right.

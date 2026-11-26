@@ -22,5 +22,5 @@ rzup's toolchain). The private posture runs on LEE's state, on a local zone and 
 proofs (exo-05f): fee-account top-up, Create, deposit, payment, every fee in the proof from the group's
 fee account (D17), proved undisclosed (D18). Muster drives it through `msig_exec04`
 (`lez_msig_private_e2e`), and through the real UI on the devnet (`scripts/lez-msig-private-self-test.sh`). A
-private payee (sealed, claimed by it alone) and a private Call run on LEE's state; a private payee from the
-room is exo-ea3.
+private payee (sealed, claimed by it alone) and a private Call run on LEE's state. A private payee from the
+room shipped in Muster 0.4.0 (exo-ea3, closed); a private Call from the room is still open (exo-0d3.36).

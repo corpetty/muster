@@ -1,6 +1,6 @@
 # Real use on Basecamp: the platform's keys and chains, nothing seeded (epic exo-d4d)
 
-**Status:** proposal, 2026-10-03. Epic `exo-d4d`, slices `exo-d4d.1`–`.8` (§7; `pb dep tree exo-d4d`). Builds on [side-modules.md](side-modules.md) (exo-ff5, which
+**Status:** proposed 2026-10-03; mostly landed. R0–R2 and R4–R6 are closed (R6 passed on display on Sepolia, 2026-10-07, `docs/labbook/muster-in-basecamp-031.md`). Open as of 2026-11-26: R3 (`exo-d4d.4`), R8 (`exo-d4d.8`) and the typed attestation's K6c–K6d (`exo-149.6`). Epic `exo-d4d`, slices `exo-d4d.1`–`.8` (§7; `pb dep tree exo-d4d`). Builds on [side-modules.md](side-modules.md) (exo-ff5, which
 decides what may leave `muster_module`) and [keystore-module-backend.md](keystore-module-backend.md)
 (exo-149, whose K1, K2 and K5 have landed).
 **Reads with:** the Logos Module Atlas at Basecamp 0.3.1, `stacks/evm-wallet.md` §6 ("Using this
@@ -55,7 +55,8 @@ holds it, and it is already persistent.
 ## 3. Where muster's EVM code stands (mapped 2026-10-03)
 
 **Reads.** Two transports, both keyed by a URL, both synchronous with no budget on `main`
-(`wallet/rpc_budget.nim`, exo-14f, is on an unmerged branch):
+(`wallet/rpc_budget.nim`, exo-14f, was then on an unmerged branch; it has since landed, and every
+chain call runs under a deadline):
 
 - `wallet/evm_rpc.nim` (nim-web3): balance, call, gas price, chain id, nonce (pending and
   latest), send raw, receipt status, transfer-of, receipt logs, `eth_sendTransaction`,
@@ -81,7 +82,8 @@ account. Only Safe approvals can already route to `keystore_module`, behind
 
 **Approvals in the UI.** `muster_ui` never raises `evm.signing.approve`; `ui/metadata.json`
 has `"uses": []`. An approval waits until the person opens the signer by hand, or an
-`evm_signer_cli` operator approves headless.
+`evm_signer_cli` operator approves headless. (Since exo-149.3 the card raises
+`evm.signing.approve`, and `ui/metadata.json` declares it under `uses`.)
 
 **Seeding.** `MUSTER_DEV_SECP_KEY`, `MUSTER_RPC`, `MUSTER_KEY_PASSPHRASE` (default
 `muster-dev-passphrase`), the anvil owners and Safe (`OWNER0..2`, `SAFE_ADDR`, `gDevSafe`)
@@ -89,15 +91,16 @@ offered by `describe()`, and the `environment: eip155:31337` setting.
 
 ## 4. The host comes first
 
-Muster has never been installed into a Basecamp 0.3.1 release. Every `keystore_module` run so
-far is headless `logoscore` 0.3.1. The atlas's compatibility guide names what has to line up:
+As of 2026-10-03, Muster had never been installed into a Basecamp 0.3.1 release, and every
+`keystore_module` run was headless `logoscore` 0.3.1. R0 answered H1–H4 the same day
+(`docs/labbook/muster-in-basecamp-031.md`). The atlas's compatibility guide names what has to line up:
 
 | # | What | State |
 |---|---|---|
-| H1 | **`muster_module` loads.** The Nim backend defines the protocol-0.2 module ABI (7 exports). The host admits any `0.x` (rule 1), and `logoscore` 0.3.1 already loads it. | Expected to work; never tried in Basecamp |
-| H2 | **`muster_ui` renders.** A `ui_qml` plugin must share the host's SDK generation (rule 4). The UI pins builder `4717b9af` (2026-07-22); the 0.3.1 generation is builder `0.3.1` (`16e2f6bd`). | **Likely blank** (`std::bad_alloc` or "Timeout waiting for ui-host"). exo-eb6.6 |
-| H3 | **Packages install.** Dev `.lgx` → a nix-built Basecamp; `.#lgx-portable` → the release AppImage. Local installs do not resolve dependencies, so the catalog modules go in first. | Untested |
-| H4 | **Attribution.** `keystore_module.caller_identity()` from muster answers `{kind: module, identity: muster_module}` with an approver set. | Verified under `logoscore` 0.3.1 (exo-149.1); not in Basecamp |
+| H1 | **`muster_module` loads.** The Nim backend defines the protocol-0.2 module ABI (7 exports). The host admits any `0.x` (rule 1), and `logoscore` 0.3.1 already loads it. | **Verified** in Basecamp 0.3.1 (R0, 2026-10-03) |
+| H2 | **`muster_ui` renders.** A `ui_qml` plugin must share the host's SDK generation (rule 4). The UI pins builder `4717b9af` (2026-07-22); the 0.3.1 generation is builder `0.3.1` (`16e2f6bd`). | Feared blank (`std::bad_alloc` or "Timeout waiting for ui-host"). **Verified:** it renders, on the July builder and re-pinned to `0.3.1` alike (R0) |
+| H3 | **Packages install.** Dev `.lgx` → a nix-built Basecamp; `.#lgx-portable` → the release AppImage. Local installs do not resolve dependencies, so the catalog modules go in first. | **Verified:** the portable packages install, all 15 (R0) |
+| H4 | **Attribution.** `keystore_module.caller_identity()` from muster answers `{kind: module, identity: muster_module}` with an approver set. | Verified under `logoscore` 0.3.1 (exo-149.1), then in Basecamp 0.3.1 (R0) |
 | H5 | **Current module ABI.** Five exports missing from `logos-nim-sdk` (`grant_host_services`, the unload pair, `set_call_caller`, `accept_inbound_token`) plus a real `get_protocol_version`, then the builder #226 commits rebased on `0.3.1`. | Not needed to load (H1); needed to leave the forked builder and to read callers |
 
 H1–H4 are the first slice. H5 is real but not on the critical path.
@@ -244,14 +247,15 @@ time two people could use muster without anyone seeding it.
 ## 8. Open questions
 
 1. **Does the 0.2-generation `muster_module` load beside 0.9-generation catalog modules in
-   Basecamp, and call them?** It does under the runner (delivery v0.3.x; v0.3.2 is pinned) and under `logoscore`
-   (keystore_module). R0 answers it for Basecamp.
-2. **Sepolia or Hoodi for R6?** Both are seeded by `eth_rpc_module.init_defaults()`. Sepolia
-   has the Safe v1.4.1 deployments and more faucets, so it is the default.
-3. **The approval count.** A split debtor approves twice (agree with the room key: no prompt;
+   Basecamp, and call them?** Answered: yes. R0 loaded it in Basecamp 0.3.1 (2026-10-03), and R6
+   ran a split and a Safe through the catalog modules. (Delivery is now declared `>=0.3.2`; the
+   AppImage carries 0.3.3.)
+2. **Sepolia or Hoodi for R6?** Answered: Sepolia, which has the Safe v1.4.1 deployments and
+   more faucets. R6 ran there on 2026-10-07.
+3. **The approval count** (open as of 2026-11-26, exo-149.6). A split debtor approves twice (agree with the room key: no prompt;
    pay: one signer prompt). A Safe owner approves once per intent plus once per settle. Is a
    prompt per Safe approval acceptable, or does the K6 typed form need to batch the
    attestation into the same EIP-712 document? (It already shares one prompt as two legs.)
-4. **Verified reads by default?** `verifiedProxyMode` is device-wide and the user's. Muster
+4. **Verified reads by default?** (open as of 2026-11-26, exo-d4d.9) `verifiedProxyMode` is device-wide and the user's. Muster
    shows the route; it should not flip the mode. Whether the card should *ask* for verified
    mode before a large settle is a product question.

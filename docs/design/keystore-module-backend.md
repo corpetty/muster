@@ -1,6 +1,6 @@
 # keystore_module as muster's EVM key backend (epic exo-149)
 
-**Status:** K1 landed (2026-10-01). §4 decided 2026-10-01: C, plus A as a flagged interim; B is the target (exo-149.6).
+**Status:** K1–K5 landed (exo-149.1–.5, closed). §4 decided 2026-10-01: C, plus A as a flagged interim; B is the target (exo-149.6): ADR-017 accepted 2026-10-07, K6b landed (`coordination/attest_typed.nim`), K6c–K6d open as of 2026-11-26.
 **Sources:** `keystore_module` = logos-co/logos-evm-keystore-module@2318c679
 (`docs/specs.md` §request_approval; `rust-lib/src/approval.rs`, `keystore.rs`). The
 platform view of the EVM stack is in the Logos Module Atlas: `stacks/evm-wallet.md` and
@@ -19,8 +19,9 @@ muster's secp256k1 authorization key there:
   `{handle, receipt}` at once, and the signatures arrive only after a human approves.
 
 FileKeystore stays the fallback wherever keystore_module cannot attest muster. That
-includes the standalone runner, `make run` and the AppImage. `keystore_status` already
-says so (K1, `docs/labbook/keystore-caller-attribution.md`).
+includes the standalone runner, `make run` and the early demo AppImages. `keystore_status`
+already says so (K1, `docs/labbook/keystore-caller-attribution.md`). The release AppImage
+(since 0.3.0) is Basecamp itself, with `keystore_module` bundled (`infra/basecamp/bundle-0.3.2.tsv`).
 
 ## 2. What an in-app EVM approval signs today
 
@@ -84,7 +85,8 @@ the keystore cannot render them.
 
 **Decided (2026-10-01):** C, plus A as an interim labelled as such: behind a setting, off
 by default outside testnet, with the risk stated on the card. Then B as the target, via
-its own ADR (exo-149.6). K2's mechanics (§5) are the same under A and B, so they land
+its own ADR (exo-149.6): ADR-017, accepted 2026-10-07; its builders and verifiers (K6b) have
+landed. K2's mechanics (§5) are the same under A and B, so they land
 first.
 
 ## 5. The asynchronous seam (K2)

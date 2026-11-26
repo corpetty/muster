@@ -5,9 +5,9 @@ A release is one GitHub release, `muster-v<version>`, carrying two ways to run M
 | Asset | For whom | What it is |
 |---|---|---|
 | `Muster-<version>-Basecamp-<tag>-linux-x86_64.AppImage` | someone who wants to download one file and run it | Basecamp's own released AppImage with Muster and the Logos Official modules it needs already installed inside. `chmod +x`, run, click **Muster**. |
-| `muster_module-<version>-linux-amd64.lgx`, `muster_ui-<version>-linux-amd64.lgx`, `lez_msig_module-<its version>-linux-amd64.lgx` and `lez_msig_v04_module-<its version>-linux-amd64.lgx`, the private LEZ multisig's provers for LEZ v0.3 and v0.4 (optional; since 0.3.3 and 0.4.0) (or `muster_module-<version>.lgx`, `muster_ui-<version>.lgx`, one per package holding every platform, from `--from-run`) | someone who already runs Basecamp, or `logoscore` | the two portable packages. Basecamp installs them from Muster's catalogue (`catalog/`, [`docs/runbooks/install-from-catalogue.md`](docs/runbooks/install-from-catalogue.md)) and fetches the dependencies from Logos Official; `lgpm install --file` installs them by hand. |
+| `muster_module-<version>.lgx` and `muster_ui-<version>.lgx`, one per package holding every platform (linux-amd64, linux-arm64, darwin-arm64; `--here` builds `-<platform>` ones for this host only), and `lez_msig_module-<its version>-linux-amd64.lgx` and `lez_msig_v04_module-<its version>-linux-amd64.lgx`, the private LEZ multisig's provers for LEZ v0.3 and v0.4 (optional; since 0.3.3 and 0.4.0) | someone who already runs Basecamp, or `logoscore` | the portable packages. Basecamp installs them from Muster's catalogue (`catalog/`, [`docs/runbooks/install-from-catalogue.md`](docs/runbooks/install-from-catalogue.md)) and fetches the dependencies from Logos Official; `lgpm install --file` installs them by hand. |
 
-Both are built from the same commit, and the AppImage contains exactly the two `.lgx` files the release publishes.
+Both are built from the same commit, and the AppImage contains exactly the four `.lgx` files the release publishes (their linux-amd64 parts).
 
 ## Cut one
 
@@ -50,4 +50,4 @@ Add `infra/basecamp/release-<tag>.env` (the AppImage URL and sha256, the design-
 
 - **What is checked where.** The AppImage was run on the build machine (bugger), with a fresh profile under Xvfb. Its portability is Basecamp's: Muster adds only portable packages, the same ones a catalogue install puts in a profile.
 - **Updating inside the AppImage.** The baked-in Muster is part of the image. A newer Muster from the catalogue installs into the profile beside it; to move a person to a new Muster, ship a new AppImage.
-- **Retired:** the `v0.1.0-demo` and `v0.2.0-demo` AppImages were built from a local Basecamp checkout with uncommitted bake-in edits (`make appimage`). They cannot share a room with today's builds.
+- **Retired:** the `v0.1.0-demo` and `v0.2.0-demo` AppImages were built from a local Basecamp checkout with uncommitted bake-in edits (`make appimage`). They cannot share a room with today's builds. Neither can any release before 0.5.0, which signs every frame on a room's wire.

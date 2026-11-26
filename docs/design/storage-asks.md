@@ -1,7 +1,7 @@
 # What Muster would ask of Logos Storage
 
 **For:** the Logos Storage team (`logos-storage-nim`, `logos-storage-module`), through Corey and Jarrad.
-**Status:** rewritten 2026-10-19 after Giuliano's reply (below). On Muster's side, FileShare (the room swarm) runs end to end in Muster's own app: two instances share a file through `storage_module` 3.0.2 (`scripts/fileshare-self-test.sh`, branch `feat/room-swarm`). It has not yet been tried in Basecamp.
+**Status:** rewritten 2026-10-19 after Giuliano's reply (below). On Muster's side, FileShare (the room swarm) runs end to end in Muster's own app: two instances share a file through `storage_module` 3.0.2 (`scripts/fileshare-self-test.sh`). It merged in PR #339 (2026-10-21), ships since Muster 0.3.3, and ran in two Muster 0.3.5 Basecamps on 2026-11-13.
 **Reads with:** `docs/design/room-swarm.md` (the design), `docs/labbook/storage-from-muster.md` (the S0 spike, Q1–Q8, every command and result).
 
 ## The short version

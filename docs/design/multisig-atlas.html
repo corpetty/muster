@@ -319,7 +319,7 @@ details.gen pre{font-family:var(--mono);font-size:10.5px;background:var(--surfac
       <div class="chips" id="obs-status" aria-label="Status"></div>
     </div>
     <div class="obs-page" id="obs-page"></div>
-    <p class="note">Every field each observer can learn, across every action, and at which step it reaches them. The dark observers are outside the room. The store node's row is on every room-borne action: it sees the topic, the timing, and each frame's epoch number — never an event's contents. It also sees, in the clear today, who asks to join and the full roster at every admit; that is a known gap, tracked as exo-fbc.</p>
+    <p class="note">Every field each observer can learn, across every action, and at which step it reaches them. The dark observers are outside the room. The store node's row is on every room-borne action: it sees the topic and the timing — never an event's contents. Until exo-661.7 (closed) it also saw each frame's epoch number, who asked to join and the full roster at every admit; since then join requests are sealed to a join key the room announces, each grant is sealed whole to one member, and envelopes carry no epoch number.</p>
   </section>
 
   <section id="panel-compare" role="tabpanel" aria-labelledby="tab-compare" hidden>
@@ -345,7 +345,7 @@ details.gen pre{font-family:var(--mono);font-size:10.5px;background:var(--surfac
       <div class="dec"><span class="q">Signers outside muster</span><span>Yes, where the family has a standard format (PSBT, Safe Tx Service JSON, …), and always surfaced: the account chooser says so, and the card marks each outside signer's slot.</span></div>
       <div class="dec"><span class="q">No network binding</span><span>Accept, with an exposure row on the card. For LEZ, push upstream for a zone tag in the signed message.</span></div>
       <div class="dec"><span class="q">Vote-locus costs</span><span>Each voter pays their own vote transaction for now, so every member needs a funded chain account. A user-configured relayer can come later.</span></div>
-      <div class="dec"><span class="q">LEZ aggregate key</span><span>Accepted as the working assumption for Phase D; it stays marked unverified until a Phase D test proves it.</span></div>
+      <div class="dec"><span class="q">LEZ aggregate key</span><span>Accepted as the working assumption for Phase D, marked unverified until a Phase D test proved it. Proven 2026-09-25: an aggregate key owns a LEZ public account with no tweak (lez_frost_account_e2e).</span></div>
       <div class="dec"><span class="q">Threshold ECDSA (MPC)</span><span>Candidate. Prototype-grade libraries are fine while muster isn't production code. Before real transactions and users, re-choose the library.</span></div>
     </div>
   </section>
@@ -765,13 +765,15 @@ const PHASES = [
   ["A","The Safe, done properly — landed","Landed 2026-09-24 (epic exo-a50): accounts are disclosed by members into the room, every driver declares its family profile, one kind list, the Safe maps every field and refuses an unallowlisted delegatecall against the real Safe v1.4.1, settlement is a seam, and the card's ten rows come from the profile. Its family, evm.safe, is now built."],
   ["B","Bitcoin through PSBT — landed","Landed 2026-09-24 (exo-a50.2): P2WSH sortedmulti and single-leaf tapscript multi_a accounts disclosed in the room, spends built from the UTXOs your own node reports, a member signing in-app through the keystore, a signer outside muster signing the exported PSBT (counted, shown as such), witnesses finalized and broadcast — verified against Bitcoin Core on regtest, where Core's wallet was the outside signer. Both families are now built. A Keycard Shell cosigning over QR is the same PSBT path, not yet run on the device. The two cards read the same: with one leaf, tapscript reveals what P2WSH does."],
   ["C","The LEZ multisig program — core landed","Landed 2026-09-24 against an in-process model of lez-multisig: an account disclosed with its config, proposals put on chain by the proposer, each approval the member's own public vote transaction — re-read and checked against what the room reviewed before it is cast, confirmed after — and settlement that counts the votes on chain. Then live: the program, rebuilt for LEZ v0.2.4, was deployed to the public testnet (logos-co/lez-multisig#45) and the room drove it there. Since the testnet moved to LEZ v0.3.0 it is ported to v0.3's program ABI and driven from the room on a local v0.3 zone; the testnet run on v0.3 is still ahead."],
-  ["D","FROST, in the room — landed","Landed 2026-09-25 (exo-a50.4): a key ceremony (ChillDKG) held in the room, and a spend the chain can't tell from a single signer — on a real Bitcoin Core regtest a 2-of-3 spends with one 64-byte signature, and an aggregate key owns an untweaked LEZ public account. FROST signing and ChillDKG are held to their draft BIPs' vectors. Demo-grade: not constant time."]
+  ["D","FROST, in the room — landed","Landed 2026-09-25 (exo-a50.4): a key ceremony (ChillDKG) held in the room, and a spend the chain can't tell from a single signer — on a real Bitcoin Core regtest a 2-of-3 spends with one 64-byte signature, and an aggregate key owns an untweaked LEZ public account. FROST signing and ChillDKG are held to their draft BIPs' vectors. Demo-grade: not constant time."],
+  ["RFP-005","lez-msig — accepted","A LEZ program that verifies M-of-N BIP-340 approvals itself at execution; the room's effect is the proposal's exact bytes (exo-0d3). It runs on LEZ v0.3 and v0.4, in both postures, public and private, and is deployed immutable on the LEZ 0.4.0-rc3 devnet; Muster 0.4.0 shipped it on v0.4. RFP-005 was accepted on 2026-11-26 as logos-co/rfp#299 (docs/proposals/RFP-005-lez-msig.md). What is left is in docs/proposals/RFP-005-roadmap.md."]
 ];
 function renderPlan(){
   document.getElementById("phases").innerHTML = PHASES.map(([p, h, d]) => {
     const fams = F.filter(f => f.muster.phase === p || (p === "A" && f.id === "evm.safe")
-      || (p === "B" && ["btc.p2wsh-sortedmulti", "btc.tapscript-multi-a"].includes(f.id)));
-    return `<div class="phase"><span class="ph">Phase ${p}</span><h3>${esc(h)}</h3><p>${esc(d)}</p>
+      || (p === "B" && ["btc.p2wsh-sortedmulti", "btc.tapscript-multi-a"].includes(f.id))
+      || (p === "RFP-005" && f.id.startsWith("lez.msig")));
+    return `<div class="phase"><span class="ph">${p.length === 1 ? "Phase " + p : p}</span><h3>${esc(h)}</h3><p>${esc(d)}</p>
       <div class="fams">${fams.map(f => `<button class="linkish" data-id="${f.id}">${esc(f.id)} · ${f.muster.status}</button>`).join("")}</div></div>`;
   }).join("");
   document.querySelectorAll("#phases .linkish").forEach(b => b.onclick = () => { state.sel = b.dataset.id; store.set("sel", state.sel); setTab("atlas"); render(); });

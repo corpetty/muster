@@ -42,7 +42,9 @@ Two v0.4 differences the scripts carry: a public account no one has used yet is 
 by its key (`funder.sh fund <id> <amount> <public key hex>`), and deploys are `--immutable`.
 
 The v0.2.4 line is the chain for `module/tests/lez_multisig_live_e2e.nim` (exo-3c9) and the
-LEZ FROST e2e tests, until they move to v0.3 (exo-b87, exo-9ed). The multisig test deploys
+v0.2.4 LEZ FROST e2e tests (`lez_frost_account_e2e`, `lez_frost_room_e2e`). Their v0.3
+successors run on the v0.3 zone: `lez_frost_v030_e2e` and `lez_frost_room_v030_e2e`
+(exo-eb6.4.3, closed) and `lez_multisig_live_v030_e2e` (exo-eb6.4.4). The v0.2.4 multisig test deploys
 the program when `MUSTER_LEZ_MULTISIG_BIN` names the guest binary, built from
 logos-co/lez-multisig PR #45 or later, ImageID 2ced3d30…d4c7.
 

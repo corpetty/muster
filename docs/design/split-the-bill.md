@@ -1,6 +1,6 @@
 # Split the bill: the room agrees who owes what, and each person pays their own share
 
-**Status:** design, 2026-09-28. Epic `exo-a90` (pebbles; `pb dep tree exo-a90` for live status; slices `exo-a90.1`–`.11`). **S0–S5 landed** (2026-09-28): the core seams, the `evm.split` driver, paying and confirming (end to end on anvil, `split_anvil_e2e`), the hosted methods, and the UI (§7), driven end to end through the real runner by `scripts/split-self-test.sh`. The composer and card were looked at on a display (Xvfb) and fixed, exo-9a4. `lez.split` — the private split, §4.7 — is built, hosted and in the UI, and **ran end to end on the LEZ testnet** (2026-09-28). **S9**: the typed spec `contracts/specs/derived-exo-a90.spec.json` (six oracles, graded 6/6). **Later families on the same seams:** `btc.split` (§4.9, exo-d17) and `monero.split`, the XMR payment request (exo-dcc.5, ADR-018): built, hosted and in the UI, confirmed only by the payee's own Monero wallet, never netted; its design is `monero-in-rooms.md`, its record `docs/labbook/xmr-payment-request.md`.
+**Status:** design, 2026-09-28. Epic `exo-a90` (pebbles; `pb dep tree exo-a90` for live status; slices `exo-a90.1`–`.11`). **S0–S5 landed** (2026-09-28): the core seams, the `evm.split` driver, paying and confirming (end to end on anvil, `split_anvil_e2e`), the hosted methods, and the UI (§7), driven end to end through the real runner by `scripts/split-self-test.sh`. The composer and card were looked at on a display (Xvfb) and fixed, exo-9a4. `lez.split` — the private split, §4.7 — is built, hosted and in the UI, and **ran end to end on the LEZ testnet** (2026-09-28). **S9**: the typed spec `contracts/specs/derived-exo-a90.spec.json` (six oracles, graded 6/6). **Later families on the same seams:** `btc.split` (§4.9, exo-d17) and `monero.split`, the XMR payment request (exo-dcc.5, ADR-018): built, hosted and in the UI, confirmed only by the payee's own Monero wallet, never netted; its design is `monero-in-rooms.md`, its record `docs/labbook/xmr-payment-request.md`. As of 2026-11-26 every slice and the backlog (`exo-a90.11`) are closed; open is `exo-a90.21`, a split run across two machines.
 **Reads with:** `multisig-landscape.md` (families, profiles, the card's fixed rows; this adds one locus to its vocabulary), `action-manifest.md` (the manifest and the credibility axis), `material-and-disclosure.md` (who supplies what; request-first), `lez-adapter.md` (the four LEZ rails and what each discloses), `docs/00-vision.md` (the education mission), FURPS F-3 / F-4 / F-5 / F-10 / F-16 / F-20 / FS-7 / FS-9.
 **Prototype:** `ui/prototype/coordination-prototype-v2.html`, the "Split the Lisbon offsite costs" room ("four wallets, no shared account — the room is the only thing holding this together") and the `split` plugin ("even shares, settles to personal wallets").
 
@@ -153,12 +153,14 @@ The grade is honest about what a confirmation is. It is the creditor's statement
 
 ### 4.6 A family per rail
 
-One driver (`drivers/split.nim`) implements two families, the way `btc_multisig.nim` implements two:
+One driver (`drivers/split.nim`) implements the split families, the way `btc_multisig.nim` implements two. This section designed the first two; `btc.split` (§4.9) and `monero.split` (`monero-in-rooms.md`) came later on the same driver:
 
 | family | kind | policy | what the chain learns | status |
 |---|---|---|---|---|
 | `evm.split` | `evm-split` | `evm-split@eip155:<id>` | every payment: payer, payee, amount. Several payments to one address, close together, **link the group**. | S2 (this epic) |
 | `lez.split` | `lez-split` | `lez-split@lez:<zone>` | nothing: shielded payee, private rail, so there is no payer, payee or amount on chain | S8 |
+| `btc.split` | `btc-split` | `btc-split@bip122:<genesis prefix>` | every payment: its inputs name the payer, and the payee and amount are public (§4.9) | exo-d17 |
+| `monero.split` | `monero-split` | `monero-split@monero:<genesis prefix>` | the effect is shielded: no policy, no signers (the registry's `reveals`); the creditor's own wallet confirms at a subaddress (`monero-in-rooms.md`) | exo-dcc.5 |
 
 The policy is qualified by the **CAIP-2 chain** it settles on, in the same way an account-bound kind is qualified by its CAIP-10 account (`kinds.nim`). The intent id commits to the policy, so the same split on two chains is two intents. The driver instance then knows its chain, and its profile is complete. The kind list gains `settlesOn` (the CAIP-2 namespaces a kind's qualifier may name), and `driverForPolicy` resolves a chain-qualified kind through the host's room builder with the roster.
 
@@ -355,7 +357,7 @@ The **split body** (S5) shows one row per person: name, amount, and state (*owes
 | **S7** `exo-a90.8` e2e | `split_anvil_e2e` green on a live anvil |
 | **S8** `exo-a90.9` `lez.split` | the private split on `FakeLezCore`, then the testnet |
 | **S9** `exo-a90.10` typed spec | `derived-exo-a90.spec.json` via `discuss-issue` |
-| backlog `exo-a90.11` | FX, proposer ≠ creditor, netting, ERC-20, Bitcoin |
+| backlog `exo-a90.11` | FX, proposer ≠ creditor, netting, ERC-20, Bitcoin — **done** (closed; §4.9–§4.13) |
 
 ## 10. Decisions and open questions
 

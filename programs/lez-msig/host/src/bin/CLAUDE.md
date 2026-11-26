@@ -8,4 +8,5 @@
   `derive` (the private PDA from the group secret), `exec` (prove and send one instruction over the
   multisig's current note; it answers with the new note), and `fund` (a development-only shield
   from a key passed in). Muster builds and signs everything else; this exists because proving needs
-  LEZ's Rust prover. A Logos module replaces it (RFP U.1).
+  LEZ's Rust prover. The Logos module `lez_msig_module` (`../../../module/`, RFP U.1) runs the same
+  `exec_request`; `msig_exec` stays as its CLI, for tests (`lez_msig_private_e2e`).

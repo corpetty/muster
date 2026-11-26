@@ -151,7 +151,7 @@ Run these in order. Each beat has **what's on screen**, **say this**, and **the 
 - **Now open the three receipts that make this different from any other client:**
   - **Provenance** (`coordinate_provenance`): every action in the room — messages,
     proposals, signatures, submits, membership changes — classed by *how you know it*
-    (a room-sealed message names its author but not by a verified signature; a
+    (a message carries its author's signature, bound to the room, since exo-f76; a
     driver-verified signature proves who; a submit is an external read). Provenance for
     *everything*, not just the signing path.
   - **A self-verifying proof** (`coordinate_proof` → `coordinate_verify_proof`): export a
@@ -174,7 +174,9 @@ End on the residual leak, because naming it is the point:
 > the room-native rail stay inside the conversation. What Muster does **not** hide is the
 > conversation *graph*: a store node sees which topics you subscribe to and when you
 > publish and fetch. End-to-end encryption doesn't cover that. Closing it needs a mixnet
-> at the transport layer — the Logos stack is building one — not an app change. Muster
+> at the transport layer, not an app change. Muster's opt-in `mix` setting (exo-dcc.4)
+> sends a room's messages over the Logos mixnet, which hides which member sent each one;
+> it does not hide who reads the room, since reading is a store query. Muster
 > names that observer on every card (the store-node rows) rather than quietly omitting the
 > observer who sees the most. A curriculum that teaches 'who can see what' and then drops
 > the observer who sees the most is marketing, not teaching."
@@ -195,4 +197,4 @@ That line is the whole ethos. It is also the bridge to the concepts runbook.
 | The log can't be tampered undetected | `coordinate_proof` / `coordinate_verify_proof` (recompute + refuse) |
 | Who can see what, at every step | `coordinate_flow` (field × observer matrix, store node always present) |
 | Same agreement, different leak | run Safe then FROST; compare what left the room |
-| The store-node metadata gap | the store-node rows on every card; say the mixnet closes it |
+| The store-node metadata gap | the store-node rows on every card; say the opt-in `mix` setting hides who sent, not who reads |

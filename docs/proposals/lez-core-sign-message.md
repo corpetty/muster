@@ -2,7 +2,8 @@
 
 Status: **filed 2026-10-24** as
 [logos-blockchain/logos-execution-zone-module#73](https://github.com/logos-blockchain/logos-execution-zone-module/issues/73),
-after the operator's review. The text below is what was filed.
+after the operator's review. The text below is what was filed. As of 2026-11-26 the issue is
+open with no reply, so the questions at its end are still unanswered.
 
 ---
 

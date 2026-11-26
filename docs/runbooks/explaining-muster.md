@@ -153,8 +153,10 @@ nullifier, nothing else) and the leakage story tells itself.
 Content is protected; the **conversation graph is not**. One content topic per
 conversation means a store node sees your subscription set and your publish/fetch timing —
 that *is* the graph, pseudonymously, and E2E encryption doesn't hide it. Closing it needs a
-mixnet at the transport layer (the Logos stack is building one, `LOGOS-MIXNET`, status
-`raw`), not an application change. Running your own store node is not a fix — it protects
+mixnet at the transport layer, not an application change. Muster's opt-in `mix` setting
+(`exo-dcc.4`, off by default) sends a room's messages over the Logos mixnet, which hides
+which member sent each one; it does not hide who reads a room, since reading is a store
+query from the reader's own address (the Ordering row in §4c). Running your own store node is not a fix — it protects
 the operator's metadata, not that of the people they talk to. **Name the gap at the step
 where it applies; that honesty is the credibility.**
 
@@ -259,4 +261,4 @@ teaching value of a stack is what it makes visible, including about itself.
 | Credibility is imperative vs motivational vs exposed | the claims registry `credibility` field; `docs/design/action-manifest.md` §2 |
 | We classify, never score | no numeric score anywhere in the card/registry — by rule |
 | Re-derivation flips signing to imperative | F-4 vs the Bybit blind-signing failure |
-| The residual leak is the conversation graph | FS-9; the mixnet (`LOGOS-MIXNET`, status `raw`) closes it |
+| The residual leak is the conversation graph | FS-9; the opt-in `mix` setting hides who sent, not who reads (`exo-dcc.4`) |

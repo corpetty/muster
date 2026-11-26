@@ -2,8 +2,8 @@
 
 ## Run them
 
-One command runs every test that needs no chain — 99 unit tests and the 55 invariant
-probes under `probes/`, in parallel:
+One command runs every test that needs no chain — 208 unit tests and the 99 invariant
+probes under `probes/` (counted 2026-11-26), in parallel:
 
 ```bash
 tests/run-suite.sh                  # unit tests + probes
@@ -39,18 +39,25 @@ nim runs `clang` from there. With no `timeout` it uses nixpkgs coreutils'.
 |---|---|---|
 | `safe_anvil_e2e`, `safe_real_anvil_e2e`, `coordinate_submit_anvil` | anvil + the Safe fixture, `infra/anvil/devnet.sh` | `<safeAddr> [rpcUrl]` (`http://127.0.0.1:8545`) — the Safe address is required |
 | `btc_regtest_e2e`, `phase_d_exit_test` | a **fresh** Bitcoin Core regtest, `infra/bitcoind/regtest.sh` | `[rpcUrl] [user] [password]` (`http://127.0.0.1:18443`, `muster`, `muster`) |
-| `lez_multisig_live_e2e`, `lez_frost_account_e2e`, `lez_frost_room_e2e` | a LEZ v0.2.4 sequencer, `infra/lez/localnet.sh`, or the public testnet | `[sequencerUrl] [blockSeconds]` (`http://127.0.0.1:3040`, `15`); `lez_multisig_live_e2e` also reads `MUSTER_LEZ_MULTISIG_BIN` |
+| `lez_multisig_live_e2e`, `lez_frost_account_e2e`, `lez_frost_room_e2e` | a local LEZ v0.2.4 sequencer, `MUSTER_LEZ_VERSION=v0.2.4 infra/lez/localnet.sh` (the public testnet runs v0.3 since 2026-09-30) | `[sequencerUrl] [blockSeconds]` (`http://127.0.0.1:3040`, `15`); `lez_multisig_live_e2e` also reads `MUSTER_LEZ_MULTISIG_BIN` |
 | `lez_frost_v030_e2e`, `lez_frost_room_v030_e2e`, `lez_multisig_live_v030_e2e` | a local LEZ **v0.3.0** zone, `infra/lez/localnet.sh`, or the testnet (`https://testnet.lez.logos.co 40`) once its funder holds LEZ: every account the tests use is funded by the zone's funder, `infra/lez/funder.sh`, `MUSTER_LEZ_E2E_FUND` base units each (default 1 LEZ; on the testnet 50000000 for the multisig, 200000000 for FROST) | `[sequencerUrl] [blockSeconds]` (`http://127.0.0.1:3040`, `15`); `lez_multisig_live_v030_e2e` takes the deployed v0.3 multisig's program account as a third argument or `MUSTER_LEZ_MULTISIG_V03_PROGRAM`, or deploys the port's guest first when `MUSTER_LEZ_MULTISIG_V03_BIN` names it (`localnet.sh deploy`) |
 | `quest_room_v030_e2e` | a local LEZ **v0.3.0** zone, `infra/lez/localnet.sh`, with the multisig port and `programs/lez-quest` deployed | `[sequencerUrl] [blockSeconds] [multisigProgram] [questProgram]`; or `MUSTER_LEZ_MULTISIG_V03_BIN` and `MUSTER_LEZ_QUEST_BIN` name the two guests to deploy first (exo-267.8) |
 | `circle_rounds_v030_e2e` | a local LEZ **v0.3.0** zone, `infra/lez/localnet.sh`, with the multisig port deployed | `[sequencerUrl] [blockSeconds] [multisigProgram]`; or `MUSTER_LEZ_MULTISIG_V03_BIN` names the guest to deploy first (exo-267.3) |
 | `circle_exit_v030_e2e` | a local LEZ **v0.3.0** zone with the multisig port and `programs/lez-quest` deployed | `[sequencerUrl] [blockSeconds] [multisigProgram] [questProgram]`; or `MUSTER_LEZ_MULTISIG_V03_BIN` and `MUSTER_LEZ_QUEST_BIN` (exo-267.5) |
+| `lez_msig_live_e2e` | a local LEZ v0.3 zone, `infra/lez/localnet.sh` | `[sequencerUrl]` (`http://127.0.0.1:3040`); `MUSTER_LEZ_MSIG_PROGRAM` names the deployed lez-msig, or `MUSTER_LEZ_MSIG_BIN` its guest to deploy first (exo-0d3) |
+| `lez_msig_private_e2e` | a dev-mode local LEZ zone, `infra/lez/localnet.sh` (v0.3; `MUSTER_LEZ_VERSION=v0.4…` for the 0.4 line), and `msig_exec` built in `programs/lez-msig` | `[sequencerUrl]` (`http://127.0.0.1:3040`); `MUSTER_LEZ_MSIG_PROGRAM` names the deployed program (exo-efa) |
+| `split_btc_regtest_e2e`, `settle_up_btc_regtest_e2e` | a **fresh** Bitcoin Core regtest, `infra/bitcoind/regtest.sh` | `[rpcUrl]` (`http://127.0.0.1:18443`) |
+| `split_erc20_anvil_e2e`, `settle_up_erc20_anvil_e2e` | any fresh anvil (chain id 31337, its default funded accounts) | `[rpcUrl]` (`http://127.0.0.1:8545`; their headers run anvil on `8547`) |
+| `xmr_msig_regtest_e2e`, `xmr_msig_setup_regtest_e2e`, `xmr_msig_spend_regtest_e2e` | a private Monero regtest chain with wallet RPCs, `infra/monero/regtest.sh up 4` | none (ADR-020, exo-dcc.34) |
+| `xmr_msig_stagenet_live` | three members' and a funder's `monero-wallet-rpc` on stagenet, the funder holding stagenet XMR | `XMR_STAGE_FUNDER`, `XMR_STAGE_MEMBERS`, `XMR_STAGE_FUND`, `XMR_STAGE_SPEND`; `XMR_STAGE_RESUME` reuses an earlier run's multisig |
 | `split_anvil_e2e` | any fresh anvil (chain id 31337, its default funded accounts; no Safe) | `[rpcUrl]` (`http://127.0.0.1:8547`) |
 | `settle_up_across_anvil_e2e` | any fresh anvil (chain id 31337, its default funded accounts); the Bitcoin split it covers needs no node — it goes final by its creditor's word | `[rpcUrl]` (`http://127.0.0.1:8545`) |
 
 ```bash
 SAFE=$(infra/anvil/devnet.sh | grep -oE '0x[0-9a-fA-F]{40}' | tail -1)   # from the repo root
 TEST_ARGS="$SAFE" module/tests/run-suite.sh e2e coordinate_submit_anvil
-TEST_ARGS="https://testnet.lez.logos.co 40" module/tests/run-suite.sh e2e lez_multisig_live_e2e
+MUSTER_LEZ_VERSION=v0.2.4 infra/lez/localnet.sh                           # a local v0.2.4 sequencer
+module/tests/run-suite.sh e2e lez_multisig_live_e2e
 ```
 
 The exophial spec oracles under `probes/` are graded the same way the runner runs
@@ -114,7 +121,7 @@ wants (below), which the runner supplies.
 - `lez_multisig_rebuilt_test` (exo-3c9 — the rebuilt program's account-ids layout: target accounts committed + bound at execute, checked on the S5 re-read; the card names no bypass; count-only keeps #40; §5 holds the decoder and PDA derivation to real chain bytes, from a local LEZ v0.2.4 sequencer (`vectors/lez-multisig-v024/`) and from the public testnet deployment (`vectors/lez-multisig-testnet/`); the room accepts the testnet multisig as a `lez:testnet` account)
 - `lez_tx_test` (exo-3c9: LEZ v0.2.4 public transactions byte for byte against LEZ's own crates, `vectors/lez-tx-v024/` + its generator: instruction words, message borsh + hash, BIP-340 witnesses, sendTransaction payload, deployment, base58 ids; needs `$SECP`)
 - `lez_member_keys_test` (exo-3c9: fresh LEZ member keys per label, derived in the keystore, never exported; `$SECP` + `$SODIUM`)
-- `lez_multisig_live_e2e` (exo-3c9: the room drives the program on a REAL v0.2.4 chain: `infra/lez/localnet.sh`, or the public testnet with `https://testnet.lez.logos.co 40`; args `[sequencerUrl] [blockSeconds]`, `MUSTER_LEZ_MULTISIG_BIN` deploys first; needs the web3 closure (chronos, json-rpc, bearssl) + `$SECP` + `$SODIUM`)
+- `lez_multisig_live_e2e` (exo-3c9: the room drives the program on a REAL v0.2.4 chain: a local sequencer, `MUSTER_LEZ_VERSION=v0.2.4 infra/lez/localnet.sh` (the public testnet ran v0.2.4 until 2026-09-30); args `[sequencerUrl] [blockSeconds]`, `MUSTER_LEZ_MULTISIG_BIN` deploys first; needs the web3 closure (chronos, json-rpc, bearssl) + `$SECP` + `$SODIUM`)
 - `phase_c_exit_test` (exo-84f — the Phase C exit: the LEZ multisig vote locus against the program model: disclose + verify, propose on chain, a member's own vote after an S5 re-read, a mismatched pointer refused before any vote, settle on the chain's count, the card; needs `$SECP`)
 - `lez_settlement_test` (exo-0c9 — count the votes on chain, re-read at settle, Execute, final when Executed)
 - `lez_vote_test` (exo-12a1 — voting in the room: S5 read, cast, confirm, receipt + room-key attestation; refusals cast and publish nothing; needs `$SECP`)
@@ -252,10 +259,10 @@ nix shell nixpkgs#bitcoind -c bash infra/bitcoind/regtest.sh   # from the repo r
 module/tests/run-suite.sh e2e btc_regtest_e2e
 ```
 
-**A LEZ v0.2.4 sequencer.** `infra/lez/localnet.sh` runs one on `127.0.0.1:3040` (the
+**A LEZ v0.2.4 sequencer.** `MUSTER_LEZ_VERSION=v0.2.4 infra/lez/localnet.sh` runs one on `127.0.0.1:3040` (the
 first build takes 5–15 minutes; its header lists the toolchain, including what a machine
 with no system g++ needs, and `docs/labbook/lez-multisig-versions.md` the reasons).
 `lez_multisig_live_e2e` deploys the program first when `MUSTER_LEZ_MULTISIG_BIN` names the
 guest — `make build` in `logos-co/lez-multisig` (PR #45 or later), which reproduces the
-testnet's ImageID `2ced3d30…d4c7`. The public testnet works too:
-`TEST_ARGS="https://testnet.lez.logos.co 40"`.
+ImageID `2ced3d30…d4c7` the v0.2.4 testnet ran. That testnet is gone: it was reset to
+LEZ v0.3 on 2026-09-30, so these tests run on a local sequencer only.

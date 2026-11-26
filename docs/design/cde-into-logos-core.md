@@ -10,9 +10,9 @@ logos-core should provide two primitives that every module which signs, hashes, 
 
 The upstream case for canonical encoding is usually argued in the abstract ("you'll want determinism eventually"). It is more convincing when a real client *cannot show data* without it, and says so out loud.
 
-Muster now renders an activity **only from a declared, versioned schema**. When an effect declares a schema the client has no vocabulary for, the card draws a named **"⚠ Schema unknown"** failure — naming what was declared and why nothing is rendered from it — and hides the body and the Approve/Deny controls. It does **not** coerce the unknown into a payment, and it does **not** leave a blank pane. (`module/src/coordination/intents.nim` `effectSchema`; `ui/src/qml/MusterCard.qml`; test `module/tests/schema_unknown_test.nim`.)
+Muster now renders an activity **only from a declared, versioned schema**. When an effect declares a schema the client has no vocabulary for, the card draws a named **"⚠ Schema unknown"** failure — naming what was declared and why nothing is rendered from it — and hides the body and the Approve/Deny controls. It does **not** coerce the unknown into a payment, and it does **not** leave a blank pane. (`module/src/coordination/intent_events.nim` `effectSchema`, read by the fold in `intents.nim`; `ui/src/qml/MusterCard.qml`; test `module/tests/schema_unknown_test.nim`.)
 
-> **[SCREENSHOT — to add from a GUI session]** The "⚠ Schema unknown" card for a proposal whose effect declares an unrecognized schema, beside a normally-rendered payment card. Capture: launch `make run`, join a room, propose an effect with an unrecognized `effect` value (e.g. `{"effect":"frobnicate"}` via the invoke composer or a seeded message), and screenshot the resulting card. Drop the image at `docs/design/img/schema-unknown-card.png` and replace this block with it. The failure is deliberately screenshot-able — that is the point of making it a named state rather than an empty view.
+To see it: launch `make run`, join a room, and propose an effect with an unrecognized `effect` value (e.g. `{"effect":"frobnicate"}` via the invoke composer or a seeded message). The card names the failure. It is deliberately visible: that is the point of making it a named state rather than an empty view.
 
 That failure is only legible because the bytes underneath are deterministic and the schema is declared. Remove either property and the failure becomes "the panel is blank sometimes" — which hides exactly the problem the demonstration depends on. **Legible failure is the argument.** A platform that offers canonical encoding as a shared primitive lets every module fail this way; a platform that does not, leaves each module to reinvent determinism and get the silent-coercion path wrong.
 
@@ -66,7 +66,7 @@ This proposal is adopted when logos-core exposes the CDE encoder and the hash-in
 
 ## References
 
-- Motivating code: `module/src/coordination/intents.nim` (`effectSchema`), `ui/src/qml/MusterCard.qml`, `module/tests/schema_unknown_test.nim`.
+- Motivating code: `module/src/coordination/intent_events.nim` (`effectSchema`), `module/src/coordination/intents.nim` (the fold that reads it), `ui/src/qml/MusterCard.qml`, `module/tests/schema_unknown_test.nim`.
 - Primitives: `module/src/dcbor/dcbor.nim`, `module/src/hashing/hash_input.nim`.
 - Specs (acceptance oracles): `contracts/specs/derived-exo-d7c.spec.json` (CDE, invariant 5), `contracts/specs/derived-exo-449.spec.json` (hash-input, catastrophic).
 - Invariants 5 and 5b, and ADR-009: `CLAUDE.md`.

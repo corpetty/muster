@@ -581,7 +581,7 @@ footer a{color:var(--ink-2)}
     <div class="head">
       <p class="eyebrow">What a room can do today</p>
       <h2>One room, many ways to agree.</h2>
-      <p>The core is driver-generic. A driver says where the threshold lives — in a contract, in a script, in an aggregate key, in an on-chain vote, or with each person paying their own share — and the room coordinates it.</p>
+      <p>The core is driver-generic. A driver says where the threshold lives — in a contract, in a script, in an aggregate key, in an on-chain vote, in the program itself, in each member's wallet, or with each person paying their own share — and the room coordinates it.</p>
     </div>
     <div class="can">
       <article>
@@ -607,6 +607,18 @@ footer a{color:var(--ink-2)}
         <h3>LEZ multisig program</h3>
         <p>Logos's own chain. Each approval is the member's own on-chain vote, read back and confirmed by the room before it counts.</p>
         <div class="chains"><span class="tag built">built</span><span class="tag">LEZ</span></div>
+      </article>
+      <article>
+        <span class="loc">Threshold in the program, private by default</span>
+        <h3>lez-msig (RFP-005)</h3>
+        <p>Muster's own LEZ program. Approvals are collected in the room and verified inside the program at execution. In the private posture, the chain sees one proof per action: no member, no approval, no configuration. It runs on LEZ v0.3 and v0.4 and is deployed on the 0.4 devnet. Not audited yet.</p>
+        <div class="chains"><span class="tag built">built</span><span class="tag">LEZ, private</span><span class="tag">LEZ, public</span></div>
+      </article>
+      <article>
+        <span class="loc">Threshold in each member's wallet</span>
+        <h3>Monero multisig</h3>
+        <p>Each member's own Monero wallet holds its key. The room carries the setup rounds and the spend, and each wallet checks the transfer before it signs. Muster holds no Monero key. Experimental: stagenet only.</p>
+        <div class="chains"><span class="tag built">built</span><span class="tag">Monero, stagenet</span></div>
       </article>
       <article>
         <span class="loc">Each pays their own</span>
@@ -689,7 +701,7 @@ footer a{color:var(--ink-2)}
         </ul>
       </div>
     </div>
-    <p class="fine">Monero multisig stays out: upstream calls it experimental, and the platform's wallet does not expose it. Every XMR action is each person paying their own part. The plan: <a href="https://github.com/corpetty/muster/blob/main/docs/design/monero-in-rooms.md">Monero in rooms</a> · the build: <a href="https://github.com/corpetty/muster/blob/main/docs/labbook/xmr-payment-request.md">the labbook</a> · the spec: <a href="https://github.com/corpetty/muster/blob/main/contracts/specs/derived-exo-dcc.5.spec.json">derived-exo-dcc.5</a>.</p>
+    <p class="fine">A Monero multisig runs separately, through each member's own wallet, on stagenet only: upstream calls Monero multisig experimental, and the platform's wallet does not expose it. Every XMR request and payment is each person paying their own part. The plan: <a href="https://github.com/corpetty/muster/blob/main/docs/design/monero-in-rooms.md">Monero in rooms</a> · the build: <a href="https://github.com/corpetty/muster/blob/main/docs/labbook/xmr-payment-request.md">the labbook</a> · the spec: <a href="https://github.com/corpetty/muster/blob/main/contracts/specs/derived-exo-dcc.5.spec.json">derived-exo-dcc.5</a>.</p>
   </div>
 </section>
 
@@ -810,10 +822,10 @@ footer a{color:var(--ink-2)}
     <div class="head">
       <p class="eyebrow">Install</p>
       <h2>Add Muster's catalogue to Basecamp.</h2>
-      <p>Muster ships its own catalogue for <a href="https://github.com/logos-co/logos-basecamp">Logos Basecamp</a>. Add it once, then install Muster like any other app; Basecamp resolves every dependency from the official Logos catalogue. The latest release is <a href="https://github.com/corpetty/muster/releases/tag/muster-v0.3.0"><code class="mono">muster-v0.3.0</code></a>, published 2026-10-14.</p>
+      <p>Muster ships its own catalogue for <a href="https://github.com/logos-co/logos-basecamp">Logos Basecamp</a>. Add it once, then install Muster like any other app; Basecamp resolves every dependency from the official Logos catalogue. The latest release is <a href="https://github.com/corpetty/muster/releases/tag/muster-v0.5.0"><code class="mono">muster-v0.5.0</code></a>, published 2026-11-24, a security release; it cannot read rooms made by 0.4.x or earlier.</p>
       <p><b>No Basecamp yet?</b> The same release carries an AppImage: Basecamp 0.3.2 with Muster and every module it needs already inside. <a href="https://github.com/corpetty/muster/releases/latest">Download it</a>, <code>chmod +x</code> it, run it, and click <i>M</i> in the sidebar; the steps below are not needed.</p>
     </div>
-    <div class="needs" aria-label="What you need"><span class="tag">Linux x86_64 only</span><span class="tag">Logos Basecamp 0.3.2</span><span class="tag">about 650 MB of downloads</span><span class="tag">unsigned</span></div>
+    <div class="needs" aria-label="What you need"><span class="tag">Linux x86_64 or arm64, or Apple Silicon</span><span class="tag">Logos Basecamp 0.3.2</span><span class="tag">about 650 MB of downloads</span><span class="tag">unsigned</span></div>
     <div class="install">
       <ol class="isteps">
         <li>
@@ -835,11 +847,11 @@ footer a{color:var(--ink-2)}
         <span class="st">What adding it trusts</span>
         <h3>Read this before you add the URL.</h3>
         <ul>
-          <li><b>It publishes two packages, <code>muster_module</code> and <code>muster_ui</code>, and nothing else.</b> Basecamp takes the newest version of a package across every catalogue you enable, so a catalogue that listed an official package's name could replace it. Muster's never does; its release script refuses to.</li>
+          <li><b>It publishes only Muster's own packages:</b> <code>muster_module</code>, <code>muster_ui</code>, and the private LEZ multisig's two provers, <code>lez_msig_module</code> and <code>lez_msig_v04_module</code>. Basecamp takes the newest version of a package across every catalogue you enable, so a catalogue that listed an official package's name could replace it. Muster's never does; its release script refuses to.</li>
           <li><b>Every dependency comes from the official Logos catalogue</b>, which Basecamp enables by default: Delivery, the LEZ core, the EVM and RLN modules, and the optional Monero wallet modules.</li>
           <li><b>Nothing is signed.</b> That is true of the official catalogue too. Basecamp checks each download against the hash the catalogue lists, so you get the file it names. Nothing proves who built it.</li>
           <li><b>Muster runs inside your Basecamp session with no sandbox</b>, like every Basecamp module. Adding a catalogue means trusting its publisher with that.</li>
-          <li><b>Linux x86_64 only.</b> On other platforms Basecamp shows Muster as "Not Available".</li>
+          <li><b>Platforms.</b> Muster installs on Linux x86_64 and arm64 and on Apple Silicon. The multisig provers and the AppImage are Linux x86_64 only.</li>
         </ul>
         <p class="more">The full steps and the known rough edges: <a href="https://github.com/corpetty/muster/blob/main/docs/runbooks/install-from-catalogue.md">install from the catalogue</a> · <a href="https://github.com/corpetty/muster/tree/main/catalog">the catalogue</a> · <a href="https://github.com/corpetty/muster/releases">releases</a></p>
       </div>
@@ -862,7 +874,10 @@ footer a{color:var(--ink-2)}
           <li>The whole lifecycle in the UI — propose, approve, submit — against a real 2-of-3 Safe.</li>
           <li>Two instances converge over the live Logos network: join, ask, admit, re-key.</li>
           <li>A relaunched member re-enters its rooms and reads them again, its founding epoch included, on Logos Delivery 0.3.2.</li>
-          <li>Safe, Bitcoin, FROST and the LEZ multisig program, coordinated from the room.</li>
+          <li>Safe, Bitcoin, FROST, Monero (stagenet) and the LEZ multisig program, coordinated from the room.</li>
+          <li>lez-msig, private by default, on LEZ v0.3 and v0.4: both postures ran on the 0.4 devnet with real proving, from two Muster clients. Its RFP-005 proposal was accepted on 2026-11-26.</li>
+          <li>Every grant and message frame on a room's wire is signed by its author, since 0.5.0.</li>
+          <li>Files shared in a room, each sealed with its own key, on Logos Storage.</li>
           <li>Split the bill in ETH, tokens, Bitcoin, privately on the LEZ, and in XMR, where a one-payer split is a payment request (stagenet).</li>
           <li>Muster can send a room's messages through the Logos mixnet. It is an opt-in setting, built on Logos Delivery 0.3's sender anonymity. It hides which participant sent a message, not who reads a room: reading still asks a store node for the room directly.</li>
           <li>An install from Muster's own Basecamp catalogue.</li>
@@ -875,12 +890,13 @@ footer a{color:var(--ink-2)}
           <li>The multi-party runs across two machines: a Safe transaction settled over the live network, and resilience when a member drops mid-collection.</li>
           <li>An XMR payment on stagenet confirmed by the payee's own wallet end to end; paying from Basecamp's own wallet; mainnet.</li>
           <li>The LEZ multisig and a FROST ceremony, run across two instances.</li>
+          <li>For lez-msig, RFP-005's milestones: rotation on removal, a module and CLI for integrators on both LEZ lines, decoding any target before signing, the full chat-module binding, and an audit (<a href="https://github.com/corpetty/muster/blob/main/docs/proposals/RFP-005-roadmap.md">progress</a>).</li>
           <li>Every LEZ path live on the v0.3 testnet.</li>
           <li>Hiding who reads a room, and a plugin runtime beyond the sandbox.</li>
         </ul>
       </div>
     </div>
-    <p class="asof">As of 2026-10-09 · the current phase is in <a href="https://github.com/corpetty/muster/blob/main/CLAUDE.md#current-phase">CLAUDE.md</a></p>
+    <p class="asof">As of 2026-11-26 · the current phase is in <a href="https://github.com/corpetty/muster/blob/main/CLAUDE.md#current-phase">CLAUDE.md</a></p>
     <div class="ctas">
       <a class="btn primary" href="#install">Install in Basecamp <span class="arr" aria-hidden="true">→</span></a>
       <a class="btn" href="https://github.com/corpetty/muster#run-the-specified-client">Build from source</a>

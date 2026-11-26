@@ -3,7 +3,7 @@
 Repeatable scripts for demos and posts. Not specs — the specs are `docs/01-furps.md` and
 `contracts/specs/`; these are how to *show* what the specs guarantee.
 
-- [`ui-redesign-review.md`](ui-redesign-review.md): what the UI redesign (exo-720) still needs from a person. The new UI in the standalone app with two peers, card by card, then installed into a fresh Basecamp 0.3.2 from a catalogue served on this machine (`scripts/basecamp-local-catalogue.sh`). It ends with what to send back.
+- [`ui-redesign-review.md`](ui-redesign-review.md): the by-hand review of the UI redesign (exo-720), done 2026-10-14 and kept for the next review of the UI. The new UI in the standalone app with two peers, card by card, then installed into a fresh Basecamp 0.3.2 from a catalogue served on this machine (`scripts/basecamp-local-catalogue.sh`). It ends with what to send back.
 - [`install-from-catalogue.md`](install-from-catalogue.md): install Muster in Logos Basecamp 0.3.2 from Muster's own catalogue. Add the URL, install from Applications, untick the full Monero node, and read what adding the catalogue trusts. These are the stranger-facing steps the campaign page reuses. The maintainers' section tests a release from a local https server.
 - [`macos.md`](macos.md): build and check Muster on a Mac (Apple Silicon). The two packages
   with Nix, installed with their Logos Official dependencies into a Basecamp 0.3.2 profile;
@@ -17,7 +17,7 @@ Repeatable scripts for demos and posts. Not specs — the specs are `docs/01-fur
   Monero wallet mints the address and confirms the payment; the payer pays from any wallet
   through a `monero:` link or QR. Stagenet. The payment and confirmation steps have not yet
   been done with a real payment, and are marked.
-- [`xmr-multisig.md`](xmr-multisig.md): three people set up a 2-of-3 Monero multisig in a room and spend from it, each with their own `monero-wallet-rpc` holding their key (ADR-020). Stagenet. Each step ran on regtest with real wallets; the stagenet run through the UI is what the page asks for.
+- [`xmr-multisig.md`](xmr-multisig.md): three people set up a 2-of-3 Monero multisig in a room and spend from it, each with their own `monero-wallet-rpc` holding their key (ADR-020). Stagenet. Each step ran on regtest with real wallets, and the whole runbook ran on stagenet through the UI on 2026-10-17.
 - [`client-tour.md`](client-tour.md) — try everything by hand, two instances on one
   machine. `scripts/try-infra.sh up` brings up every local chain it uses, funded (anvil
   with the real Safe and an ERC-20; Bitcoin Core on regtest with a miner), and

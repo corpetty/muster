@@ -5,24 +5,24 @@ Status: **planned 2026-10-07. ADR-018 accepted 2026-10-08; the target network is
 
 ## 0. Where it stands (2026-10-09)
 
-Read from the pebbles on 2026-10-09; the multisig row was added on 2026-10-30, and the other rows
-were not re-read then. The pebbles win over this table.
+Read from the pebbles on 2026-10-09; the multisig row was added on 2026-10-30, and the installable,
+deal-desk and follow-up rows were re-read on 2026-11-26. The pebbles win over this table.
 
 | Phase | Pebble | State |
 |---|---|---|
 | 0 Ground truth | `exo-dcc.1` | **Done** (2026-10-08). Basecamp 0.3.2 and delivery 0.3.2; Muster reaches `monero_wallet_backend`, attested as `muster_module`; ADR-018 accepted. Two spike questions are still open, because they need a funded stagenet wallet: whether an incoming transfer shows in `history()` before it confirms, and how long a first sync takes. `exo-dcc.19` answers them |
 | 1 Messaging with no LEZ | `exo-dcc.2` | **Decided, not built.** The target is `logos.test` with a room gifter we run. Slices R2, R3, R4 (`rln-membership.md` §7). **Waits on funds**: native LEZ on LEZ classic for the gifter. Meanwhile (2026-10-09) the demo and live testing run on `logos.dev`, the default |
-| 1 An installable Muster | `exo-dcc.3` | **Published.** Version ranges and 0.2.0; `catalog/` and `scripts/catalog-release.sh`; a fresh Basecamp 0.3.2 installed Muster from a locally served copy; release `muster-v0.2.0` published 2026-10-09 with `catalog/index.json` on `main`. Ahead: CI builds, the fork exit, macOS |
+| 1 An installable Muster | `exo-dcc.3` | **Published.** Version ranges and 0.2.0; `catalog/` and `scripts/catalog-release.sh`; a fresh Basecamp 0.3.2 installed Muster from a locally served copy; release `muster-v0.2.0` published 2026-10-09 with `catalog/index.json` on `main`. Since then CI builds every release, and darwin-arm64 ships since 0.3.4; the current release is `muster-v0.5.0` (2026-11-24). Ahead: the fork exit (`exo-d4d.8`) |
 | 1 The mixnet | `exo-dcc.4` | **Done** (2026-10-08). An opt-in `mix` setting, off by default, sends only. Untested on `logos.test` |
 | 1 Install what's missing | `exo-dcc.10`, `.11` | **Done** (2026-10-08). Seen on display in Basecamp 0.3.2 |
 | 2 The XMR payment request | `exo-dcc.5`, `.20` | **Done, except the live payment** (2026-10-09). Spec `derived-exo-dcc.5`, 7/7. The UI was seen on display in Basecamp 0.3.2 with a real stagenet wallet, up to the payment. The live two-machine run is `exo-dcc.19`, which **waits on funds**: stagenet XMR for the payer. Detail: `docs/labbook/xmr-payment-request.md` |
 | 2 Send Monero (and every asset) | `exo-dcc.32`, `.33` | **Done** (2026-10-15). A request on the payee's behalf with the sender its only payer: paid at the address they shared, never one already backing a payment; proposing is the sender's agreement, the payee accepts, the sender pays from any wallet, the payee's wallet confirms. `xmr_send_test`. Since `.33` the same Send works in ETH or a token, BTC and LEZ (`send_any_asset_test`) |
 | 2 A room treasury: Monero multisig, coordinated (added 2026-10-30) | `exo-dcc.34` | **Built, and run on stagenet through the UI** (2026-10-17; ADR-020). Each member's own `monero-wallet-rpc` holds their key; the room carries the setup, the sync data and the partly signed transactions, and each signer's wallet checks the spend against the agreement before signing. Stagenet only, labelled experimental and pre-FCMP++; shipped since Muster 0.3.3. Design `monero-multisig-coordination.md`, runbook `docs/runbooks/xmr-multisig.md` |
 | 3 Pay from Basecamp's own wallet | `exo-dcc.6` | **Interim done** (2026-10-09): Pay with Monero Wallet copies the address and opens the wallet. The review intent `monero.wallet.review_send` is drafted for the wallet app and builds; it waits on being published upstream |
-| 4 The deal-desk demo | `exo-dcc.7` | **Not started.** Needs `.2`, `.3` and `.19`. `audit.nim` still refuses the split families |
+| 4 The deal-desk demo | `exo-dcc.7` | **Receipt landed** (2026-10-12): a split's signature-audit file carries its counted payments (`audit.nim`, `split_receipt_test`). The demo itself waits on `.2` and `.19` |
 | 5 The mainnet gate | `exo-dcc.8` | **Not started** |
 
-Smaller follow-ups, all open: a local copy of each room's log (`exo-dcc.14`, P2); a 0.3.2 catalogue file for the Basecamp harness (`.15`); readiness under `--access-policy enforce` (`.16`); the `frost_ceremony_room_test` flake (`.17`); upstream asks from the catalogue run (`.18`), the mix path (`.13`) and Monero Wallet's `failed` answer to `monero.wallet.unlock` (`.21`); a grader leftover (`.22`); a spec wording fix (`.23`).
+Smaller follow-ups still open (2026-11-26): readiness under `--access-policy enforce` (`exo-dcc.16`); upstream asks from the catalogue run (`.18`), the mix path (`.13`) and Monero Wallet's `failed` answer to `monero.wallet.unlock` (`.21`); a spec wording fix (`.23`). Closed since: a local copy of each room's log (`.14`), a 0.3.2 catalogue file for the Basecamp harness (`.15`), the `frost_ceremony_room_test` flake (`.17`) and a grader leftover (`.22`).
 
 **Waiting on funds.** Both are the operator's to fund. The public addresses are in `docs/06-session-handoff-2026-10-09.md` §4; the wallets themselves live outside the repo.
 - **`exo-dcc.19`, the live XMR payment:** stagenet XMR for the payer's wallet, from a stagenet faucet.
@@ -87,8 +87,9 @@ a wallet is open, the core is ungated.
 ## 3. What shaped this plan
 
 1. **The critical path is not Monero code.** Two things a stranger needs come first:
-   - **an installable build.** The last public AppImage (`v0.2.0-demo`) cannot share a room
-     with today's builds, and Muster is in no catalogue.
+   - **an installable build.** On 2026-10-07 the last public AppImage (`v0.2.0-demo`) could not
+     share a room with the builds of the day, and Muster was in no catalogue (since 2026-10-09 it is,
+     `exo-dcc.3`).
    - **messaging that needs no LEZ.** From about **2026-10-14**, `logos.test` rejects
      messages without RLN proofs. Each node then needs about 2.5×10⁸ native LEZ on the
      "LEZ classic" zone (logos-docs#519, `rln-membership.md`). The campaign promises no
@@ -302,8 +303,9 @@ intent)**
 - tx proofs upstream, for a chain-side receipt;
 - the swap, with RFP-003 M4, with a Muster room as the negotiation front end;
 - escrow, revisited after FCMP++;
-- a subaddress per share (a new effect version) if distinct amounts prove awkward;
-- macOS.
+- a subaddress per share (a new effect version) if distinct amounts prove awkward.
+
+(macOS was on this list; it shipped in 0.3.4.)
 
 ## 7. Against the campaign's 60 days
 

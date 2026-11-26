@@ -1,12 +1,12 @@
 # Install Muster from its catalogue
 
-**As of 2026-10-08 (exo-dcc.3); versions updated for Muster 0.3.0 on 2026-10-14.** For anyone with Logos Basecamp who wants to try Muster. You add Muster's catalogue once, then install Muster like any other app; its dependencies come from the official Logos catalogue. Every label below was read on screen in Basecamp 0.3.2 on 2026-10-08, from a catalogue served locally (`docs/design/catalogue-install.md`, §7). The code wins over this page.
+**As of 2026-10-08 (exo-dcc.3); updated for Muster 0.5.0 on 2026-11-26.** For anyone with Logos Basecamp who wants to try Muster. You add Muster's catalogue once, then install Muster like any other app; its dependencies come from the official Logos catalogue. Every label below was read on screen in Basecamp 0.3.2 on 2026-10-08, from a catalogue served locally (`docs/design/catalogue-install.md`, §7). The code wins over this page.
 
 > **No Basecamp yet?** The [latest release](https://github.com/corpetty/muster/releases/latest) also carries an AppImage: Basecamp 0.3.2 with Muster and its dependencies already installed. Download it, `chmod +x`, run it and click **M**; nothing on this page is needed. This page is for adding Muster to the Basecamp you already run.
 
 ## What you need
 
-- **Linux on x86_64.** The releases published so far carry only `linux-amd64`, so Basecamp on another platform cannot install Muster from the catalogue yet. On a Mac with Apple Silicon, build and run it from source instead: [`macos.md`](macos.md).
+- **Linux (x86_64 or arm64) or an Apple Silicon Mac.** Releases since 0.3.4 carry all three; on a Mac, see also [`macos.md`](macos.md). The private LEZ multisig's provers are built for Linux x86_64 only, so a private multisig needs that platform.
 - **Logos Basecamp 0.3.2**, from [its releases](https://github.com/logos-co/logos-basecamp/releases).
 - **About 650 MB of downloads and ten minutes.** Most of it is Muster's dependencies, which come from the official Logos catalogue.
 
@@ -42,10 +42,10 @@ The link `basecamp://app/muster_ui` does the same thing once the catalogue is ad
 
 The dialog lists:
 
-- **Required (10):** Muster 0.3.0 and Muster Module 0.3.0 from the Muster catalogue. From Logos Official: Delivery Module 0.3.2, LEZ Core Module 0.5.1, keystore_module 0.1.0, eth_rpc_module 0.1.0, EVM Fee Estimator 0.1.0, EVM Transaction Sender 0.1.0, LEZ RLN Module 4.2.1 and RLN Module 0.10.0.
-- **Optional, all pre-ticked:** libp2p Networking 1.1.0, Module State 0.1.0 (already installed: Basecamp ships it), Verified Proxy Module 0.1.4, **Monero Node (local)** 0.1.1, and Monero Wallet Backend 0.1.1. The Monero Wallet Backend brings `monero_node_module` and `monero_wallet_core_module` with it.
+- **Required:** Muster and Muster Module from the Muster catalogue. From Logos Official: Delivery Module, LEZ Core Module, keystore_module, eth_rpc_module, EVM Fee Estimator, EVM Transaction Sender, LEZ RLN Module, RLN Module, and the Storage Module, which FileShare uses (in `muster_ui`'s requirements since 0.5.0; Basecamp ships it).
+- **Optional, pre-ticked:** libp2p Networking, Module State (Basecamp ships it), Verified Proxy Module, **Monero Node (local)**, Monero Wallet Backend, the Chat Module, and from the Muster catalogue the two **LEZ Multisig Provers**. The Monero Wallet Backend brings `monero_node_module` and `monero_wallet_core_module` with it.
 
-The dialog offers the newest version each catalogue holds; the numbers above are as of 2026-10-14.
+The dialog offers the newest version each catalogue holds. The packages come from `ui/metadata.json` and `module/metadata.json`; this list was last read on screen for Muster 0.3.0, so the dialog may order or name them a little differently.
 
 ### What to untick
 
@@ -54,6 +54,7 @@ The dialog offers the newest version each catalogue holds; the numbers above are
 Keep the rest:
 - **Monero Wallet Backend** is how Muster reaches a Monero wallet (Muster declares it optional).
 - **Verified Proxy Module** lets Ethereum balances be proven rather than trusted.
+- **The LEZ Multisig Provers** prove a private LEZ multisig's transactions, one per LEZ line. Untick them if you won't hold a private multisig: each is about 85 MB, and they install only on Linux x86_64.
 - **libp2p Networking** is an optional transport of Delivery, which carries Muster's rooms.
 
 ## 3. Open Muster
@@ -64,7 +65,7 @@ Installing starts nothing. Opening Muster starts the modules it declares.
 
 ## Updating
 
-Basecamp shows a new Muster release after **Package Repositories → Refresh** or a restart. Members of a room should run the same version; a room may not work across versions.
+Basecamp shows a new Muster release after **Package Repositories → Refresh** or a restart. Members of a room should run the same version. Muster 0.5.0 cannot read rooms made by 0.4.x or earlier, so after upgrading, start new rooms.
 
 ## Known rough edges
 
@@ -75,7 +76,7 @@ Basecamp shows a new Muster release after **Package Repositories → Refresh** o
 
 ## Testing a release locally (maintainers)
 
-`scripts/catalog-release.sh --local <dir> --base-url https://127.0.0.1:<port>` writes a whole catalogue (both files, the icons and the two `.lgx` files) for a local server. Because Basecamp requires `https://` for the repository and for every download, the server needs TLS:
+`scripts/catalog-release.sh --local <dir> --base-url https://127.0.0.1:<port>` writes a whole catalogue (both files, the icons and the `.lgx` files) for a local server. Because Basecamp requires `https://` for the repository and for every download, the server needs TLS:
 
 1. Make a throwaway CA and a certificate for `127.0.0.1` (`openssl`).
 2. Serve `<dir>` over https with that certificate.
