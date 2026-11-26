@@ -254,6 +254,118 @@ postures. A refusal surfaces while proving, and nothing is sent.
     balance there, in the same transaction.
   - **v0.3, migration (D11).** The remaining members create a new multisig under a new GMS, then
     move the vault to it with a `Transfer` the old quorum approves.
+
+### D19 in detail: rotation on removal (v0.4, exo-3dc)
+
+After James Zaki's 0.4 multisig (`jzaki/jz-progs`, `example_progs/multisig/src/rotate.rs`), mapped
+onto signatures instead of seats.
+
+**The action.** One new `Action` variant, appended (borsh tag 4):
+
+```
+Action::Rotate { create_key: ck', successor: A', changes: Vec<ConfigChange> }
+```
+
+It is a proposal like any other: approved by the quorum, executed with `Execute`, or queued under
+a time lock and run by `ExecuteQueued`. `changes` is applied to the current configuration exactly
+as `Config(changes)` would be, and the result must be valid. Removing a member is
+`changes = [RemoveMember(k), …]`, but the core does not insist on a removal: an add the members
+want hidden from the history, or a suspected leak of the GMS, rotates the same way.
+
+**The successor.**
+- Its create key `ck'` is fresh (the proposer's client draws it), so its seed is
+  `S' = tagged("muster-msig/v1/state", ck')`. A new seed is required, not a style choice: LEE binds
+  each `(program, seed)` to one account per transaction (`bind_family`), and the rotation grants the
+  old seed (moving the balance) and the new one (the handover) in the same transaction.
+- Its account is `A' = for_private_pda(P, S', npk', vpk')`, with `npk'`/`vpk'` from the new group
+  secret GMS'. The proposal names `A'` and `ck'`, never the keys, so a member who sees the proposal
+  learns an address it cannot derive keys for.
+- Its fee account (D17) is `derive_regular_shared_account_keys(fee_derivation_id(ck'))` under GMS':
+  both inputs changed, so it is a new account the removed member cannot touch.
+- Its state: the old state with the changes applied (so the epoch is `e + 1`), its own create key,
+  the spending limits' usage and the nonce window carried over (a limit spent this period stays
+  spent, a nonce used stays used), and **an empty queue**.
+- The core refuses a successor equal to the multisig itself, and a `ck'` equal to its own.
+
+**In the transaction** (the v0.4 actor model):
+1. The root call `Execute { proposal: Rotate, … }` passes every check of §5. The core returns the
+   old account's new record, **retired**, and a handover. The handler writes the record, then sends:
+   - `Handover { to: A', state }` to `(A', P)`, granting `S'`;
+   - `ReadState` to its own native balance.
+2. At `(A', P)`, the handover is accepted only from this program (`from` is one of its actors), only
+   authorized (the sender granted `S'`, which LEE proves is the seed of this account's witness), and
+   only onto an empty shard. The core checks the state names `A'`'s create key and a valid
+   configuration, and writes it.
+3. The native balance answers the old account with its balance. The handler, at a retired record,
+   sends the whole balance to `A'` (`custody_transfer` under `S`). The credit is promoted into `A'`'s
+   new note in the same proof.
+
+One transaction, one proof, two multisig accounts and two balances. The removed member never holds
+GMS', so they cannot read or build anything on `A'`.
+
+**A retired account** stores a `Retired { create_key, epoch, successor }` record in place of
+`State`. Its first byte is `0x52` where a `State` has its version, `1`, so `State`'s layout is
+unchanged and every existing note decodes as before. A retired account refuses every instruction
+(`retired`) except `Sweep`, a new `Instruction` variant (tag 5) with no signatures: it reads the
+balance and forwards all of it to the recorded successor, which is the only place it can go. Anyone
+who can build the transaction may send it, the removed member included; all it can do is finish the
+move the quorum approved.
+
+**Late deposits.** A deposit made to the old address after the rotation (a member who had not
+caught up, or an outside payer using the old address) lands in the retired account. A `Sweep` in a
+transaction of its own forwards it to `A'`. The rotation transaction also registers `A'`'s recovery
+binding, so outside payers can be given the new address.
+
+**The fee account.** The old fee account `F` cannot move in the rotation's own transaction: a v0.4
+transaction has one root call, and the program neither holds nor sees `F` (a regular account
+authorized by a key from the GMS, not the program's PDA). Making the program forward it would need an
+account the members never approved in the instruction, and a role over an account the program does
+not own. So the executor sends two transactions:
+1. **the fee sweep**: `F`'s whole balance transferred to `F'`, witnessed with `F`'s authorization key,
+   `F'` paying this transaction's fee out of the credit (as a top-up does);
+2. **the rotation**, its fee paid from `F'`.
+
+This opens no new window: any GMS holder, the removed member included, could already drain `F`
+(D17's stated cost), and after step 1 there is nothing left there.
+
+**What the room must supply** (Muster's side; out of this program change):
+- a fresh `ck'` and a fresh GMS', generated by a remaining member's client (the proposer's) and sealed
+  to each remaining member in the room. Never to the removed member, never to the program: the program
+  sees only `A'` and `ck'`.
+- `A'`, derived from `(P, ck', GMS')`. Every approving member's client re-derives it from a GMS' it
+  holds and refuses to sign otherwise. The program cannot check this, and an `A'` only the proposer
+  can derive would hand the vault to an account the others cannot operate.
+- After the rotation, the new notes (`A'`'s and `F'`'s), sealed to the remaining members. The old
+  account's last note is the retired record.
+
+**What is lost, and said on the card.**
+- Queued actions do not carry over, so a rotation also cancels everything queued, which the same
+  quorum can already do at once (D5).
+- Approvals gathered for the old account never count on the new one: they name `A` and its epoch.
+
+**Public posture.** The program does not refuse a public rotation, but a public multisig has no
+shared secret, so `RemoveMember` in place is enough. Muster offers rotation only for the private
+posture.
+
+**Signing bytes: no tag bump.** D19 first said the tags move to `v2`; they do not.
+- Appending `Rotate` to `Action` and `Sweep` to `Instruction` changes no existing value's bytes.
+  Every `Proposal`, `Spend` and envelope encodes byte for byte as before, so every approval, execution
+  and spend signature means what it meant. Muster's vectors (`module/tests/vectors/lez-msig/`) are
+  unchanged.
+- A tag separates purposes, so a signature for one purpose is worthless for another. A rotation is a
+  proposal, and its id is hashed under the proposal tag like any other. borsh's variant byte already
+  makes a `Rotate` proposal's bytes differ from every older value.
+- Invariant 2 holds as for every proposal: the id commits to the zone, the account `A`, the slot
+  (epoch and nonce) and the expiry, and now also to `ck'` and `A'`.
+- A program built before D19 cannot decode variant 4, so it refuses a `Rotate`. Because a proposal
+  names `A`, which derives from the program id, a `Rotate` signed for one program's multisig is
+  worthless at another's.
+- The handover is a message from the program to itself, never signed.
+
+**A new program.** The guest changes, so its image id, and with it the program id and every private
+PDA, change too. Multisigs on the deployed 0.4 program (the devnet's) keep working there, without
+rotation, and move to the new program by D11's migration. v0.3 has no actor messages, so its adapter
+refuses `Rotate` and `Sweep` (`rotation-unsupported`) and keeps D11.
 - **Correlation across layers (Privacy-3).**
   - Room messages and executions are separate traffic. An observer of both sees the room's sends,
     which the store node sees as sealed envelopes on one topic, and executions at about the same
@@ -424,7 +536,7 @@ The `ConversationCrypto` seam is where a chat-module binding goes once chat ship
 | D16 | inherited seed authority on 0.4 | forbid `Call`; allow it and say what it means | allow it and say so: on 0.4 a seed granted to a call's target reaches everything the target calls, so a `Call` hands the vault to that whole call tree. The `targets` allowlist is the guard, and the card must name it. Spending limits never bound a `Call` |
 | D17 | the fee on a private execution (0.4: no longer exempt, paid in the proof by a private account with an authorization key; a PDA cannot) | the executor's own private account; a group fee account from the GMS (`FeeOnly`); the vault through a program-sent credit (unverified, a core change) | **decided 2026-11-20:** a group fee account derived from the GMS (LEE's `derive_regular_shared_account_keys`, id `SHA-256("lez-msig/v1/fee-account" ‖ create_key)`, `msig_host04::fee_derivation_id`), witnessed `FeeOnly`, so no member's account appears and the module still receives no key. Shown on LEE 0.4.0-rc3 state with dev-mode proofs (`lez04/host/tests/v04_private_fee.rs`): it pays a private Create's fee, a nullifier-key witness cannot pay (`FeePayerWithoutAuthorization`), and the PDA cannot pay its own. Its cost: members top it up (`Msig::top_up_fee_tx`: a public account's transfer promoted into the fee account, which pays that transaction's own fee out of the credit, so a group starts with no funds), and anyone holding the GMS (a removed member included) can drain it. D19's rotation moves to a new GMS, hence a new fee account; the rotation should sweep the old one in the same transaction |
 | D18 | the program's identity on a private execution (0.4 discloses it by default) | disclosed; deployed immutable and proved undisclosed; a shadow program | **decided 2026-11-20:** deploy immutable and prove with an undisclosed image claim (`Msig::with_undisclosed`, LEE's `ProgramCatalog::with_undisclosed`), which keeps v0.3's property and lets the public posture exist at the same program. Shown on LEE 0.4.0-rc3 state (`lez04/host/tests/v04_undisclosed.rs`): a default proof names the program; an undisclosed one carries only a commitment-set root, the program's account appears nowhere in the transaction, and the zone accepts it; a claim against a header the zone never saw is refused. The devnet program is already immutable |
-| D19 | removing a member when the group secret cannot be revoked (0.4) | migrate in a separate flow (D11); rotate in the program | **decided 2026-11-26** (the accepted proposal; to build: exo-3dc): rotate in the program, after James Zaki's 0.4 multisig (`jzaki/jz-progs`, `example_progs/multisig`). The approved removal retires the vault and hands its config to a successor at a new PDA under a new group secret, moving the whole balance, in the same transaction. A retired vault refuses everything but a sweep that forwards late deposits. This is a core change, so the tags move to `v2`. It replaces D11's separate migration on 0.4 |
+| D19 | removing a member when the group secret cannot be revoked (0.4) | migrate in a separate flow (D11); rotate in the program | **decided 2026-11-26** (the accepted proposal; to build: exo-3dc): rotate in the program, after James Zaki's 0.4 multisig (`jzaki/jz-progs`, `example_progs/multisig`). The approved removal retires the vault and hands its config to a successor at a new PDA under a new group secret, moving the whole balance, in the same transaction. A retired vault refuses everything but a sweep that forwards late deposits. It replaces D11's separate migration on 0.4. **Refined 2026-11-26** (§7, "D19 in detail"): a core change, but an appended `Action::Rotate` and `Instruction::Sweep`, so no existing bytes change and the tags stay `v1`; the successor takes a fresh create key, because LEE binds one account per `(program, seed)` in a transaction; the old fee account is swept to the new one in the transaction before, because a transaction has one root call and the program does not hold the fee account |
 
 ## 10. Measured (RFP P.1, P.2)
 
