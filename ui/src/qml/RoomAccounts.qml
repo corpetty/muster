@@ -1526,6 +1526,86 @@ Item {
                                 : { kind: "transfer", to: msigPayTo.text.trim(), amount: msigBox.payBase }))
                     }
                 }
+                // a Call from the vault (D15, D16; from a private multisig on LEZ v0.4, exo-0db): the
+                // vault invokes a program, its own seed authorizing it. rows[0] is the target, an
+                // account of the called program; the other rows are the accounts the call touches
+                ColumnLayout {
+                    id: msigCallBox
+                    objectName: "msigCallBox"
+                    Layout.fillWidth: true
+                    visible: !!(msigBox.st && msigBox.st.config && msigBox.st.config.call)
+                    spacing: Theme.spacing.small
+                    readonly property var targets: (msigBox.st && msigBox.st.config && msigBox.st.config.targets) || []
+                    readonly property string vault: {
+                        var a = acc.msigAccount;
+                        if (!a) return "";
+                        if (a.address) return acc.bareId(a.address);
+                        var id = String(a.id || "");
+                        return id.slice(id.lastIndexOf(":") + 1);
+                    }
+                    // "vault" for the multisig's own account, "account@program" for another program's
+                    // account, else an account of the called program
+                    function rows() {
+                        var prog = msigCallProgram.text.trim();
+                        return msigCallRows.text.split(/[\s,]+/).filter(function (t) { return t.length > 0; }).map(function (t) {
+                            var at = t.indexOf("@");
+                            var account = at >= 0 ? t.slice(0, at) : t;
+                            return { account: account.toLowerCase() === "vault" ? msigCallBox.vault : account,
+                                     program: at >= 0 ? t.slice(at + 1) : prog };
+                        });
+                    }
+                    readonly property bool dataOk: /^([0-9a-fA-F]{2})*$/.test(msigCallData.text.trim().replace(/^0x/, ""))
+                    LogosText {
+                        textFormat: Text.PlainText
+                        Layout.fillWidth: true
+                        text: qsTr("Call a program from the vault")
+                        color: Theme.palette.text
+                        font.pixelSize: Theme.typography.secondaryText
+                        font.weight: Theme.typography.weightMedium
+                    }
+                    LogosTextField {
+                        id: msigCallProgram
+                        objectName: "msigCallProgram"
+                        Layout.fillWidth: true
+                        placeholderText: qsTr("the program to call (hex or base58)")
+                        font.family: MusterStyle.mono
+                    }
+                    LogosTextField {
+                        id: msigCallRows
+                        objectName: "msigCallRows"
+                        Layout.fillWidth: true
+                        placeholderText: qsTr("its accounts, the target first: \"vault\" for this multisig's own, account@program for another program's")
+                        font.family: MusterStyle.mono
+                    }
+                    LogosTextField {
+                        id: msigCallData
+                        objectName: "msigCallData"
+                        Layout.fillWidth: true
+                        placeholderText: qsTr("the instruction, hex")
+                        font.family: MusterStyle.mono
+                    }
+                    LogosText {
+                        textFormat: Text.PlainText
+                        objectName: "msigCallNote"
+                        Layout.fillWidth: true
+                        text: qsTr("A call hands the vault's authority to that program and to every program it calls, and no spending limit bounds it.")
+                              + " " + (msigCallBox.targets.length > 0
+                                       ? qsTr("This multisig may call only: %1.").arg(msigCallBox.targets.join(", "))
+                                       : qsTr("This multisig may call any program."))
+                        color: Theme.palette.warning
+                        font.pixelSize: MusterStyle.caption
+                        wrapMode: Text.WrapAnywhere
+                    }
+                    ActionButton {
+                        objectName: "msigProposeCall"
+                        enabled: msigCallProgram.text.trim().length > 0 && msigCallRows.text.trim().length > 0 && msigCallBox.dataOk
+                        text: qsTr("Propose this call")
+                        variant: LogosButton.Variant.Secondary
+                        onClicked: acc.lezMsigProposeRequested(String(acc.msigAccount.id), JSON.stringify({
+                            kind: "call", program: msigCallProgram.text.trim(), rows: msigCallBox.rows(),
+                            data: msigCallData.text.trim().replace(/^0x/, "") }))
+                    }
+                }
                 // spending limits (exo-0d3.12): k of a limit's signers move up to its amount each
                 // period with no vote and no time lock: the one bypass of the quorum
                 Repeater {

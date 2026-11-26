@@ -1075,7 +1075,7 @@ ColumnLayout {
                 : parent.a.kind === "transfer"
                   ? qsTr("Pays %1 LEZ to %2").arg(parent.lez(parent.a.amount)).arg(String(parent.a.to))
                 : parent.a.kind === "call"
-                  ? qsTr("Calls program %1 with %2 accounts and instruction %3").arg(String(parent.a.program))
+                  ? qsTr("Calls program %1 with %2 accounts and instruction %3. The vault's authority goes with it, to every program it calls, and no spending limit bounds it").arg(String(parent.a.program))
                         .arg((parent.a.rows || []).length).arg(String(parent.a.data))
                 : parent.a.kind === "config"
                   ? qsTr("Changes the multisig: %1").arg((parent.a.changes || []).map(function (c) {
