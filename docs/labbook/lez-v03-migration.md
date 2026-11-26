@@ -100,6 +100,16 @@ program) and L5 (live testnet runs) are not.
    each run draws from it. A test's own keys are dropped with what they hold, so on the
    testnet the tests send far less than the local zone's 1 LEZ per account
    (`MUSTER_LEZ_E2E_FUND`).
+13. **A cached build outlives the nix libraries on its rpath** (exo-98e). On a host with no
+   `libpcsclite`, `localnet.sh` links the wallet CLI against `nixpkgs#pcsclite` and puts
+   that store path on its rpath. CI's `actions/cache` keeps `~/.cache/muster/lez-v0.3.0`
+   but not `/nix/store`, so from the first cache hit (main, 2026-11-23 17:21) the restored
+   CLI died with `libpcsclite.so.1: cannot open shared object file`, while the sequencer,
+   which does not link it, started fine. Runs that missed the cache built from scratch and
+   passed, which is why the PRs before the merge were green. `funder.sh` hid the error:
+   under `pipefail` the CLI's message went into `grep` and `set -e` exited without a word.
+   `build()` now re-links a binary whose libraries do not load, and `funder.sh deploy`
+   prints the CLI's error. A garbage-collected nix store does the same on a workstation.
 
 ## What is verified, and where
 

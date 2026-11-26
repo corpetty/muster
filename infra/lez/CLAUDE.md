@@ -58,3 +58,7 @@ Rules:
   chain also works, but a fresh one is the reproducible case.
 - The build traps (libclang for RocksDB, r0vm for genesis, a C++ compiler and its rpath)
   are in the script header and `docs/labbook/lez-multisig-versions.md`.
+- The nix libraries on the binaries' rpath (gcc's libstdc++, pcsclite) live in the nix
+  store, outside `$DIR`. A build restored from a cache or kept across a nix GC can lose
+  them, so `build()` (run by every start) re-links any binary whose libraries do not load
+  (exo-98e, `docs/labbook/lez-v03-migration.md` §13).
