@@ -137,13 +137,35 @@ build() {
     echo "building the $VERSION standalone sequencer$([ "$VERSION" = v0.2.4 ] || echo " and wallet CLI") (first run: ~15 min)…"
     toolchain
     (cd "$DIR" && cargo build --release --features standalone "${pkgs[@]}")
-    local rp="${GCCLIB:-}${PCSCLIB:+${GCCLIB:+:}$PCSCLIB}"
-    if [ -n "$rp" ]; then
-      for b in "$SEQ" "$WALLET"; do
-        [ -x "$b" ] && nix shell nixpkgs#patchelf -c patchelf --add-rpath "$rp" "$b"
-      done
+    link_nix_libs
+  fi
+  # The nix libraries on the binaries' rpath live in the nix store, not in $DIR: a build
+  # restored from a cache (CI's actions/cache keeps $DIR, never /nix/store) or a garbage-
+  # collected store leaves them dangling, and the wallet CLI then dies loading
+  # libpcsclite.so.1 (exo-98e). Realise them again and put them back on the rpath.
+  if unloadable; then
+    echo "the $VERSION binaries' nix libraries are gone from the store; linking them again…" >&2
+    toolchain; link_nix_libs
+    if unloadable; then
+      echo "the $VERSION binaries still cannot load their libraries:" >&2
+      for b in "$SEQ" "$WALLET"; do if [ -x "$b" ]; then ldd "$b" | grep 'not found' >&2 || true; fi; done
+      exit 1
     fi
   fi
+}
+link_nix_libs() {  # toolchain()'s nix libraries onto the binaries' rpath
+  local rp="${GCCLIB:-}${PCSCLIB:+${GCCLIB:+:}$PCSCLIB}" b
+  [ -n "$rp" ] || return 0
+  for b in "$SEQ" "$WALLET"; do
+    if [ -x "$b" ]; then nix shell nixpkgs#patchelf -c patchelf --add-rpath "$rp" "$b"; fi
+  done
+}
+unloadable() {  # a built binary names a library the loader cannot find
+  local b
+  for b in "$SEQ" "$WALLET"; do
+    if [ -x "$b" ] && ldd "$b" 2>/dev/null | grep -q 'not found'; then return 0; fi
+  done
+  return 1
 }
 
 # launch <config> <home> <log> <pidfile> — a sequencer in the background, from <home>;
