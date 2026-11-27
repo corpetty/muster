@@ -84,15 +84,20 @@ proc lastBlockId*(r: LezRpc): uint64 =
     raise newException(WalletError, "LEZ getLastBlockId returned no height (" & $j & ")")
   uint64(j.getBiggestInt())
 
-proc feeCeiling*(r: LezRpc): uint64 =
-  ## v0.4's getFeeState: the highest base fee the next block can charge, execution or storage.
-  ## An answer without both ceilings raises: a fee cap is never sized from a guess.
+proc feeCeilings*(r: LezRpc): tuple[exec, stor: uint64] =
+  ## v0.4's getFeeState: the highest base fees the next block can charge, for execution and for
+  ## storage. An answer without both ceilings raises: a fee is never sized from a guess.
   let j = r.call("getFeeState", newJArray())
   let e = j{"next_base_fee_exec_ceiling"}
   let st = j{"next_base_fee_stor_ceiling"}
-  if e.isNil or st.isNil or e.kind != JInt or st.kind != JInt or e.getBiggestInt() <= 0:
+  if e.isNil or st.isNil or e.kind != JInt or st.kind != JInt or e.getBiggestInt() <= 0 or st.getBiggestInt() < 0:
     raise newException(WalletError, "LEZ getFeeState returned no fee ceilings (" & $j & ")")
-  uint64(max(e.getBiggestInt(), st.getBiggestInt()))
+  (uint64(e.getBiggestInt()), uint64(st.getBiggestInt()))
+
+proc feeCeiling*(r: LezRpc): uint64 =
+  ## The highest base fee the next block can charge, execution or storage (getFeeState).
+  let c = r.feeCeilings()
+  max(c.exec, c.stor)
 
 proc getAccount*(r: LezRpc, id: seq[byte]): LezAccountState =
   ## Either line's account (lez/account_view.nim): v0.2.4's owner + data, v0.3.0's shards.

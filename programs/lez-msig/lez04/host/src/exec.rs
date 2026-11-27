@@ -48,11 +48,11 @@ use lee_core::{
     program::{immutable_mirror_commitment, ProgramHeader, PROGRAM_LOADER_ACCOUNT_ID},
     Commitment, MembershipProof,
 };
-use msig_core::{claims, Instruction, Outflow};
+use msig_core::Instruction;
 use sequencer_service_rpc::{RpcClient as _, SequencerClient, SequencerClientBuilder};
 use serde_json::{json, Value};
 
-use crate::{fee_inbox, native_state, private_reserve, program, Msig, PrivateFee, Proven};
+use crate::{fee_inbox, private_reserve, program, Msig, PrivateFee, Proven};
 
 fn h32(v: &Value, k: &str) -> Result<[u8; 32], String> {
     let s = v.get(k).and_then(Value::as_str).ok_or(format!("missing {k}"))?;
@@ -123,10 +123,17 @@ async fn proofs(c: &SequencerClient, notes: &[(AccountId, &Account)]) -> Result<
 }
 
 async fn states(c: &SequencerClient, ids: &[AccountId]) -> Result<HashMap<Actor, ActorState>, String> {
+    actor_states(c, &ids.iter().map(|id| Actor::native_balance(*id)).collect::<Vec<_>>()).await
+}
+
+/// Each actor's state as the zone holds it: its account's state under that program (a native
+/// balance, or a called program's state at one of a Call's rows). An account no one has used is
+/// empty.
+async fn actor_states(c: &SequencerClient, actors: &[Actor]) -> Result<HashMap<Actor, ActorState>, String> {
     let mut out = HashMap::new();
-    for id in ids {
-        let a = c.get_account(*id).await.map_err(|e| format!("getAccount: {e}"))?.unwrap_or_default();
-        out.insert(Actor::native_balance(*id), native_state(&a));
+    for x in actors {
+        let a = c.get_account(x.account_id).await.map_err(|e| format!("getAccount: {e}"))?.unwrap_or_default();
+        out.insert(x.clone(), a.data.actor_state(x.program_account_id).clone());
     }
     Ok(out)
 }
@@ -211,14 +218,13 @@ async fn run(req: Value) -> Result<Value, String> {
                 let b = hex::decode(r.as_str().ok_or("a recipient is hex")?).map_err(|e| format!("recipient: {e}"))?;
                 seals.push(borsh::from_slice(&b).map_err(|e| format!("recipient: {e}"))?);
             }
-            let mut ids = vec![inbox];
-            if let Some(Outflow::Pay { to, .. }) = claims(&op).ok().and_then(|cl| cl.outflow) {
-                let to = AccountId::new(to);
-                if !seals.iter().any(|r| r.address() == to) {
-                    ids.push(to);
-                }
-            }
-            let st = states(&c, &ids).await?;
+            // every public actor the proof declares, as the zone holds it: the fee inbox, and what the
+            // outflow touches (a payee's balance; a Call's rows other than the vault, exo-0db), less a
+            // payee sealed to privately
+            let sealed: Vec<AccountId> = seals.iter().map(Recipient::address).collect();
+            let mut actors = vec![Actor::native_balance(inbox)];
+            actors.extend(m.private_public_actors(&op).into_iter().filter(|x| !sealed.contains(&x.account_id)));
+            let st = actor_states(&c, &actors).await?;
             // the vault's recovery binding at Create, so anyone can pay its address from a public
             // account; and the deposits the caller asks to collect (positions from `inbound`)
             let recoveries = if matches!(op, Instruction::Create { .. }) { vec![m.vault_binding()] } else { vec![] };

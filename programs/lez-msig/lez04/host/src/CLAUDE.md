@@ -25,4 +25,6 @@
   `vault_balance`, `native_state`.
 - `exec.rs`: `exec_request(json) -> json`, the executor on 0.4. It has v0.3's surface (derive / exec /
   fund / scan / send) plus `feeNote` → `feePost` and a `topup` mode; it prices the fee from
-  `getFeeState` and proves undisclosed when the program is immutable. `bin/msig_exec04` is its CLI.
+  `getFeeState` and proves undisclosed when the program is immutable. An exec reads the zone's state
+  of every public actor the proof declares (`Msig::private_public_actors`: a payee's balance, or each
+  of a Call's rows but the vault under its row's program, exo-0db). `bin/msig_exec04` is its CLI.

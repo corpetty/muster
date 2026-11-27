@@ -35,7 +35,10 @@ The LEZ *wallet* rails (public / shield / deshield / private transfers) live in
 - `msig_gas.nim`: the gas limit and fee cap a lez-msig step declares on LEZ v0.4, where a refusal
   burns its whole limit (exo-50c). A model per step (signatures, members, config changes, a call's
   allowance), held above every step measured on LEE's own state (`tests/vectors/lez-msig/v04-gas.json`
-  from `programs/lez-msig/lez04/host/tests/v04_gas.rs`) by `msig_gas_test`.
+  from `programs/lez-msig/lez04/host/tests/v04_gas.rs`) by `msig_gas_test`. Also a private
+  multisig's fee account (exo-8ef): `privateReserve`, what the next private transaction takes from it
+  (fee_core's private fee at getFeeState's ceilings, as the executor prices it), and
+  `feeAccountStatus`, its balance from the newest fee note against that reserve.
 - `quest.nim`: the quest record program's on-chain objects (exo-267.7, its source in
   `programs/lez-quest`, design `docs/design/lez-quest-program.md`): `QuestRecord` in its borsh
   layout, every instruction, and the record's PDA (psLee02). Held to vectors from the

@@ -73,6 +73,7 @@ import ../src/transport/chat_groups_lp
 import ../src/coordination/member_accounts   # a member's own accounts, disclosed to the room (exo-1f9)
 import ../src/crypto/account_labels          # …and the keystore labels they live under
 import ../src/wallet/lez_msig_private  # its private posture (exo-efa)
+import ../src/lez/msig_gas             # …whose fee account pays each private transaction (exo-8ef)
 import ../src/wallet/msig_prover       # …proved by the lez_msig_module
 import ../src/wallet/msig_prover_lp    # …over lp_*
 import std/sysrand                     # a multisig create key
@@ -4133,6 +4134,23 @@ proc msigLiveOf(a: LezMsigAccount): MsigLive =
   if a.private: return msigPrivFor(a.chain, a.program, a.createKey)
   msigLiveFor(a.chain, a.program)
 
+var gMsigFeeCache = initTable[string, tuple[at: float, json: JsonNode]]()   ## create key → its fee account, read
+proc msigFeeJson(pc: MsigPrivate): JsonNode =
+  ## A private lez-msig's group fee account on LEZ v0.4 (D17, exo-8ef): its balance from the newest
+  ## fee note the room carries for this member, against what the next private transaction reserves
+  ## at the zone's fee state; `low` when it cannot pay it (the proof would fail). null on v0.3,
+  ## where private transactions pay no fee. The UI asks on every tick, so a read is reused for 4 s.
+  let ck = msigbytes.hexOf(pc.createKey)
+  if ck in gMsigFeeCache and epochTime() - gMsigFeeCache[ck].at < 4.0: return gMsigFeeCache[ck].json
+  try:
+    if pc.zoneLine() != "v0.4": return newJNull()
+    let s = pc.feeStatus()
+    result = %*{"funded": s.funded, "balance": $s.balance, "reserve": $s.reserve, "low": s.low, "covers": $s.covers,
+                "note": pc.feeNoteN}
+  except CatchableError as e:
+    result = %*{"error": "unreadable", "detail": e.msg}
+  gMsigFeeCache[ck] = (epochTime(), result)
+
 proc msigMyNames(): seq[string] =
   ## For every lez-msig account disclosed in the joined room, the name this member's approval
   ## for it carries: msig:<this member's approval key for that multisig>.
@@ -4354,6 +4372,16 @@ proc musterLezMsigOpen(specJson: string): string =
     $(%*{"createKey": ck, "chain": gLezChain, "members": ids, "threshold": k, "private": private})
   except CatchableError as e: $(%*{"error": "refused", "detail": e.msg})
 
+proc ceremonyFeeJson(c: MsigCeremony): JsonNode =
+  ## msigFeeJson for a private ceremony not yet created: null while this member holds no group
+  ## secret or no prover, and that answer too is kept 4 s, so a tick never re-asks the zone.
+  let ck = c.createKey.toLowerAscii()
+  if ck in gMsigFeeCache and epochTime() - gMsigFeeCache[ck].at < 4.0: return gMsigFeeCache[ck].json
+  try: msigFeeJson(msigPrivFor(c.chain, hexToBytes(c.program), hexToBytes(c.createKey)))
+  except CatchableError:
+    gMsigFeeCache[ck] = (epochTime(), newJNull())
+    newJNull()
+
 proc musterLezMsigCeremonies(): string =
   if gSession == nil: return "[]"
   gSession.poll()
@@ -4365,6 +4393,8 @@ proc musterLezMsigCeremonies(): string =
     let d = disclosed.filterIt(it.config.contains(c.createKey))
     j["account"] = %(if d.len > 0: d[0].id else: "")
     j["createSent"] = %(c.createKey in gMsigCreated)
+    # before Create, a private multisig's fee account: on LEZ v0.4 Create pays from it (exo-8ef)
+    if c.private and d.len == 0: j["fee"] = ceremonyFeeJson(c)
     arr.add j
   $arr
 
@@ -4576,8 +4606,11 @@ proc musterLezMsigStateRead(acct: string): string =
   let (ok, la, detail) = lezMsigAccountOf(a.chain, a.address, a.config)
   if not ok: return $(%*{"error": "does-not-derive", "detail": detail})
   try:
-    let r = msigLiveOf(la).readMsig(la.address)
+    let live = msigLiveOf(la)
+    let r = live.readMsig(la.address)
     if not r.found: return $(%*{"error": "not-on-chain"})
+    # a private multisig's fee account on LEZ v0.4, beside "Top up the fee account" (exo-8ef)
+    let fee = (if live of MsigPrivate: msigFeeJson(MsigPrivate(live)) else: newJNull())
     let me = moduleKeystore().lezMemberKey(myMsigLabel(moduleKeystore(), la))
     # a queued action whose proposer was since removed: the current quorum may cancel it (exo-0d3.13)
     let proposers = queuedProposers(gSession.roomEvents(), la.address)
@@ -4590,7 +4623,7 @@ proc musterLezMsigStateRead(acct: string): string =
     let ck = msigbytes.hexOf(la.createKey)
     $(%*{"account": a.id, "private": la.private, "epoch": $r.state.epoch, "nonceBase": $r.state.nonceBase, "balance": $r.balance,
          "config": msigbytes.configJson(r.state.config), "myKey": msigbytes.hexOf(me),
-         "queue": queue, "height": $r.height,
+         "queue": queue, "height": $r.height, "fee": fee,
          # its deliberation's chat group (exo-7a5): null until this client has seen chat_module
          "chat": gChatStatus.getOrDefault(ck, newJNull())})
   except CatchableError as e: $(%*{"error": "sequencer-unreachable", "detail": e.msg})

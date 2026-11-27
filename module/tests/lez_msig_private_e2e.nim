@@ -29,7 +29,9 @@
 ## transaction pays its fee inside its proof from the group's fee account (D17): before Create,
 ## Alice tops it up from her own public account, and each transaction's new fee note is sealed
 ## into the room beside the multisig's. The payee is an account with a key, since v0.4 admits a
-## fresh public account only by its key.
+## fresh public account only by its key. Also on v0.4: 10. a private payee; 11. a deposit from outside
+## the group; 12. a Call from the room (exo-0db), after every member reads the fee account's balance
+## against the next transaction's reserve (exo-8ef) and, when it cannot pay it, Alice tops it up.
 
 import std/[os, json, strutils, sequtils, times, options, httpclient]
 import stint
@@ -333,5 +335,62 @@ if v04:
   doAssert chains[1].inboundCursor.len > 0 and chains[2].inboundCursor == chains[1].inboundCursor,
     "the room carries the deposits' cursor beside the note"
   echo "11. an outsider's public payment to the vault, collected by the next settled transaction OK"
+
+# ── 12. a Call from the room (LEZ v0.4, exo-0db) ──────────────────────────────
+if v04:
+  # the vault calls a program: the native token program at the vault's own balance, carrying a
+  # transfer to the payee (programs/lez-msig/lez04/host/tests/v04_private_call.rs). rows[0] is the
+  # target, the vault's own account, authorized by the multisig's seed inside the proof (D15, D16);
+  # the payee is a declared public row, whose state the prover reads from the zone
+  #
+  # first the group's fee account (exo-8ef): each member reads its balance from the newest fee note
+  # the room carries, against what the next private transaction takes at the zone's fee state. The
+  # 50M top-up has paid seven transactions by now, at about 5.7M each, so it cannot pay an eighth:
+  # the call would fail while proving. A member sees it, and tops it up.
+  for i in 0 .. 2: chains[i].refresh(i)
+  let fee0 = chains[1].feeStatus()
+  doAssert fee0.funded and fee0.reserve > 0.u128 and fee0.low == (fee0.balance < fee0.reserve), $fee0
+  doAssert chains[0].feeStatus().balance == fee0.balance and chains[2].feeStatus().balance == fee0.balance,
+    "every member reads the same fee account from the room"
+  echo "   the fee account holds ", fee0.balance, "; the next private transaction takes ", fee0.reserve,
+       (if fee0.low: ": too low" else: "")
+  if fee0.low:
+    let sent = chains[0].topUp(50_000_000.u128)
+    doAssert sent.ok, sent.error
+    waitFor("the top-up included", proc(): bool = chains[0].included(sent.hash))
+    doAssert chains[0].failure(sent.hash) == "", chains[0].failure(sent.hash)
+    for i in 0 .. 2: chains[i].refresh(i)
+    let fee1 = chains[2].feeStatus()
+    doAssert not fee1.low and fee1.balance > fee0.balance, "Carol reads the topped-up fee account: " & $fee1
+    echo "   Alice topped it up: ", fee1.balance, ", enough for ", fee1.covers
+  let vaultBefore = chains[0].readMsig(a).balance
+  let payeeBefore = rpc.getAccount(recipient).balance
+  let call = MsigAction(kind: akCall, program: NativeTokenProgram,
+                        rows: @[MsigRow(account: a, program: NativeTokenProgram),
+                                MsigRow(account: recipient, program: NativeTokenProgram)],
+                        data: nativeTransfer04(recipient, 250.u128))
+  let viaCall = propose(1, call)
+  let card = proposalOf(effectFromJson(effectJsonOf(r.alice.roomEvents(), viaCall)))
+  doAssert card.action.kind == akCall and card.action.rows.len == 2 and card.action.rows[0].account == a,
+    "the room carries the call, its rows and its data"
+  doAssert drv.manifest(effectFromJson(effectJsonOf(r.alice.roomEvents(), viaCall))).touches.anyIt(it.target == Chain & ":" & hexOf(recipient)),
+    "the card's manifest names every row it touches"
+  approve(2, viaCall)
+  doAssert intentState(r.alice.roomEvents(), roomDriverFor, viaCall) == "executable", "2 of 3"
+  let (f12, ref12) = settleAndWatch(2, viaCall)
+  doAssert f12.status == fsFinal, $f12
+  waitFor("the payee credited by the call", proc(): bool = rpc.getAccount(recipient).balance == payeeBefore + 250.u128, 60)
+  for i in 0 .. 2: chains[i].refresh(i)
+  doAssert chains[0].readMsig(a).balance == vaultBefore - 250.u128 and chains[1].readMsig(a).balance == vaultBefore - 250.u128,
+    "every member reads the call's debit from the note Carol sealed: " & $chains[0].readMsig(a).balance
+  block:
+    let c = newHttpClient()
+    defer: c.close()
+    c.headers = newHttpHeaders({"Content-Type": "application/json"})
+    let body = c.postContent(url, $(%*{"jsonrpc": "2.0", "id": 1, "method": "getTransaction",
+                                       "params": [chains[2].txHashOf(ref12.id)]})).toLowerAscii()
+    doAssert body.len > 200, "the call is on chain"
+    for m in config.members: doAssert hexOf(m.key) notin body, "a member's approval key is on chain"
+  echo "12. a Call from the room: the vault called the native program with its own seed, the payee paid 250, every member reads the debit OK"
 
 echo "lez_msig_private_e2e: all passed"

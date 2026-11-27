@@ -24,7 +24,7 @@ The R&D Program team reviews the program before the external audit.
 
 | Milestone | Built | Left | Issues |
 |---|---|---|---|
-| M1 The multisig on LEZ 0.4 | Most of it: both postures on the 0.4 devnet with real proving, from Muster's UI | Rotation on removal, a private Call from the room, the fee balance, a laptop benchmark, the dogfood journey | exo-3dc, exo-0db, exo-8ef, exo-0d3.15, exo-d4b |
+| M1 The multisig on LEZ 0.4 | Most of it: both postures on the 0.4 devnet with real proving, from Muster's UI; a private Call from the room; the fee balance | Rotation on removal, a laptop benchmark, the dogfood journey | exo-3dc, exo-0d3.15, exo-d4b |
 | M2 The program stands alone | The signing spec; key-free public-posture operations in the module and CLI | The full module API for both postures, a CLI over `logoscore`, the integration guide, Ed25519 members if needed | exo-dbd3, exo-c3b, exo-0d3.20 |
 | M3 Decode, disclose, document | Decode-before-sign for the multisig's own actions | The registry and arbitrary targets, the disclosure tiers, the mini-app view, the documentation, a pilot | exo-ac1, exo-4cd4, exo-93b, exo-05d |
 | M4 The chat binding and the IDL | Deliberation in a `chat_module` group that follows the members | The full binding, the IDL, CI on a 0.4 zone | exo-13f, exo-7610 |
@@ -57,6 +57,16 @@ is the security release that followed an outside review of 0.4.0.
   - Anyone can pay the vault's address from a public account, and the next transaction collects
     up to four deposits.
   - Both ran on LEE's 0.4 state and on a local 0.4 zone (`lez_msig_private_e2e`, `live_exec04`).
+- **A private Call from the room** (exo-0db). A member proposes a Call (the program, its rows, the
+  instruction) to a private multisig, members approve it on its card, and the prover proves it over
+  the vault's note, the seed authorizing the vault. Run from a room on a local 0.4 zone
+  (`lez_msig_private_e2e` §12: the native program at the vault's own balance, paying a public payee).
+  The room's accounts panel has a call composer for either posture, not yet seen on a display.
+- **The fee account's balance** (exo-8ef). Each member reads it from the newest fee note the room
+  carries, against what the next private transaction reserves at the zone's fee state, and the
+  multisig's panel shows both beside "Top up the fee account", warning when it cannot pay the next
+  one (`msig_gas_test` §4; `lez_msig_private_e2e` §12 reads it run dry after seven transactions on a
+  50M top-up, and tops it up).
 - **Per-step gas limits** (exo-50c). On 0.4 a refused transaction burns its whole declared limit.
 - **Recovery** of a lost note by scanning the chain with the group's viewing keys.
 - **The room follows the program's members** (#382), and **spending limits** run from the room (#383).
@@ -75,8 +85,6 @@ is the security release that followed an outside review of 0.4.0.
   - moves the balance there.
 
   Deposits that reach a retired vault are swept forward. This is James Zaki's 0.4 pattern.
-- A private Call from the room (exo-0db). It already runs on LEE's 0.4 state.
-- The fee account's balance on the card (exo-8ef).
 - A laptop-class benchmark (exo-0d3.15).
 - **Acceptance:** the dogfood journey in Basecamp (exo-d4b). A 2-of-3 private multisig on the
   devnet is opened, funded and paid out; a member is added and one removed, the vault rotates,
@@ -159,7 +167,7 @@ follows M1 and M2.
 |---|---|---|
 | F.1 M-of-N, members, threshold, action set | ✅ | `msig_core`, `rules.rs` |
 | F.2 lifecycle, expiry, off-chain collection | ✅ | approvals collected in the room, verified in the program |
-| F.3 arbitrary program calls | ✅ | `Call`; private Call from the room is exo-0db (M1) |
+| F.3 arbitrary program calls | ✅ | `Call`; a private Call from the room ran on a local 0.4 zone (exo-0db) |
 | F.4 target registry | ⬜ | exo-ac1 (M3) |
 | F.5 configuration through the quorum | ✅ | the room follows the program's members (#382) |
 | F.6 role separation | ✅ | PROPOSE / APPROVE / EXECUTE |

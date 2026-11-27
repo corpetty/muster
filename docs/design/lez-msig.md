@@ -212,7 +212,10 @@ cannot drift. It holds no key:
 - `scan` recovers the newest note from the chain with the group's viewing keys, for a member whose
   room never received it.
 - On v0.4, every request also carries the fee account's note (`feeNote`) and answers with its new
-  one, and `topup` funds that account from a member's public account (D17).
+  one, and `topup` funds that account from a member's public account (D17). Muster reads its
+  balance from the newest fee note and sets it against what the next private transaction reserves
+  (LEZ's private fee at `getFeeState`'s ceilings, as the executor prices it), so a member sees it
+  run low before a proof fails (exo-8ef, `lez/msig_gas.nim`).
   - `recipients` seals a payment to a private payee's `Recipient`.
   - `collectFrom` collects deposits paid to the vault from outside the group, from a cursor the
     room keeps beside each note.
