@@ -25,6 +25,10 @@ Field reports (performance and findings from real use, kept current; each ends w
   0.4.0-rc3 (devnet and local): what each step meters and costs, refusals burning the whole gas
   limit with no estimate RPC, a PDA unable to pay its own fee, version detection, deploy resume,
   and risc0's recursion circuit answering 403 (a hosted copy would unblock every program author).
+- [`spel-field-report.md`](spel-field-report.md) — for the **SPEL** maintainers: lez-msig's IDL v2
+  through `refactor/lez-v0.4.x`; `spel encode` silently drops a vector's elements after the first
+  (a signer would approve what the bytes do not say), refuses vectors in JSON-valued fields, a
+  struct message the program decodes cannot be described, and state types are found in the crate only.
 - [`chat-module-field-report.md`](chat-module-field-report.md) — for the **chat** team: a
   `chat_module` group per multisig, its roster following the members; removal on GroupV3
   (logos-chat-module#103), one-session addresses, two-minute membership changes, every member an
