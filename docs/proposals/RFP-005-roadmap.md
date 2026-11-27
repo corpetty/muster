@@ -1,6 +1,6 @@
 # RFP-005: progress against the accepted proposal
 
-*Updated 2026-11-26. Owner: Corey Petty. Epic exo-0d3; this document is exo-0d3.19.*
+*Updated 2026-11-27. Owner: Corey Petty. Epic exo-0d3; this document is exo-0d3.19.*
 
 **The reference is the accepted proposal,** [logos-co/rfp#299](https://github.com/logos-co/rfp/issues/299)
 (accepted 2026-11-26; copied in [`RFP-005-lez-msig.md`](RFP-005-lez-msig.md)). It fixes the scope
@@ -24,10 +24,10 @@ The R&D Program team reviews the program before the external audit.
 
 | Milestone | Built | Left | Issues |
 |---|---|---|---|
-| M1 The multisig on LEZ 0.4 | Most of it: both postures on the 0.4 devnet with real proving, from Muster's UI; a private Call from the room; the fee balance | Rotation on removal, a laptop benchmark, the dogfood journey | exo-3dc, exo-0d3.15, exo-d4b |
+| M1 The multisig on LEZ 0.4 | Most of it: both postures on the 0.4 devnet with real proving, from Muster's UI; a private Call from the room; the fee balance; private by default; windows to the minute; rotation on removal in the program (D19) | D19 from the room, and deploying its program; a laptop benchmark; the dogfood journey | exo-3dc, exo-0d3.15, exo-d4b, exo-30b |
 | M2 The program stands alone | The signing spec; key-free public-posture operations in the module and CLI | The full module API for both postures, a CLI over `logoscore`, the integration guide, Ed25519 members if needed | exo-dbd3, exo-c3b, exo-0d3.20 |
-| M3 Decode, disclose, document | Decode-before-sign for the multisig's own actions | The registry and arbitrary targets, the disclosure tiers, the mini-app view, the documentation, a pilot | exo-ac1, exo-4cd4, exo-93b, exo-05d |
-| M4 The chat binding and the IDL | Deliberation in a `chat_module` group that follows the members | The full binding, the IDL, CI on a 0.4 zone | exo-13f, exo-7610 |
+| M3 Decode, disclose, document | Decode-before-sign for the multisig's own actions; the guarantees page (U.5, Privacy 3, S.7) | The registry and arbitrary targets, the disclosure tiers, the mini-app view, the README and designs, a pilot | exo-ac1, exo-4cd4, exo-93b, exo-421c |
+| M4 The chat binding and the IDL | Deliberation in a `chat_module` group that follows the members; the IDL through SPEL; CI on a 0.4 zone | The full binding | exo-13f |
 | M5 Audit | — | Review, audit, fixes, report | exo-a80 |
 
 Released: [muster-v0.4.0](https://github.com/corpetty/muster/releases/tag/muster-v0.4.0)
@@ -78,13 +78,20 @@ is the security release that followed an outside review of 0.4.0.
   - peak memory is about 9.6 GB.
 
 **Left.**
-- **In-program rotation on removal, D19** (exo-3dc). The approval that removes a member, in the
-  same transaction:
-  - retires the vault;
-  - hands its configuration to a successor at a new PDA from a new group secret;
-  - moves the balance there.
-
-  Deposits that reach a retired vault are swept forward. This is James Zaki's 0.4 pattern.
+- **D19 from the room** (exo-3dc). The program side is built (#403, `docs/design/lez-msig.md`
+  "D19 in detail"): the approval that removes a member, in one transaction, retires the vault,
+  hands its configuration to a successor at a new PDA from a new group secret, and moves the
+  balance there; a retired vault forwards late deposits; the fee account moves in the transaction
+  before. Left:
+  - Muster's Nim port of `Rotate` and `Sweep`, held to `v04-rotation.json`;
+  - proposing a rotation (a fresh create key and group secret, sealed to the remaining members
+    only), approving it (each approver re-derives the successor), and the prover's rotate and
+    sweep modes;
+  - after a rotation: sealing the successor's notes, moving the room's keys, re-keying the removed
+    member out, and sweeping late deposits;
+  - deploying the new program (`lez04/artifacts/msig-next.bin`) locally, then on the devnet, and a
+    real-proving benchmark of the rotation.
+- A private Queue's slack is shorter than its proof (exo-30b).
 - A laptop-class benchmark (exo-0d3.15).
 - **Acceptance:** the dogfood journey in Basecamp (exo-d4b). A 2-of-3 private multisig on the
   devnet is opened, funded and paid out; a member is added and one removed, the vault rotates,
@@ -119,19 +126,26 @@ itself takes: create, transfer, call, configuration, spend and a private payee.
   - An unregistered target shows its raw bytes, with a warning and a second confirmation.
 - The selective-disclosure tiers (F.10, exo-4cd4).
 - A multisig view in the mini-app and an error pass (U.2, U.7; exo-93b).
-- Documentation (exo-05d):
-  - the per-action public/private table (U.5): written, [`lez-msig-guarantees.md`](../design/lez-msig-guarantees.md) §1;
-  - the cross-layer correlations (Privacy 3): written, same page §2;
-  - the README (S.8);
-  - designs (S.11);
-  - the requirement-to-test map (S.7): written, same page §3, which also lists the requirements no test holds yet.
+- Documentation: the README (S.8) and designs (S.11). Built (#402): the per-action public/private
+  table (U.5), the cross-layer correlations (Privacy 3) and the requirement-to-test map (S.7), in
+  [`lez-msig-guarantees.md`](../design/lez-msig-guarantees.md), whose §3 lists the requirements no
+  test holds yet.
+- The room metadata the guarantees page found: unpadded note bursts, and a transaction hash outside
+  the seal (exo-421c).
 - **Acceptance:** a dogfood pilot, a real group running a small treasury on testnet.
 
 ## M4: the chat-module binding and the IDL
 
-**Built.** Each multisig's deliberation runs in a `chat_module` group whose membership follows the
-program's (PR #388). Removal was proven on the live fleet with a patched module exposing
-`remove_group_member`.
+**Built.**
+- Each multisig's deliberation runs in a `chat_module` group whose membership follows the
+  program's (PR #388). Removal was proven on the live fleet with a patched module exposing
+  `remove_group_member`.
+- **The IDL (U.4)** through SPEL's `refactor/lez-v0.4.x` (#405): `lez04/idl/lez_msig.json`, the
+  types named in `lez04/spel.toml` so `msig_core` keeps no SPEL dependency, and checked in CI
+  (`lez-msig-idl`). SPEL cannot describe the struct the guest decodes, so the IDL describes
+  `Instruction`; the limits are in `docs/upstream/spel-field-report.md`.
+- **CI on a LEZ v0.4 zone (S.5, S.6)** (#405): the `lez-msig-v04` job runs the v0.4 live tests and
+  Muster's private end-to-end test.
 
 **Left.**
 - The full binding behind `ConversationCrypto` (S.2, exo-13f). Proposals and approvals move there
@@ -139,13 +153,6 @@ program's (PR #388). Removal was proven on the live fleet with a patched module 
   - forward secrecy on removal;
   - a store node that cannot read membership;
   - an exportable proof.
-- The IDL (U.4) and the lez-msig end-to-end tests in CI on a 0.4 zone (S.5, S.6), in exo-7610.
-  - **The IDL is still required, through SPEL's v0.4.x branch** (r4bbit, 2026-11-26). SPEL takes
-    the state types in one of three ways: `#[state]` annotations, type names in `spel.toml`, or
-    names passed to `spel-cli idl-generate`.
-  - lez-msig names its borsh instruction and state types in `spel.toml`, so `msig_core` keeps
-    no LEZ or SPEL dependency.
-  - CI runs a v0.3 zone today.
 
 ## M5: audit
 
@@ -174,12 +181,12 @@ follows M1 and M2.
 | F.7 time lock | ✅ | validity windows; a pessimistic ETA |
 | F.8 spending limits | ✅ | from the room (#383) |
 | F.9 E2EE room per multisig | ✅↪ | Muster's room; the chat module carries deliberation (S.2) |
-| F.10 private default, public posture, disclosure | 🟡 | both postures ✅; disclosure tiers exo-4cd4 (M3) |
+| F.10 private default, public posture, disclosure | 🟡 | both postures ✅; private by default ✅ (#407); disclosure tiers exo-4cd4 (M3) |
 | U.1 a module other modules call | 🟡 | prover and public-posture operations ✅; the full API exo-dbd3 (M2) |
 | U.2 QML mini-app | 🟡 | Muster in Basecamp; a multisig view exo-93b (M3) |
 | U.3 CLI on the headless core | 🟡 | `msig_exec`; over `logoscore` exo-c3b (M2) |
-| U.4 IDL | ⬜ | through SPEL's v0.4.x branch, types named in `spel.toml`; exo-7610 (M4) |
-| U.5 per-action public/private | 🟡 | design §7; the table exo-05d (M3) |
+| U.4 IDL | ✅ | through SPEL's v0.4.x branch, types named in `spel.toml`, checked in CI (#405) |
+| U.5 per-action public/private | ✅ | `lez-msig-guarantees.md` §1 (#402) |
 | U.6 decode before signing | 🟡 | own actions ✅; any target exo-ac1 (M3) |
 | U.7 actionable errors | 🟡 | refusal codes ✅; UI pass exo-93b (M3) |
 | R.1 distinct current members, exactly this action, no replay | ✅ | `rules.rs`, `v03_state.rs`, `v04_state.rs` |
@@ -189,14 +196,14 @@ follows M1 and M2.
 | S.1 LEZ, private accounts | ✅ | |
 | S.2 the room on `chat_module` | ↪ | deliberation ✅ (#388); full binding exo-13f (M4) |
 | S.3/S.4 testnet 0.4, deployed | ✅ | the 0.4.0-rc3 devnet, both postures |
-| S.5/S.6 e2e in CI, green | 🟡 | a local v0.3 zone in CI ✅; 0.4 exo-7610 (M4) |
-| S.7 a test per hard requirement | 🟡 | the mapping exo-05d (M3) |
+| S.5/S.6 e2e in CI, green | ✅ | local v0.3 and v0.4 zones in CI (#405) |
+| S.7 a test per hard requirement | 🟡 | the map ✅ (`lez-msig-guarantees.md` §3); some requirements still have no test |
 | S.8–S.10 README, API, CLI docs | 🟡 | exo-05d (M3), exo-c3b (M2) |
 | S.11 designs | 🟡 | exo-05d (M3) |
 | S.12 own catalogue | ✅ | both provers in Muster's catalogue |
 | S.13 audit | ⬜ | exo-a80 (M5) |
 | S.14 decision log | ✅ | design §9, D1–D19 |
-| Privacy 1–3 | 🟡 | design §7; correlations write-up exo-05d (M3) |
+| Privacy 1–3 | 🟡 | documented (`lez-msig-guarantees.md` §1–2); windows to the minute (#407); room metadata exo-421c |
 | Soft: weighted approvals | ✅ | |
 | Soft: proof of holding, mixed postures | ⬜ | not in the proposal |
 

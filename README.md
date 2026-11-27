@@ -164,4 +164,4 @@ Dual-licensed under either of [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE)
 
 This is an independent community project intended to demonstrate some of the capabilities and potential uses of the Logos technology stack. It has been developed independently by its contributor(s) and is not built for, on behalf of, or as part of the work of Logos or the Institute of Free Technology ("IFT"). It has not been reviewed, audited, approved, or endorsed by Logos or IFT. The project, including its code, documentation, views, and functionality, is the sole responsibility of its contributor(s) and should not be attributed to Logos or IFT.
 
-<!-- rot-check: current-phase=CLAUDE.md sha256=cda227b8b4e416ed7f41c42cee8093436d462cf12a2b2e2c706700fe1a2fe912 -->
+<!-- rot-check: current-phase=CLAUDE.md sha256=ee16ffa976d6fbe6bc9ee72109108b428a986de0cbdff6357056abf3ab8bf568 -->
