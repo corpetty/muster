@@ -3215,3 +3215,18 @@
 {"type":"comment","timestamp":"2026-11-27T12:19:58.097718579Z","issue_id":"exo-c0c","payload":{"body":"Fixed in PR #407 (draft): see its description. lez_msig_defaults_test 5/5, suite 308/308; the live e2e compiles, not run (needs a v0.3 zone). Close when #407 merges."}}
 {"type":"comment","timestamp":"2026-11-27T12:19:58.368317477Z","issue_id":"exo-a99","payload":{"body":"Fixed in PR #407 (draft): see its description. lez_msig_defaults_test 5/5, suite 308/308; the live e2e compiles, not run (needs a v0.3 zone). Close when #407 merges."}}
 {"type":"comment","timestamp":"2026-11-27T12:19:58.615351237Z","issue_id":"exo-5ed","payload":{"body":"Fixed in PR #407 (draft): see its description. lez_msig_defaults_test 5/5, suite 308/308; the live e2e compiles, not run (needs a v0.3 zone). Close when #407 merges."}}
+{"type":"comment","timestamp":"2026-11-27T14:08:20.971646337Z","issue_id":"exo-8ef","payload":{"body":"Merged in #404."}}
+{"type":"close","timestamp":"2026-11-27T14:08:21.285956428Z","issue_id":"exo-0d3.37","payload":{}}
+{"type":"comment","timestamp":"2026-11-27T14:08:21.587577687Z","issue_id":"exo-0db","payload":{"body":"Merged in #404."}}
+{"type":"close","timestamp":"2026-11-27T14:08:21.879651952Z","issue_id":"exo-0d3.36","payload":{}}
+{"type":"comment","timestamp":"2026-11-27T14:08:22.143476655Z","issue_id":"exo-7610","payload":{"body":"Merged in #405."}}
+{"type":"close","timestamp":"2026-11-27T14:08:22.465176119Z","issue_id":"exo-0d3.33","payload":{}}
+{"type":"comment","timestamp":"2026-11-27T14:08:22.730151444Z","issue_id":"exo-c0c","payload":{"body":"Merged in #407."}}
+{"type":"close","timestamp":"2026-11-27T14:08:23.020254321Z","issue_id":"exo-0d3.38","payload":{}}
+{"type":"comment","timestamp":"2026-11-27T14:08:23.275697234Z","issue_id":"exo-a99","payload":{"body":"Merged in #407."}}
+{"type":"close","timestamp":"2026-11-27T14:08:23.559586002Z","issue_id":"exo-0d3.39","payload":{}}
+{"type":"comment","timestamp":"2026-11-27T14:08:23.832413349Z","issue_id":"exo-5ed","payload":{"body":"Merged in #407."}}
+{"type":"close","timestamp":"2026-11-27T14:08:24.119863985Z","issue_id":"exo-0d3.41","payload":{}}
+{"type":"comment","timestamp":"2026-11-27T14:08:24.411635315Z","issue_id":"exo-05d","payload":{"body":"Merged in #402."}}
+{"type":"close","timestamp":"2026-11-27T14:08:24.703294343Z","issue_id":"exo-0d3.31","payload":{}}
+{"type":"comment","timestamp":"2026-11-27T14:08:24.977150849Z","issue_id":"exo-3dc","payload":{"body":"Program side merged in #403 (a5ef34c1). Open: the room flow (see the earlier comment), then deploying msig-next.bin."}}
