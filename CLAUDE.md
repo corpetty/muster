@@ -178,11 +178,17 @@ muster-v0.4.0 also carries a copy of risc0's recursion circuit, which the prover
   - the room following the program's members, and spending limits;
   - the signing spec, and key-free public-posture operations for integrators;
   - deliberation in a `chat_module` group.
+- **Built since** (on main, 2026-11-27):
+  - D19's program side: rotation on removal, `Action::Rotate` and `Instruction::Sweep` appended, so existing bytes and tags are unchanged; its guest is `lez04/artifacts/msig-next.bin`, not yet deployed (#403);
+  - the fee account's balance, and a private Call from the room (#404);
+  - the IDL through SPEL `refactor/lez-v0.4.x`, checked in CI, and CI on a LEZ v0.4 zone (#405);
+  - private by default, and validity windows rounded to the minute (#407);
+  - `docs/design/lez-msig-guarantees.md`: who sees what, the cross-layer correlations, the requirement-to-test map (#402).
 - **Left**, per the proposal:
-  - rotation on removal (D19, exo-3dc);
+  - D19 from the room, then deploying its program (exo-3dc);
   - the module and CLI for both lines (M2);
-  - the target registry, disclosure tiers, mini-app view and docs (M3);
-  - the full chat binding and the IDL (M4);
+  - the target registry, disclosure tiers, mini-app view, README and designs (M3);
+  - the full chat binding (M4);
   - the audit (M5).
 
 **Monero in Muster rooms (epic exo-dcc, from 2026-10-07).** Plan `docs/design/monero-in-rooms.md`; ADR-018 accepted 2026-10-08. Settlement stays on Monero, and Muster covers the rest of the deal; Muster holds no Monero key and never spends. Handoff: `docs/06-session-handoff-2026-10-09.md`.
