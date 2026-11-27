@@ -6,7 +6,12 @@
 //!   It proves the claims are what the members approved, so a chained call from the plan runs
 //!   only if `apply` accepted.
 //!
-//! Both are total over their inputs and never panic; adapters turn an `Err` into a refusal.
+//! `apply` is v0.3's entry, over a bare `State`. An actor adapter (v0.4) calls `apply_stored`,
+//! which also knows a retired multisig and returns what else the transaction must send (D19's
+//! rotation: a handover and a balance read), then `adopt` at the successor and `forward` on the
+//! balance's answer.
+//!
+//! All are total over their inputs and never panic; adapters turn an `Err` into a refusal.
 
 use crate::digest::{approve_msg, execute_msg, proposal_id, spend_msg};
 use crate::error::MsigError;
@@ -23,7 +28,8 @@ fn outflow_of(a: &Action) -> Option<Outflow> {
         Action::Call { program, rows, data } => {
             Some(Outflow::Invoke { program: *program, rows: rows.clone(), data: data.clone() })
         }
-        Action::Config(_) | Action::Cancel(_) => None,
+        // A rotation's balance is read in the transaction, not claimed by the instruction.
+        Action::Config(_) | Action::Cancel(_) | Action::Rotate { .. } => None,
     }
 }
 
@@ -39,7 +45,7 @@ pub fn claims(ins: &Instruction) -> R<Claims> {
         Ok(Window { from, to })
     };
     Ok(match ins {
-        Instruction::Create { .. } => Claims::default(),
+        Instruction::Create { .. } | Instruction::Sweep => Claims::default(),
         Instruction::Execute { proposal, .. } => Claims {
             window: w(None, Some(proposal.expires_ms))?,
             outflow: outflow_of(&proposal.action),
@@ -324,7 +330,30 @@ fn apply_changes(s: &mut State, changes: &[ConfigChange]) -> R<()> {
     Ok(())
 }
 
-fn run_action(s: &mut State, a: &Action) -> R<()> {
+/// Runs the action on the state. A rotation returns the successor's state instead (D19): the
+/// changes applied as `Config` applies them, its own create key, the limits' usage and the nonce
+/// window carried over, and an empty queue.
+fn run_action(s: &mut State, a: &Action, ctx: &Ctx) -> R<Option<Handover>> {
+    match a {
+        Action::Rotate { create_key, successor, changes } => {
+            if *create_key == s.create_key {
+                return Err(MsigError::BadRotation("the successor needs a create key of its own"));
+            }
+            if *successor == ctx.multisig {
+                return Err(MsigError::BadRotation("the successor must be another account"));
+            }
+            let mut next = s.clone();
+            apply_changes(&mut next, changes)?;
+            next.create_key = *create_key;
+            // Queued actions name this account: they do not carry over (a rotation cancels them).
+            next.queue.clear();
+            Ok(Some(Handover { to: *successor, state: next }))
+        }
+        a => run_plain(s, a).map(|()| None),
+    }
+}
+
+fn run_plain(s: &mut State, a: &Action) -> R<()> {
     match a {
         Action::Config(changes) => apply_changes(s, changes),
         Action::Cancel(nonces) => {
@@ -338,45 +367,146 @@ fn run_action(s: &mut State, a: &Action) -> R<()> {
             }
             Ok(())
         }
-        Action::Transfer { .. } | Action::Call { .. } => Ok(()),
+        Action::Transfer { .. } | Action::Call { .. } | Action::Rotate { .. } => Ok(()),
     }
 }
 
-/// Every check against the stored state, and the new state. `pre` is the program's shard as
-/// stored (`None` or empty when the account holds no multisig yet). `program` is the multisig
-/// program's own id, when the adapter knows it, so a `Call` cannot target it.
+/// v0.3's entry: every check against the stored state, and the new state. `pre` is the program's
+/// shard as stored (`None` or empty when the account holds no multisig yet). `program` is the
+/// multisig program's own id, when the adapter knows it, so a `Call` cannot target it.
+///
+/// v0.3 has no actor messages, so it cannot rotate: a `Rotate` and a `Sweep` are refused here
+/// (`rotation-unsupported`), and v0.3 migrates (D11).
 pub fn apply(pre: Option<&State>, ins: &Instruction, ctx: &Ctx, program: Option<&Key>) -> R<State> {
-    if let Instruction::Create { zone, config } = ins {
-        if pre.is_some() {
-            return Err(MsigError::AlreadyInitialised);
+    let rotates = |p: &Proposal| matches!(p.action, Action::Rotate { .. });
+    match ins {
+        Instruction::Sweep => return Err(MsigError::RotationUnsupported),
+        Instruction::Execute { proposal, .. }
+        | Instruction::Queue { proposal, .. }
+        | Instruction::ExecuteQueued { proposal, .. }
+            if rotates(proposal) =>
+        {
+            return Err(MsigError::RotationUnsupported)
         }
-        validate_config(config)?;
-        return Ok(State {
-            version: VERSION,
-            zone: *zone,
-            create_key: ctx.create_key,
-            epoch: 0,
-            config: config.clone(),
-            usage: Vec::new(),
-            nonce_base: 0,
-            consumed: [0; 32],
-            queue: Vec::new(),
-        });
+        _ => {}
+    }
+    if let Instruction::Create { .. } = ins {
+        return create(pre.is_some(), ins, ctx);
     }
     let s0 = pre.ok_or(MsigError::NotInitialised)?;
+    step(s0, ins, ctx, program).map(|(s, _)| s)
+}
+
+/// The actor adapter's entry (v0.4): `apply` over what the shard stores, active or retired, and what
+/// the transaction must also send. A retired multisig refuses everything but `Sweep`.
+pub fn apply_stored(pre: Option<&Stored>, ins: &Instruction, ctx: &Ctx, program: Option<&Key>) -> R<Applied> {
+    if let Instruction::Create { .. } = ins {
+        let s = create(pre.is_some(), ins, ctx)?;
+        return Ok(Applied { post: Stored::Active(s), handover: None, sweep_to: None });
+    }
+    match pre.ok_or(MsigError::NotInitialised)? {
+        Stored::Retired(r) => {
+            if r.create_key != ctx.create_key {
+                return Err(MsigError::WrongCreateKey);
+            }
+            match ins {
+                Instruction::Sweep => {
+                    Ok(Applied { post: Stored::Retired(r.clone()), handover: None, sweep_to: Some(r.successor) })
+                }
+                _ => Err(MsigError::Retired(r.successor)),
+            }
+        }
+        Stored::Active(s0) => {
+            if let Instruction::Sweep = ins {
+                return Err(MsigError::NotRetired);
+            }
+            let (s, handover) = step(s0, ins, ctx, program)?;
+            Ok(match handover {
+                None => Applied { post: Stored::Active(s), handover: None, sweep_to: None },
+                Some(h) => Applied {
+                    post: Stored::Retired(Retired {
+                        mark: RETIRED,
+                        create_key: s.create_key,
+                        epoch: h.state.epoch,
+                        successor: h.to,
+                    }),
+                    sweep_to: Some(h.to),
+                    handover: Some(h),
+                },
+            })
+        }
+    }
+}
+
+/// At a successor, its predecessor's handover (D19): written once, onto an empty shard, naming this
+/// account and its create key, with a valid configuration and an empty queue. The adapter has
+/// already checked that the program sent it granting this account's seed.
+pub fn adopt(pre: Option<&Stored>, ctx: &Ctx, h: &Handover) -> R<State> {
+    if pre.is_some() {
+        return Err(MsigError::AlreadyInitialised);
+    }
+    if h.to != ctx.multisig {
+        return Err(MsigError::BadHandover("it names another account"));
+    }
+    let s = &h.state;
+    if s.version != VERSION {
+        return Err(MsigError::BadHandover("an unknown state version"));
+    }
+    if s.create_key != ctx.create_key {
+        return Err(MsigError::WrongCreateKey);
+    }
+    if !s.queue.is_empty() {
+        return Err(MsigError::BadHandover("a successor starts with an empty queue"));
+    }
+    validate_config(&s.config)?;
+    Ok(s.clone())
+}
+
+/// On the balance's answer to a rotation or a sweep (D19): where it goes. Only a retired multisig
+/// reads its balance, and all of it goes to the successor.
+pub fn forward(pre: &Stored, balance: u128) -> R<Option<Outflow>> {
+    match pre {
+        Stored::Active(_) => Err(MsigError::NotRetired),
+        Stored::Retired(r) => Ok((balance > 0).then_some(Outflow::Pay { to: r.successor, amount: balance })),
+    }
+}
+
+fn create(exists: bool, ins: &Instruction, ctx: &Ctx) -> R<State> {
+    let Instruction::Create { zone, config } = ins else { return Err(MsigError::Decode) };
+    if exists {
+        return Err(MsigError::AlreadyInitialised);
+    }
+    validate_config(config)?;
+    Ok(State {
+        version: VERSION,
+        zone: *zone,
+        create_key: ctx.create_key,
+        epoch: 0,
+        config: config.clone(),
+        usage: Vec::new(),
+        nonce_base: 0,
+        consumed: [0; 32],
+        queue: Vec::new(),
+    })
+}
+
+/// Every instruction but Create and Sweep, against an active multisig: its new state, and the
+/// successor's when the action rotates.
+fn step(s0: &State, ins: &Instruction, ctx: &Ctx, program: Option<&Key>) -> R<(State, Option<Handover>)> {
     if s0.create_key != ctx.create_key {
         return Err(MsigError::WrongCreateKey);
     }
     let mut s = s0.clone();
+    let mut handover = None;
     match ins {
-        Instruction::Create { .. } => unreachable!(),
+        Instruction::Create { .. } | Instruction::Sweep => return Err(MsigError::Decode), // the callers handle both
         Instruction::Execute { proposal: p, approvals, executor } => {
             check_proposal(&s, p, approvals, executor, ctx, program)?;
             if s.config.timelock_ms > 0 && !matches!(p.action, Action::Cancel(_)) {
                 return Err(MsigError::NeedsQueue);
             }
             consume(&mut s, p.nonce)?;
-            run_action(&mut s, &p.action)?;
+            handover = run_action(&mut s, &p.action, ctx)?;
         }
         Instruction::Queue { proposal: p, approvals, executor, at_ms } => {
             if s.config.timelock_ms == 0 {
@@ -418,7 +548,7 @@ pub fn apply(pre: Option<&State>, ins: &Instruction, ctx: &Ctx, program: Option<
             check_executor(&s.config, &id, executor)?;
             check_action_allowed(&s.config, &p.action, program)?;
             s.queue.remove(pos);
-            run_action(&mut s, &p.action)?;
+            handover = run_action(&mut s, &p.action, ctx)?;
         }
         Instruction::Spend { spend: sp, approvals, period, period_ms } => {
             if sp.multisig != ctx.multisig {
@@ -472,5 +602,5 @@ pub fn apply(pre: Option<&State>, ins: &Instruction, ctx: &Ctx, program: Option<
             s.usage.push(LimitUsage { id: sp.limit, period: *period, used });
         }
     }
-    Ok(s)
+    Ok((s, handover))
 }
