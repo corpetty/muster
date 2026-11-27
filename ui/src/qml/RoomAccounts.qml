@@ -80,6 +80,25 @@ Item {
     // account is the multisig's id or, before Create, its ceremony's create key
     signal lezMsigTopupRequested(string account, string amount)
     signal lezMsigRecoverRequested(string account)
+    // a private lez-msig's prover, when the open was refused for want of it (exo-c0c): the
+    // Room raises Basecamp's packages.install and hands the answers back in packageRequests,
+    // as for a card's install remedy (exo-dcc.10)
+    signal packageInstallRequested(string pkg)
+    property var packageRequests: ({})
+    readonly property string msigProverMissing: (acc.lezMsigOpen && acc.lezMsigOpen.error === "no-prover")
+                                                ? String(acc.lezMsigOpen.install || "") : ""
+    readonly property var msigInstallReq: acc.msigProverMissing.length > 0 && acc.packageRequests
+                                          ? (acc.packageRequests[acc.msigProverMissing] || null) : null
+    function msigInstallNote() {
+        var r = acc.msigInstallReq, pkg = acc.msigProverMissing;
+        if (!r) return "";
+        if (r.state === "asking") return qsTr("Asking Package Manager to open %1…").arg(pkg);
+        if (r.state === "open") return qsTr("Package Manager is open on %1. Confirm the install there, then create the multisig again.").arg(pkg);
+        if (r.state === "unavailable") return qsTr("Install %1 from Basecamp's Package Manager.").arg(pkg);
+        if (r.state === "failed") return qsTr("%1 was not found in your catalogues. Check the catalogues in Package Manager.").arg(pkg);
+        if (r.state === "cancelled") return qsTr("The install request was cancelled.");
+        return qsTr("Package Manager did not answer (%1). Install %2 from Basecamp's Package Manager.").arg(String(r.error || "")).arg(pkg);
+    }
 
     // a member's own accounts, disclosed to the room (exo-1f9): anyone may pick one where an
     // account of that member is needed, e.g. as their approval key in a LEZ multisig
@@ -106,7 +125,7 @@ Item {
     }
     function msigSpec(isPrivate) {
         var spec = { threshold: Number(msigK.text.trim()), timelockMs: Number(msigLock.text.trim()) * 60000 };
-        if (isPrivate) spec.private = true;
+        spec.private = !!isPrivate;     // always said: private is the module's default (exo-c0c)
         if (Object.keys(acc.msigPicks).length > 0) spec.accounts = acc.msigPicks;
         return JSON.stringify(spec);
     }
@@ -1219,34 +1238,44 @@ Item {
                         }
                     }
                 }
-                ActionButton {
-                    id: msigOpenButton
-                    objectName: "msigOpen"
-                    Layout.fillWidth: true
-                    readonly property int n: Math.max(acc.roomMembers.length, 1)
-                    readonly property bool valid: /^[0-9]+$/.test(msigK.text.trim()) && Number(msigK.text.trim()) >= 1
-                             && Number(msigK.text.trim()) <= n && /^[0-9]+$/.test(msigLock.text.trim())
-                    enabled: valid
-                    text: qsTr("Create a %1-of-%2 LEZ multisig").arg(msigK.text.trim()).arg(n)
-                    variant: LogosButton.Variant.Secondary
-                    onClicked: acc.lezMsigOpenRequested(acc.msigSpec(false))
-                }
-                // the private posture (exo-efa): the same rules over a private account
+                // private by default (exo-c0c, exo-efa): the same rules over a private account
                 LogosText {
                     textFormat: Text.PlainText
+                    objectName: "msigPrivateDefaultNote"
                     Layout.fillWidth: true
-                    text: qsTr("Or keep it private: only the members can see it. The chain sees a proof, never who is in it or who approved. Its transactions are proved on this device, which takes a few minutes each.")
+                    text: qsTr("Private: only the members can see it. The chain sees a proof, never who is in it or who approved. Each of its transactions is proved on this device, which takes a few minutes. On LEZ v0.4 every private transaction pays its fee from the group's fee account, so you top that up first, before it can be created.")
                     color: Theme.palette.textSecondary
                     font.pixelSize: MusterStyle.caption
                     wrapMode: Text.WordWrap
                 }
                 ActionButton {
+                    id: msigOpenButton
                     objectName: "msigOpenPrivate"
                     Layout.fillWidth: true
-                    enabled: msigOpenButton.valid
-                    text: qsTr("Create a private %1-of-%2 LEZ multisig").arg(msigK.text.trim()).arg(msigOpenButton.n)
-                    variant: LogosButton.Variant.Secondary
+                    readonly property int n: Math.max(acc.roomMembers.length, 1)
+                    readonly property bool valid: /^[0-9]+$/.test(msigK.text.trim()) && Number(msigK.text.trim()) >= 1
+                             && Number(msigK.text.trim()) <= n && /^[0-9]+$/.test(msigLock.text.trim())
+                    enabled: valid
+                    text: qsTr("Create a private %1-of-%2 LEZ multisig").arg(msigK.text.trim()).arg(n)
+                    variant: LogosButton.Variant.Primary
                     onClicked: acc.lezMsigOpenRequested(acc.msigSpec(true))
+                }
+                // the public posture, chosen explicitly
+                LogosText {
+                    textFormat: Text.PlainText
+                    Layout.fillWidth: true
+                    text: qsTr("Or make it public: anyone can read it on chain, with every member's approval key, the threshold, each action and who approved it. Nothing is proved on this device.")
+                    color: Theme.palette.textSecondary
+                    font.pixelSize: MusterStyle.caption
+                    wrapMode: Text.WordWrap
+                }
+                ActionButton {
+                    objectName: "msigOpenPublic"
+                    Layout.fillWidth: true
+                    enabled: msigOpenButton.valid
+                    text: qsTr("Create a public %1-of-%2 LEZ multisig").arg(msigK.text.trim()).arg(msigOpenButton.n)
+                    variant: LogosButton.Variant.Secondary
+                    onClicked: acc.lezMsigOpenRequested(acc.msigSpec(false))
                 }
             }
 
@@ -1312,13 +1341,30 @@ Item {
                 textFormat: Text.PlainText
                 objectName: "msigOpenResult"
                 Layout.fillWidth: true
-                visible: !!(acc.lezMsigOpen && acc.lezMsigOpen.error)
+                visible: !!(acc.lezMsigOpen && acc.lezMsigOpen.error) && acc.msigProverMissing.length === 0
                 text: acc.lezMsigOpen && acc.lezMsigOpen.error
                       ? "⚠ " + String(acc.lezMsigOpen.error) + (acc.lezMsigOpen.detail ? " — " + String(acc.lezMsigOpen.detail) : "")
                       : ""
                 color: Theme.palette.error
                 font.pixelSize: MusterStyle.caption
                 wrapMode: Text.WordWrap
+            }
+            // no prover for the zone's LEZ line (exo-c0c): name the module, offer its install,
+            // and leave public as the person's own choice, never made for them
+            InlineNotice {
+                objectName: "msigNoProver"
+                Layout.fillWidth: true
+                visible: acc.msigProverMissing.length > 0
+                tone: "needs"
+                title: qsTr("A private multisig needs its prover, which is not installed")
+                text: qsTr("On this zone each private transaction is proved on this device by %1. Install it and create the multisig again, or create a public one instead.").arg(acc.msigProverMissing)
+                      + (acc.msigInstallNote().length > 0 ? "\n" + acc.msigInstallNote() : "")
+                ActionButton {
+                    objectName: "msigInstallProver"
+                    enabled: !acc.msigInstallReq || acc.msigInstallReq.state !== "asking"
+                    text: qsTr("Install the prover")
+                    onClicked: acc.packageInstallRequested(acc.msigProverMissing)
+                }
             }
 
             // the account, as its program holds it, and proposing from it

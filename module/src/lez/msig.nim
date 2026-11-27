@@ -519,6 +519,42 @@ proc nextNonce*(s: MsigState, taken: seq[uint64] = @[]): uint64 =
     inc n
   raise newException(ValueError, "the nonce window is full: execute or cancel a proposal first")
 
+# ── the times a client picks, to the minute (§5, exo-a99) ─────────────────────
+# Every time a client chooses reaches the sequencer as a validity window, and a window is
+# public even in a private transaction. So each is a whole minute: an execution's window does
+# not date its proposal to the millisecond, and a Queue does not pair with its ExecuteQueued.
+# The program and its encoding are unchanged: a rounded time is just another u64.
+const WindowGrainMs* = 60_000'u64
+
+proc floorMinute*(ms: uint64): uint64 = ms - ms mod WindowGrainMs
+proc ceilMinute*(ms: uint64): uint64 =
+  if ms mod WindowGrainMs == 0: ms else: ms - ms mod WindowGrainMs + WindowGrainMs
+
+proc msigExpiryMs*(nowMs, ttlMs: uint64): uint64 =
+  ## A proposal's or a spend's `expires_ms`, `ttlMs` from now, rounded DOWN to the minute:
+  ## never longer than asked, and still in the future, which takes a ttl of at least a minute
+  ## (floor(now + 60 s) > now); a shorter one raises.
+  if ttlMs < WindowGrainMs:
+    raise newException(ValueError, "an expiry must be at least a minute away: windows are rounded to the minute")
+  floorMinute(nowMs + ttlMs)
+
+proc queueAtMs*(nowMs, slackMs: uint64): uint64 =
+  ## Queue's `at_ms`: the LATEST the transaction may land (window `[—, at_ms]`), and the time
+  ## the program counts the ETA from. Rounded UP, so it lands no later and the ETA stays
+  ## pessimistic, never early.
+  ceilMinute(nowMs + slackMs)
+
+proc executeQueuedAtMs*(nowMs: uint64): uint64 =
+  ## ExecuteQueued's `at_ms`: the EARLIEST the transaction may land (window `[at_ms, expires)`),
+  ## which the program holds at or after the ETA. The minute it is sent, rounded DOWN: never
+  ## later than now, and it names only the minute it is sent in, not the ETA. Send it once
+  ## this is at or after the ETA (`executeQueuedReady`).
+  floorMinute(nowMs)
+
+proc executeQueuedReady*(nowMs, etaMs: uint64): bool =
+  ## Whether an ExecuteQueued sent now passes the program's `at_ms ≥ eta`.
+  executeQueuedAtMs(nowMs) >= etaMs
+
 proc hexOf*(b: openArray[byte]): string =
   for x in b: result.add toLowerAscii(toHex(x, 2))
 

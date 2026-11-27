@@ -12,7 +12,7 @@
         {
           "step": "ceremony",
           "who": "the opener",
-          "does": "lez_msig_open: publishes lmsig/<create key>/open (a random create key; the program and zone from Settings) and joins.",
+          "does": "lez_msig_open {private: false} (a lez-msig is private unless the opener says public, exo-c0c): publishes lmsig/<create key>/open (a random create key; the program and zone from Settings) and joins.",
           "signs": "the opener's approval key signs tagged('muster-msig/v1/bind', room ‖ create key ‖ their room identity)",
           "reveals": [
             {

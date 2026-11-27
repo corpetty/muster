@@ -411,8 +411,8 @@ type LezMsigSettlement* = ref object of Settlement
   queueSlackMs*: uint64     ## how late a Queue may land; 0 = QueueSlackMs
   queuedRef: string         ## the ExecuteQueued this settlement sent itself, once the lock ended
 
-const QueueSlackMs = 120_000'u64   ## a Queue claims to land within two minutes
-const SpendMarginMs = 120_000'u64  ## a Spend is not sent this close to the end of its period
+const QueueSlackMs = 120_000'u64   ## a Queue claims to land within two minutes (then to the minute)
+const SpendMarginMs* = 120_000'u64 ## a Spend is not sent this close to the end of its period
 
 proc msigChainOf(s: LezMsigSettlement): MsigChain =
   if s.adapter of MsigChain: MsigChain(s.adapter) else: nil
@@ -524,12 +524,13 @@ method assemble*(s: LezMsigSettlement, drv: Driver, effect: Effect,
     if q.nonce == p.nonce and q.proposalId == id: queued = i
   if queued >= 0:
     let q = st.queue[queued]
-    if now < q.etaMs:
+    # at_ms is the minute it is sent in (§5, exo-a99): it may go once that minute is past the ETA
+    if not executeQueuedReady(now, q.etaMs):
       return Assembled(ok: false, error: "not-settleable",
-                       detail: "queued: its time lock ends at " & isoMs(q.etaMs))
+                       detail: "queued: its time lock ends at " & isoMs(q.etaMs) & "; it executes from the next whole minute")
     if now >= q.expiresMs:
       return Assembled(ok: false, error: "not-settleable", detail: "expired: the proposal expired at " & isoMs(q.expiresMs))
-    ins = MsigInstruction(kind: ikExecuteQueued, proposal: p, atMs: q.etaMs)
+    ins = MsigInstruction(kind: ikExecuteQueued, proposal: p, atMs: executeQueuedAtMs(now))
   else:
     if p.epoch != st.epoch:
       return Assembled(ok: false, error: "not-settleable",
@@ -560,8 +561,10 @@ method assemble*(s: LezMsigSettlement, drv: Driver, effect: Effect,
       return Assembled(ok: false, error: "insufficient-signatures", have: have, need: need,
                        detail: "approvals weigh " & $weight & "; the threshold is " & $st.config.threshold)
     if st.config.timelockMs > 0 and p.action.kind != akCancel:
-      let at = now + (if s.queueSlackMs > 0: s.queueSlackMs else: QueueSlackMs)
-      if at + st.config.timelockMs >= p.expiresMs:
+      # the latest it may land, to the minute (§5, exo-a99); the ETA counts from it, and
+      # ExecuteQueued goes at a whole minute at or after the ETA, before the expiry
+      let at = queueAtMs(now, if s.queueSlackMs > 0: s.queueSlackMs else: QueueSlackMs)
+      if ceilMinute(at + st.config.timelockMs) >= p.expiresMs:
         return Assembled(ok: false, error: "not-settleable",
           detail: "the time lock (" & $(st.config.timelockMs div 1000) & " s) would end after the proposal expires")
       ins = MsigInstruction(kind: ikQueue, proposal: p, approvals: approvals, atMs: at)
@@ -635,10 +638,11 @@ method watch*(s: LezMsigSettlement, txRef: TxRef): Finality =
       if r.state.nonceFree(s.proposal.nonce):
         return Finality(status: fsFailed, detail: "the program refused the queue (included; nothing changed)")
       return Finality(status: fsFailed, detail: "no longer queued: cancelled")
-    if c.nowMs() < s.etaMs:
+    let now = c.nowMs()
+    if not executeQueuedReady(now, s.etaMs):
       return Finality(status: fsPending, detail: "queued: its time lock ends at " & isoMs(s.etaMs))
-    # the lock has ended: execute it, and watch that
-    var ins = MsigInstruction(kind: ikExecuteQueued, proposal: s.proposal, atMs: s.etaMs)
+    # the lock has ended: execute it at the minute it is sent in (§5, exo-a99), and watch that
+    var ins = MsigInstruction(kind: ikExecuteQueued, proposal: s.proposal, atMs: executeQueuedAtMs(now))
     let ex = c.myExecutor(s.driver, s.proposal)
     if not ex.ok: return Finality(status: fsPending, detail: "queued and ready, waiting on an EXECUTE member: " & ex.why)
     ins.executor = ex.signed

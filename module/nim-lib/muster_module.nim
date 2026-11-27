@@ -4349,16 +4349,15 @@ proc musterLezMsigOpen(specJson: string): string =
     let w = spec{"weights"}{id}
     members.add (id: id, roles: roles, weight: uint16(if w != nil: w.getInt(1) else: 1))
   let program = hexToBytes(gLezMsigProgram)
-  let private = spec{"private"}.getBool(false)
-  if private:
-    var line: string
-    try: line = lezZoneLine(program)
-    except CatchableError as e:
-      return $(%*{"error": "refused", "detail": "cannot read the zone's LEZ line: " & e.msg})
-    if msigProver(line) == nil:
-      let name = proverModuleFor(line)
-      return $(%*{"error": "no-prover", "install": name,
-                  "detail": "a private multisig's transactions on this zone (LEZ " & line & ") are proved by " & name & ": install it first"})
+  # private by default (exo-c0c): public only when the spec says private: false; with no
+  # prover for the zone's line the open is refused, naming the module, never made public
+  let posture = msigPostureOf(spec, proc(): string = lezZoneLine(program),
+                              proc(line: string): bool = msigProver(line) != nil)
+  if not posture.ok:
+    var err = %*{"error": posture.error, "detail": posture.detail}
+    if posture.install.len > 0: err["install"] = %posture.install
+    return $err
+  let private = posture.private
   # an account a member disclosed in this room, picked as their approval key (exo-1f9)
   var accounts = initTable[string, string]()
   if spec{"accounts"} != nil and spec{"accounts"}.kind == JObject:
@@ -4516,7 +4515,8 @@ proc musterLezMsigSpend(d: LezMsigDriver, j: JsonNode): string =
     limit = uint32(j["limit"].getInt())
     to = lezIdOf(j["to"].getStr())
     amount = parse(j["amount"].getStr(), UInt128)
-    if j.hasKey("expiresInS"): ttlMs = uint64(j["expiresInS"].getBiggestInt()) * 1000
+    if j.hasKey("expiresInS"): ttlMs = uint64(max(0'i64, j["expiresInS"].getBiggestInt())) * 1000
+    if ttlMs < WindowGrainMs: raise newException(ValueError, "expiresInS must be at least 60: windows are rounded to the minute")
   except CatchableError as e: return $(%*{"error": "bad-action", "detail": e.msg})
   let l = d.account.config.limitOf(limit)
   if l.isNone: return $(%*{"error": "bad-action", "detail": "the multisig has no spending limit " & $limit})
@@ -4531,7 +4531,8 @@ proc musterLezMsigSpend(d: LezMsigDriver, j: JsonNode): string =
     st = r.state
   except CatchableError as e: return $(%*{"error": "sequencer-unreachable", "detail": e.msg})
   try:
-    let sp = newMsigSpend(gSession.roomEvents(), d, st, limit, to, amount, uint64(epochTime() * 1000) + ttlMs)
+    # the expiry to the minute (§5, exo-a99): it becomes the spend's public window
+    let sp = newMsigSpend(gSession.roomEvents(), d, st, limit, to, amount, msigExpiryMs(uint64(epochTime() * 1000), ttlMs))
     let why = d.signRefusal(effectFromJson(lezMsigSpendEffect(sp)))
     if why.len > 0: return $(%*{"error": "refused", "detail": why})
     inc gMsgSeq
@@ -4559,7 +4560,8 @@ proc musterCoordinateProposeLezMsig(actionJson: string): string =
       payee = hexToBytes(j["recipient"].getStr())
       j["to"] = %msigbytes.hexOf(msigbytes.recipientAddress(msigbytes.decodeRecipient(payee)))
     action = msigActionOf(j)
-    if j.hasKey("expiresInS"): ttlMs = uint64(j["expiresInS"].getBiggestInt()) * 1000
+    if j.hasKey("expiresInS"): ttlMs = uint64(max(0'i64, j["expiresInS"].getBiggestInt())) * 1000
+    if ttlMs < WindowGrainMs: raise newException(ValueError, "expiresInS must be at least 60: windows are rounded to the minute")
   except CatchableError as e: return $(%*{"error": "bad-action", "detail": e.msg})
   if payee.len > 0 and not d.account.private:
     return $(%*{"error": "bad-action", "detail": "a private payee needs a private multisig: a public one cannot seal a payment"})
@@ -4575,7 +4577,8 @@ proc musterCoordinateProposeLezMsig(actionJson: string): string =
     st = r.state
   except CatchableError as e: return $(%*{"error": "sequencer-unreachable", "detail": e.msg})
   try:
-    let p = newMsigProposal(gSession.roomEvents(), ks, d, st, action, uint64(epochTime() * 1000) + ttlMs)
+    # the expiry to the minute (§5, exo-a99): it becomes the execution's public window
+    let p = newMsigProposal(gSession.roomEvents(), ks, d, st, action, msigExpiryMs(uint64(epochTime() * 1000), ttlMs))
     inc gMsgSeq
     let (id, approval) = liveMsigPropose(gSession, ks, driverFor, gCoordKind, d, p, int64(epochTime()), gMsgSeq,
                                          intentLinkContext(""), payee)
