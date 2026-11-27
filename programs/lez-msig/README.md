@@ -15,6 +15,8 @@ v0.4. Built for RFP-005. The accepted proposal is the reference for scope and mi
 
 Design and decision log: `docs/design/lez-msig.md`. What a signer signs, byte for byte:
 `docs/design/lez-msig-signing.md`. Benchmarks (real proving): `BENCHMARKS.md`.
+What each observer sees for each action, the cross-layer correlations, and which test holds each
+RFP requirement: [`docs/design/lez-msig-guarantees.md`](../../docs/design/lez-msig-guarantees.md).
 
 ## Layout
 

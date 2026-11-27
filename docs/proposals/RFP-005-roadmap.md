@@ -120,11 +120,11 @@ itself takes: create, transfer, call, configuration, spend and a private payee.
 - The selective-disclosure tiers (F.10, exo-4cd4).
 - A multisig view in the mini-app and an error pass (U.2, U.7; exo-93b).
 - Documentation (exo-05d):
-  - the per-action public/private table (U.5);
-  - the cross-layer correlations (Privacy 3);
+  - the per-action public/private table (U.5): written, [`lez-msig-guarantees.md`](../design/lez-msig-guarantees.md) §1;
+  - the cross-layer correlations (Privacy 3): written, same page §2;
   - the README (S.8);
   - designs (S.11);
-  - the requirement-to-test map (S.7).
+  - the requirement-to-test map (S.7): written, same page §3, which also lists the requirements no test holds yet.
 - **Acceptance:** a dogfood pilot, a real group running a small treasury on testnet.
 
 ## M4: the chat-module binding and the IDL

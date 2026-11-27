@@ -144,7 +144,7 @@ the sequencer enforces:
 - `ExecuteQueued`: `[ at_ms, expires )` with `at_ms ≥ eta`.
 - `Spend`: `[ p·period, (p+1)·period ) ∩ [ —, expires )`.
 
-Windows are public even in a private transaction, so clients round them to the minute.
+Windows are public even in a private transaction, so clients round them to the minute (exo-a99, #407).
 
 **A valid config.**
 - 1 ≤ n ≤ 32 members, with distinct keys and every weight ≥ 1.
@@ -232,14 +232,18 @@ postures. A refusal surfaces while proving, and nothing is sent.
 
 ## 7. What each observer sees (U.5, Privacy 1–3)
 
+The full per-action table for both postures and both LEZ lines, the cross-layer correlations,
+and the requirement-to-test map are in [`lez-msig-guarantees.md`](lez-msig-guarantees.md). This
+section is the summary.
+
 **Private posture.**
 
 | item | chain | store node / fleet | room member | removed member |
 |---|---|---|---|---|
-| existence | no (a nullifier and a commitment per execution) | no | yes | yes |
+| existence | v0.3: no (a nullifier and a commitment per execution). v0.4: the vault's address is published as a recovery binding at Create and named by outside deposits, so its existence (not that it is a multisig) is visible | no | yes | yes |
 | member set, threshold | no | no | yes | until rotation or migration (state is readable with the GMS) |
 | who approved | no | no | yes (signed in the room) | until rotation or migration |
-| pending proposals | no | no | yes | until the room re-keys them out (immediately, F-16) |
+| pending proposals | no | no | yes | until the room re-keys them out (F-16), once the removal is final; not at all while they are still in another lez-msig of the room (§8) |
 | action payload | no; a public payee's credit shows payee and amount, a private payee's (v0.4) is sealed to it | no | yes | until rotation or migration |
 | vault balance | no | no | yes | until rotation or migration |
 | execution linkage | unlinkable notes; window bounds are public | timing of room traffic | yes | — |
@@ -378,7 +382,11 @@ refuses `Rotate` and `Sweep` (`rotation-unsupported`) and keeps D11.
   - Nothing on chain names the room. The binding between a member's LEZ identity and their room
     identity exists only inside the room (§8).
 
+**The RPC provider** (the member's own sequencer endpoint) sees more than the chain. Before every private transaction, the v0.4 executor reads the program's account and its mirror commitment, and the membership proofs of the notes it spends. So the RPC learns which program runs (D18 hides it from the chain only), and can link one multisig's transactions together. Each member choosing their own RPC limits who learns this.
+
 **Public posture.** Everything except coordination content is public; that stays in the room.
+
+The full per-action, per-observer table, and the cross-layer correlations, are in [`lez-msig-guarantees.md`](lez-msig-guarantees.md).
 
 **Selective disclosure (§ Privacy Architecture 2–3).**
 - **A narrow audience.** Give an auditor the PDA's viewing key. On v0.3 that is `(nsk, vsk)`:
