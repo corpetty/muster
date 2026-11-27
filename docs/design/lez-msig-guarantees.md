@@ -54,11 +54,11 @@ sealed room frames: one per published event (`coordination/session.nim`, `publis
 | **Execute: transfer to a private payee** | **v0.4 only.** As above, but the payee's address appears nowhere in the transaction. The credit is published sealed to the payee's `Recipient`, and only the payee can open and claim it (`v04_private_payee.rs`; `lez_msig_private_e2e` §10).<br>**v0.3:** not available. | As above, without a payee read. | As above. | Everything, including the recipient, which travels in the effect. | The proposal, which names the recipient, and the transaction hash. | The balance drops by the amount; they do not see the payee. |
 | **Call** | As an execution, plus whatever public effects the called program has. `v04_private_call.rs` credits a public payee through the native program. Whether the called program's id appears in the transaction is **not checked by any test**. | As for Execute. | As for Execute. | The decoded call: program, rows and data. | The same. | The new note. |
 | **Configuration change** (add, remove, threshold, roles, weights, time lock, limits) | An execution with no public credit. That a private config change looks like any other execution on chain is **inferred**: it has not been measured. | As for Execute. | As for Execute. An add also seals the group secret and the newest note to the new member (`msig_members_test` §6). A removal also publishes re-key grant frames (one per remaining room member), so the store node sees that the room re-keyed. | The decoded change. | The same. | See Removal. |
-| **Queue, then ExecuteQueued** | Two executions. **Queue:** the window's upper bound is `at_ms + 1`, where `at_ms` is the send time plus 120 s (`settlement.nim`, `QueueSlackMs`). **ExecuteQueued:** the window runs from `eta = at_ms + time lock` to the expiry, and the payee (if any) is credited here. Both bounds are unrounded milliseconds, so the two transactions can be paired, and their difference is the time lock (C2). | As for Execute. | As for Execute, twice. | The queue and the ETA, on the card. | The same. | Queue entries (nonce, proposal id, ETA, expiry) in the note. |
+| **Queue, then ExecuteQueued** | Two executions. **Queue:** the window's upper bound is `at_ms + 1`, where `at_ms` is the send time plus 120 s (`settlement.nim`, `QueueSlackMs`), rounded up to the minute. **ExecuteQueued:** the window runs from a whole minute at or after `eta = at_ms + time lock` to the expiry, and the payee (if any) is credited here. Both bounds are whole minutes since #407 (exo-a99); the two transactions can still be paired by their bounds, and their difference shows the time lock to the minute (C2). | As for Execute. | As for Execute, twice. | The queue and the ETA, on the card. | The same. | Queue entries (nonce, proposal id, ETA, expiry) in the note. |
 | **Cancel** | An execution with no public credit. It is never time-locked. | As for Execute. | As for Execute. | Which nonces it cancels. | The same. | The new note. |
 | **Spend under a limit** | One `Spend` execution. Its window is `[p·period, min((p+1)·period, expiry))`, so the lower bound is a multiple of the limit's period (C2), and the payee and amount are public. **No test runs a Spend over a private PDA** (§3). | As for Execute. | The spend intent's frame and one frame per signature, then the note frames. | The limit, the signers and the amount. | The same. | The new note. |
 | **Recovery by scan** | Nothing: it only reads. | `getLastBlockId`, then `getBlockRange` over every block from `from` (default block 1), and on v0.4 the publications too (`exec.rs`, `scan`). The RPC sees a full scan, not which account it is for. | The recovered note, sealed to each member. | Who recovered it. | The transaction hash in the note event. | They can run the same scan, since it needs only the group's viewing key. |
-| **Removal** | An execution, like any configuration change.<br>**v0.3, migration (D11):** after the removal, the remaining members create a new multisig under a new group secret and move the vault there with a `Transfer` the old quorum approves. Muster has **no flow and no test** for it. How the move to a private vault shows on chain is untested.<br>**v0.4, rotation (D19):** decided 2026-11-26 and **not built** (exo-3dc). Until it lands, a removal on v0.4 behaves as on v0.3. | As for Execute. | Re-key grant frames. | The room re-keys the removed member out (F-16, `msig_members_test` §4–5). | The same. | Keeps the group secret, so: reads the multisig's state from the chain until migration or rotation; can drain the fee account (v0.4, D17); can stall the multisig by consuming its note (`lez-msig.md` §7); can **never spend**, because the program checks current members (`rules.rs`). See C6 for the room window. |
+| **Removal** | An execution, like any configuration change.<br>**v0.3, migration (D11):** after the removal, the remaining members create a new multisig under a new group secret and move the vault there with a `Transfer` the old quorum approves. Muster has **no flow and no test** for it. How the move to a private vault shows on chain is untested.<br>**v0.4, rotation (D19):** the program side is built (#403: one transaction retires the vault and moves its configuration and balance to a successor under a new group secret; a retired vault forwards late deposits). **Muster's room flow for it is not built yet** (exo-3dc), so from a room a removal on v0.4 still behaves as on v0.3. | As for Execute. | Re-key grant frames. | The room re-keys the removed member out (F-16, `msig_members_test` §4–5). | The same. | Keeps the group secret, so: reads the multisig's state from the chain until migration or rotation; can drain the fee account (v0.4, D17); can stall the multisig by consuming its note (`lez-msig.md` §7); can **never spend**, because the program checks current members (`rules.rs`). See C6 for the room window. |
 
 ### 1.2 The public posture
 
@@ -124,14 +124,14 @@ Each entry says what is observable, who observes it, what it reveals, and what m
 **C2. Public validity-window bounds.** A program reads no clock, so every time is a validity
 window, and the window is public even in a private transaction (`lez-msig.md` §5).
 - **Execute:** the upper bound is the proposal's expiry. Muster sets it to the propose time plus a
-  default of 7 days, to the millisecond, and a spend's to the spend time plus 24 h
-  (`muster_module.nim`). So an execution reveals **when its proposal was made**, to the
-  millisecond. That lines up with the proposal frame the store node holds, and is the strongest
-  link between a room and an execution.
+  default of 7 days, and a spend's to the spend time plus 24 h (`muster_module.nim`), rounded down
+  to the minute since #407 (exo-a99). So an execution reveals **when its proposal was made**, to the
+  minute. That can still line up with the proposal frame the store node holds, but no longer to
+  the millisecond; it remains the strongest link between a room and an execution.
 - **Queue and ExecuteQueued:** they pair up, and their difference is the time lock (§1.1).
 - **Spend:** the lower bound is a multiple of the limit's period, which suggests the period.
-- **What mitigates it:** `lez-msig.md` §5 says "clients round them to the minute". **The code does
-  not** (§4).
+- **What mitigates it:** clients round every window they choose to the minute (`lez-msig.md` §5;
+  done in #407, exo-a99). A coarser rounding would blur more, at the cost of shorter validity.
 
 **C3. A public payee's credit.** The payee and amount are public. Anyone who knows the payee, and
 the payee itself, learns that some private account paid them at that time. With C1 or C2 that
@@ -168,7 +168,7 @@ whenever it runs low.
   reading this multisig's proposals and approvals (`msig_members_test` §5).
 - **The chain:** the group secret cannot be revoked. A removed member can read the multisig's
   state, drain the fee account (v0.4), and stall by consuming its note, until the group migrates
-  (v0.3, D11, no flow) or rotates (v0.4, D19, not built, exo-3dc). They can never spend.
+  (v0.3, D11, no flow) or rotates (v0.4, D19: the program side built in #403, the room flow not yet, exo-3dc). They can never spend.
 
 **C7. The RPC endpoint.** It sees one layer, but it sees more of it than the chain does:
 - **v0.4 names the program to the RPC.** Before every private transaction, the executor reads the
@@ -226,11 +226,11 @@ default.
 |---|---|---|
 | `rules.rs` | `programs/lez-msig/core/tests/rules.rs` | yes, `checks.yml` (`rust-cores`) |
 | `v03_state.rs`, `live_public.rs`, `live_private.rs` | `programs/lez-msig/host/tests/` | `live_public` and `live_private` in `lez-e2e.yml` on a v0.3 zone; `v03_state` is **not** in CI |
-| `v04_*.rs`, `live_*04.rs` | `programs/lez-msig/lez04/host/tests/` | **not** in CI (exo-7610). The live ones passed by hand on the 0.4.0-rc3 devnet (`lez04/host/tests/CLAUDE.md`) |
+| `v04_*.rs`, `live_*04.rs` | `programs/lez-msig/lez04/host/tests/` | in CI since #405: the `lez-msig-v04` job runs `live_public04`, `live_private04`, `live_exec04` and Muster's `lez_msig_private_e2e` on a local v0.4 zone; the in-process `v04_*.rs` are not. The live ones also passed by hand on the 0.4.0-rc3 devnet (`lez04/host/tests/CLAUDE.md`) |
 | `module.rs` | `programs/lez-msig/module/tests/` and `lez04/module/tests/` | no |
 | `*_test.nim` | `module/tests/` | yes, `checks.yml` (`run-suite.sh`) |
 | `lez_msig_live_e2e` | `module/tests/` | yes, `lez-e2e.yml` on a v0.3 zone; passed 7/7 on the 0.4 devnet by hand |
-| `lez_msig_private_e2e` | `module/tests/` | no (by hand, v0.3 and v0.4) |
+| `lez_msig_private_e2e` | `module/tests/` | yes on v0.4, the `lez-msig-v04` job (#405); by hand on v0.3 |
 
 **How tests are named.** Rust tests are named by their function. Nim tests are named by the
 numbered sections in each file's header (`§n`).
@@ -239,7 +239,7 @@ numbered sections in each file's header (`§n`).
 |---|---|---|---|
 | **F.1** | M-of-N; members, threshold and action set configurable at creation | `rules.rs`: `create_writes_state_once`, `invalid_configs_refused`, `below_threshold_refused`, `action_set_and_targets`, `runs_iff_weight_reaches_threshold` (proptest); `v03_state.rs`: `public_create_then_pay_two_of_three`; `v04_state.rs`: `create_on_a_fresh_pda_then_pay_two_of_three` | — |
 | **F.2** | Lifecycle; async approve or reject; expiry; off-chain collection stated; under the private posture, no payload on chain | `rules.rs`: `expiry`; `lez_msig_driver_test` §2–3 (the effect is the proposal's bytes; an approval counts only for this proposal); `lez_msig_live_e2e` §3, §6; `lez_msig_private_e2e` §5 (the payment's transaction names no member key, approval or create key), §7; **reject:** `decline_final_test` (a decline is final; generic, stub driver) | No lez-msig-specific decline test. Nothing checks the store node's view of a lez-msig room in particular: `store_node_view_test` checks the room in general |
-| **F.3** | Execute actions on any program | `rules.rs`: `action_set_and_targets`; `v03_state.rs`: `a_state_anywhere_but_its_pda_is_refused`, `rows_must_be_the_outflows_own`; `v04_private_call.rs`: `a_private_call_runs_with_the_vaults_seed`, `a_call_outside_the_targets_list_is_refused_while_proving` | No test executes a **public** Call on LEZ state; the core rules only. The private Call from the room is exo-0db |
+| **F.3** | Execute actions on any program | `rules.rs`: `action_set_and_targets`; `v03_state.rs`: `a_state_anywhere_but_its_pda_is_refused`, `rows_must_be_the_outflows_own`; `v04_private_call.rs`: `a_private_call_runs_with_the_vaults_seed`, `a_call_outside_the_targets_list_is_refused_while_proving` | No test executes a **public** Call on LEZ state; the core rules only. A private Call from the room: `lez_msig_private_e2e` §12 (#404) |
 | **F.4** | Target-program registry | **none** | exo-ac1 |
 | **F.5** | Configuration changes through the quorum | `rules.rs`: `r2_approvals_before_a_change_stop_counting`, `r2_the_cutoff_is_the_queue`, `config_change_refused_whole_when_invalid`; `v03_state.rs`: `r2_on_chain`; `lez_msig_live_e2e` §4; `msig_members_test` §1–7 | No test runs a config change over a **private** PDA on chain; only `msig_members_test` §6 covers the room side |
 | **F.6** | Role separation, and what each role guarantees | `rules.rs`: `the_proposer_must_sign_and_counts_only_if_an_approver`, `a_signer_without_approve_is_refused`, `executor_role_when_execution_is_closed`; `lez_msig_driver_test` §4 | The guarantees are stated in `lez-msig.md` §5 |
@@ -250,7 +250,7 @@ numbered sections in each file's header (`§n`).
 | **U.1** | A module other modules call | `module.rs`: `health_derive_and_a_private_create_as_a_job` (v0.3), `health_derive_and_a_fee_top_up_as_a_job` (v0.4); `live_public.rs` (the module's `exec_request`, public posture); `live_exec04.rs` (the v0.4 executor's JSON surface) | The full API (create, propose, approve, reject, execute, configuration and limits, both postures and lines): exo-dbd3 |
 | **U.2** | A QML mini-app with the room beside the proposal list | `scripts/lez-msig-self-test.sh`, `scripts/lez-msig-private-self-test.sh` (the real runner, offscreen) | The multisig view: exo-93b. Offscreen, the QML is never instantiated (the self-test says so) |
 | **U.3** | A CLI on the headless core | `msig_exec` / `msig_exec04`, driven by `live_public.rs`, `live_exec04.rs`, `lez_msig_private_e2e` (`CliMsigProver`) | A CLI over `logoscore`: exo-c3b |
-| **U.4** | An IDL through SPEL | **none** | exo-7610 |
+| **U.4** | An IDL through SPEL | `programs/lez-msig/lez04/tools/idl.sh --check` (CI job `lez-msig-idl`, #405): the committed IDL matches SPEL's output and decodes Muster's `State` vector | The IDL describes `Instruction`, not the struct the guest decodes (SPEL takes an enum only; `docs/upstream/spel-field-report.md`) |
 | **U.5** | Per-action public/private documentation | this page, §1 | **none**: nothing checks this page against the code |
 | **U.6** | Decode from the exact bytes before signing | `lez_msig_bytes_test` §1–5 (every encoding, held to the program's vectors); `lez_msig_driver_test` §2 (the card's line read from the same bytes; bytes that do not decode are named "unknown"); `lez_msig_recipient_test` §3 (the card names a private payee) | No test checks the card's words for a Call, a Config, a Cancel or a Spend. Arbitrary targets and the registry: exo-ac1 |
 | **U.7** | Clear, actionable errors | `rules.rs` (every refusal matched by its `MsigError` code; `r2_approvals_before_a_change_stop_counting` checks the message names the epoch); `live_public.rs` (`below-threshold`); `live_exec04.rs` (1 of 2 answered `refused` with its code); `lez_msig_private_e2e` §6–7; `lez_msig_live_e2e` §4, §6 | The UI pass: exo-93b |
@@ -261,8 +261,8 @@ numbered sections in each file's header (`§n`).
 | **P.2** | Cost as a function of M; M ≥ 5 viable | the same harnesses, at M = 1, 3, 5, 10 (`BENCHMARKS.md`) | — |
 | **S.1** | LEZ private accounts | as F.10 (private) | — |
 | **S.2** | The room on the chat module | `msig_chat_test` §1–7 (deliberation, on a fake module) | The full binding: exo-13f |
-| **S.3, S.4** | Compatible with, and deployed on, testnet 0.4 | `live_public04.rs`, `live_private04.rs` passed on the 0.4.0-rc3 devnet (`docs/labbook/lez-v04-port.md`) | Run by hand, not in CI |
-| **S.5, S.6** | End-to-end tests against a standalone sequencer, in CI, green | `.github/workflows/lez-e2e.yml`: `live_public`, `live_private`, `lez_msig_live_e2e` on a v0.3 zone; green on `main` 2026-11-26 | v0.4 in CI: exo-7610 |
+| **S.3, S.4** | Compatible with, and deployed on, testnet 0.4 | `live_public04.rs`, `live_private04.rs` passed on the 0.4.0-rc3 devnet (`docs/labbook/lez-v04-port.md`); in CI on a local v0.4 zone (`lez-msig-v04`, #405) | On the devnet itself, by hand only |
+| **S.5, S.6** | End-to-end tests against a standalone sequencer, in CI, green | `.github/workflows/lez-e2e.yml`: `live_public`, `live_private`, `lez_msig_live_e2e` on a v0.3 zone; and on a v0.4 zone, the `lez-msig-v04` job (#405) | Both green on `main` |
 | **S.7** | A test per hard requirement | this section | The rows marked none |
 | **S.8** | A README | `programs/lez-msig/README.md` | Documentation, not tested |
 | **S.9, S.10** | API and CLI docs | `docs/design/lez-msig-signing.md`; the README's "Use it without Muster" | The full guides: exo-c3b |
@@ -275,9 +275,9 @@ numbered sections in each file's header (`§n`).
 | **Privacy 3** | Every cross-layer correlation documented | §2 of this page | **none**: documentation |
 | Soft: weighted approvals | | `rules.rs`: `weights_count`, `runs_iff_weight_reaches_threshold`; `lez_msig_driver_test` §4 | — |
 
-**Requirements with no test at all:** F.4, U.4, U.5, S.11, S.13 and Privacy 3. **F.10 and U.1–U.3
-are partial:** F.10 lacks the disclosure tiers and "by default"; U.1–U.3 lack the full module, the
-mini-app view and the `logoscore` CLI.
+**Requirements with no test at all:** F.4, U.5, S.11, S.13 and Privacy 3. **F.10 and U.1–U.3
+are partial:** F.10 lacks the disclosure tiers (private by default holds since #407); U.1–U.3 lack
+the full module, the mini-app view and the `logoscore` CLI. *(Updated 2026-11-27, after #403–#407.)*
 
 **Gaps in the private posture.** The private posture has no on-chain test for a configuration
 change, a Queue/ExecuteQueued, a Cancel or a Spend. The rules are the shared `msig_core`, so they
@@ -285,9 +285,9 @@ hold, but no test proves that these actions' private transactions build and land
 
 ## 4. Where the code and the design doc disagreed
 
-These were found while writing this page (2026-11-26). Points 1 and 2 are the code falling short of
-the design and the accepted proposal; each is an issue, and the design stands. Points 3–5 were the
-design doc overstating; `lez-msig.md` §7 is corrected.
+These were found while writing this page (2026-11-26). Points 1 and 2 were the code falling short
+of the design and the accepted proposal; both are fixed in #407. Points 3–5 were the design doc
+overstating; `lez-msig.md` §7 is corrected.
 
 1. **"Clients round [windows] to the minute"** (`lez-msig.md` §5). They do not:
    - `musterCoordinateProposeLezMsig` and `musterLezMsigSpend` set the expiry as
@@ -295,14 +295,14 @@ design doc overstating; `lez-msig.md` §7 is corrected.
    - settlement sets Queue's `at_ms` as `now + QueueSlackMs`;
    - `msig_core::claims` passes both through unchanged.
 
-   C2 follows from this. **To fix in the code: exo-a99.**
+   C2 followed from this. **Fixed in #407 (exo-a99):** every client-chosen window time is a whole minute.
 2. **"Private by default"** (proposal; `lez-msig.md` §1: "the private posture, the default"). In
    the code the default is public:
    - `lez_msig_open` reads `private` with a default of `false` (`muster_module.nim`);
    - the room panel's first button, "Create a k-of-n LEZ multisig", opens a public one, and the
      private one is offered below it as "Or keep it private" (`ui/src/qml/RoomAccounts.qml`).
 
-   **To fix in the code: exo-c0c.**
+   **Fixed in #407 (exo-c0c):** private is the default and the primary button; without the zone's prover the open is refused, naming the module to install.
 3. **§7's removal rows** say a removed member loses pending proposals "immediately". Two things
    qualify that:
    - a removed member still in another lez-msig of the room keeps the room (`msig_members.nim`,

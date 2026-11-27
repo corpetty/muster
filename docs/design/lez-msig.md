@@ -27,7 +27,7 @@ a public transaction naming its member.
   LEZ's PR #1001 manual lists this as the alternative to seats: seats cost 2k proofs per action,
   signatures one.
 - **Posture is placement, not a program fork.** The same program runs over a **public** PDA (the
-  public posture) or a **group-owned private PDA** (the private posture, the default; the room still opens a public one first: exo-c0c). A private
+  public posture) or a **group-owned private PDA** (the private posture, the default). A private
   execution is one privacy-preserving transaction with no public signer and the program's image
   undisclosed. It is fee-exempt on v0.3; on v0.4 it pays its fee inside the proof, from the
   group's fee account (D17).
@@ -144,7 +144,7 @@ the sequencer enforces:
 - `ExecuteQueued`: `[ at_ms, expires )` with `at_ms ≥ eta`.
 - `Spend`: `[ p·period, (p+1)·period ) ∩ [ —, expires )`.
 
-Windows are public even in a private transaction, so clients must round them to the minute (not done yet: exo-a99).
+Windows are public even in a private transaction, so clients round them to the minute (exo-a99, #407).
 
 **A valid config.**
 - 1 ≤ n ≤ 32 members, with distinct keys and every weight ≥ 1.
