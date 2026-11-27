@@ -12,7 +12,7 @@
         {
           "step": "ceremony",
           "who": "the opener",
-          "does": "lez_msig_open {private: true}: publishes lmsig/<ck>/open (private) and lmsig/<ck>/gms/<member> for every invited member, the group secret sealed to that member's room identity and author-signed; refused with no-prover when the lez_msig_module is not loaded.",
+          "does": "lez_msig_open (private is the default, exo-c0c): publishes lmsig/<ck>/open (private) and lmsig/<ck>/gms/<member> for every invited member, the group secret sealed to that member's room identity and author-signed; refused with no-prover, naming the zone line's prover module (lez_msig_module on LEZ v0.3, lez_msig_v04_module on v0.4), when it is not loaded, and never opened public instead.",
           "signs": "the opener's room identity signs each sealed copy (authorship); their approval key signs the bind message",
           "reveals": [
             {
@@ -84,10 +84,11 @@
           ]
         },
         {
-          "what": "a private multisig opened with no prover loaded",
-          "why": "lez_msig_open answers no-prover and names the package to install",
+          "what": "a private multisig opened with no prover loaded, or silently opened public instead",
+          "why": "lez_msig_open answers no-prover and names the package to install, unless the opener said private: false (msigPostureOf)",
           "evidence": [
-            "module/nim-lib/muster_module.nim"
+            "module/nim-lib/muster_module.nim",
+            "module/tests/lez_msig_defaults_test.nim"
           ]
         },
         {

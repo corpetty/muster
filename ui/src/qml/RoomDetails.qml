@@ -187,6 +187,9 @@ Rectangle {
                         if (details.room.backend) details.room.backend.lezMsigTopup(account, amount);
                     }
                     onLezMsigOpenRequested: function (specJson) { if (details.room.backend) details.room.backend.lezMsigOpen(specJson); }
+                    // a private multisig's prover, when it is missing (exo-c0c)
+                    packageRequests: details.room.packageRequests
+                    onPackageInstallRequested: function (pkg) { details.room.packageInstallRequested(pkg); }
                     onLezMsigProposeRequested: function (account, actionJson) {
                         if (!details.room.backend) return;
                         // a proposal goes out from the room's policy: make it this multisig first

@@ -48,6 +48,7 @@ import ../src/coordination/[session, intent_events, intents, live, accounts, aut
                             msig_members]
 import ./probes/live_room
 import ./probes/lez_funding
+import ./probes/msig_period
 
 let url = (if paramCount() >= 1: paramStr(1) else: "http://127.0.0.1:3040")
 const Chain = "lez:local"
@@ -198,7 +199,7 @@ doAssert parseJson(qasm.tx.payload)["msig"].getStr() == $ikQueue, "a time-locked
 let qref = qst.submit(qasm.tx, aliceKs)
 var qf = qst.watch(qref)
 var sawQueued = false
-let until = epochTime() + scaled(240)
+let until = epochTime() + scaled(360)   # windows are whole minutes (exo-a99): up to two more
 while qf.status == fsPending and epochTime() < until:
   if "queued" in qf.detail and not sawQueued:
     sawQueued = true
@@ -311,13 +312,21 @@ block:
   let addLimit = propose(0, MsigAction(kind: akConfig, changes: @[MsigChange(kind: ccAddLimit, limit: lim)]),
                          alice.readMsig(a).state)
   approve(1, addLimit)
-  let fl = settleAndWatch(addLimit, seconds = 240, slackMs = 45_000)
+  let fl = settleAndWatch(addLimit, seconds = 360, slackMs = 45_000)   # whole-minute windows (exo-a99)
   doAssert fl.status == fsFinal, $fl
   doAssert alice.readMsig(a).state.config.limits.len == 1 and alice.readMsig(a).state.epoch == 2
   r.alice.publish(finalEvent(addLimit))
   pollAll()
   let d2 = LezMsigDriver(rdf(policy))
   doAssert d2.account.epoch == 2 and d2.account.config.limits.len == 1, "the room's copy holds the limit"
+  # the spend, its watch and the over-limit check below must fall in one period, clear of the
+  # margin settlement keeps before its end (exo-5ed): near the hour's end, wait for the next
+  let spendWatchS = 120
+  let wait = spendWaitMs(uint64(epochTime() * 1000), lim.periodMs,
+                         SpendMarginMs + uint64(spendWatchS) * 1000 + 60_000)
+  if wait > 0:
+    echo "   the limit's period ends within the step; waiting ", wait div 1000, " s for the next"
+    sleep(int(wait))
   let paidBefore = rpc.getAccount(recipient).balance
   inc seqNo
   let sp = newMsigSpend(r.bob.roomEvents(), d2, alice.readMsig(a).state, 1, recipient, 400.u128,
@@ -332,7 +341,7 @@ block:
   doAssert parseJson(sasm.tx.payload)["msig"].getStr() == $ikSpend, "a Spend: no Queue despite the time lock"
   let sref = sst.submit(sasm.tx, aliceKs)
   var sf = sst.watch(sref)
-  let sUntil = epochTime() + 120
+  let sUntil = epochTime() + float(spendWatchS)
   while sf.status == fsPending and epochTime() < sUntil:
     sleep(3000)
     sf = sst.watch(sref)

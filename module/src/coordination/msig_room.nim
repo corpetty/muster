@@ -197,10 +197,11 @@ proc takenNonces*(events: seq[Event], multisig: seq[byte]): seq[uint64] =
 proc newMsigProposal*(events: seq[Event], ks: Keystore, d: LezMsigDriver, st: MsigState,
                       action: MsigAction, expiresMs: uint64): MsigProposal =
   ## A proposal from THIS member (their approval key is the proposer), at the chain's epoch
-  ## and the next nonce free on chain and in the room.
+  ## and the next nonce free on chain and in the room. Its expiry is rounded down to the
+  ## minute: the window it becomes is public (§5, exo-a99).
   MsigProposal(multisig: d.account.address, zone: st.zone, epoch: st.epoch,
                nonce: st.nextNonce(takenNonces(events, d.account.address)), action: action,
-               expiresMs: expiresMs, proposer: ks.lezMemberKey(myMsigLabel(ks, d.account)))
+               expiresMs: floorMinute(expiresMs), proposer: ks.lezMemberKey(myMsigLabel(ks, d.account)))
 
 proc liveMsigPropose*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor, policy: string,
                       d: LezMsigDriver, p: MsigProposal, nowSec: int64, msgSeq: uint64,
@@ -216,10 +217,10 @@ proc liveMsigPropose*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor
 proc newMsigSpend*(events: seq[Event], d: LezMsigDriver, st: MsigState, limit: uint32, to: seq[byte],
                    amount: UInt128, expiresMs: uint64): MsigSpend =
   ## A spend under a limit (exo-0d3.12), at the chain's epoch and the next nonce free on chain
-  ## and in the room.
+  ## and in the room. Its expiry is rounded down to the minute, as a proposal's is.
   MsigSpend(multisig: d.account.address, zone: st.zone, epoch: st.epoch, limit: limit,
             nonce: st.nextNonce(takenNonces(events, d.account.address)), to: to, amount: amount,
-            expiresMs: expiresMs)
+            expiresMs: floorMinute(expiresMs))
 
 proc liveMsigSpend*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor, policy: string,
                     d: LezMsigDriver, sp: MsigSpend, nowSec: int64, msgSeq: uint64,

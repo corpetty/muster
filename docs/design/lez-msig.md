@@ -458,8 +458,9 @@ that member's join. Their client finds its keystore label by deriving its own ca
 public posture puts every member key on chain at creation, so one account used in several
 multisigs links them. The fresh key stays the default.
 
-**The private posture in the room (built, exo-efa).** The opener's `lez_msig_open {private:
-true}` generates the GMS and seals one copy to each invited member's room identity. Each copy is
+**The private posture in the room (built, exo-efa).** The opener's `lez_msig_open` (private
+unless it says `private: false`; refused, naming the prover to install, when the zone's line has
+none, exo-c0c) generates the GMS and seals one copy to each invited member's room identity. Each copy is
 author-signed, and only the opener's counts:
 - `lmsig/<ck>/gms/<member>` carries the sealed GMS.
 - The opener's client creates the multisig through the prover. Once the chain includes the

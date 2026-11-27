@@ -39,6 +39,38 @@ proc proverFits*(health: JsonNode, zoneLine: string): tuple[ok: bool, want: stri
   let line = health{"line"}.getStr("v0.3")
   (line == (if zoneLine == "v0.4": "v0.4" else: "v0.3"), want)
 
+type MsigPosture* = object
+  ## What `lez_msig_open` opens (exo-c0c): private unless the spec asks for public.
+  ok*: bool
+  private*: bool
+  error*: string     ## "" | bad-spec | no-prover | refused
+  install*: string   ## no-prover: the package to install
+  detail*: string
+
+proc msigPostureOf*(spec: JsonNode, zoneLine: proc(): string,
+                    proverLoaded: proc(line: string): bool): MsigPosture =
+  ## A lez-msig is private by default (RFP-005, docs/design/lez-msig.md §1): `private` absent
+  ## opens a private one, `private: false` a public one, and only that. Private needs the zone
+  ## line's prover module loaded; without it the open is refused, naming the module to install,
+  ## and never falls back to public on its own. `zoneLine` raises when the zone cannot be read.
+  let p = (if spec.kind == JObject: spec{"private"} else: nil)
+  if p != nil and p.kind != JBool:
+    return MsigPosture(error: "bad-spec", detail: "private is true or false")
+  let asked = p != nil
+  if asked and not p.getBool():
+    return MsigPosture(ok: true, private: false)
+  let orPublic = (if asked: "" else: "; or open a public one with private: false, which puts every member's key and every action on chain")
+  var line: string
+  try: line = zoneLine()
+  except CatchableError as e:
+    return MsigPosture(error: "refused", detail: "cannot read the zone's LEZ line: " & e.msg & orPublic)
+  if not proverLoaded(line):
+    let name = proverModuleFor(line)
+    return MsigPosture(error: "no-prover", install: name,
+                       detail: "a private multisig's transactions on this zone (LEZ " & line & ") are proved by " &
+                               name & ": install it first" & orPublic)
+  MsigPosture(ok: true, private: true)
+
 method derive*(p: MsigProver, req: JsonNode): JsonNode {.base.} =
   %*{"error": "unavailable", "detail": "no prover"}
 method submit*(p: MsigProver, req: JsonNode): JsonNode {.base.} =
