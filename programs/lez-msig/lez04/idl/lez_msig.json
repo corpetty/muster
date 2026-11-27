@@ -137,6 +137,11 @@
           "type": "u64"
         }
       ]
+    },
+    {
+      "name": "Sweep",
+      "tag": 5,
+      "docs": "D19: at a retired multisig, forward its whole balance to its successor. Unsigned: the\nsuccessor is the one the quorum approved, so this only finishes the move."
     }
   ],
   "state_types": [
@@ -213,6 +218,37 @@
               "name": "0",
               "type": {
                 "vec": "u64"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Rotate",
+          "fields": [
+            {
+              "name": "create_key",
+              "type": {
+                "array": [
+                  "u8",
+                  32
+                ]
+              }
+            },
+            {
+              "name": "successor",
+              "type": {
+                "array": [
+                  "u8",
+                  32
+                ]
+              }
+            },
+            {
+              "name": "changes",
+              "type": {
+                "vec": {
+                  "defined": "ConfigChange"
+                }
               }
             }
           ]
